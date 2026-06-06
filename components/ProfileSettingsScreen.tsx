@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, TouchableOpacity, TextInput, Modal, ActivityIndicator } from "react-native";
+import { View, Text, TouchableOpacity, TextInput, Modal, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform } from "react-native";
 import { useUser } from "@clerk/clerk-expo";
 import * as Location from "expo-location";
 import { useMutation } from "convex/react";
@@ -59,7 +59,12 @@ export default function ProfileSettingsScreen({ visible, onClose, dashboardData 
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
-      <View className="flex-1 bg-neutral-900 px-6 pt-12 pb-8">
+      <KeyboardAvoidingView 
+        style={{ flex: 1 }} 
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView className="flex-1 bg-neutral-900">
+          <View className="px-6 pt-12 pb-12">
         <View className="flex-row justify-between items-center mb-8">
           <Text className="text-3xl font-extrabold text-white">Profile Settings</Text>
           <TouchableOpacity onPress={onClose} className="bg-neutral-800 w-10 h-10 rounded-full border border-neutral-700 items-center justify-center">
@@ -152,7 +157,9 @@ export default function ProfileSettingsScreen({ visible, onClose, dashboardData 
             <Text className="text-white font-bold">Force Refresh Location</Text>
           </TouchableOpacity>
         </View>
-      </View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

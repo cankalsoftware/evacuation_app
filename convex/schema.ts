@@ -10,6 +10,7 @@ export default defineSchema({
     scannedPlanId: v.optional(v.id("_storage")),
     scannedPlanLat: v.optional(v.number()),
     scannedPlanLon: v.optional(v.number()),
+    scannedAt: v.optional(v.number()),
     role: v.union(v.literal("guest"), v.literal("admin")),
     createdAt: v.number(),
   }).index("by_clerkId", ["clerkId"]),

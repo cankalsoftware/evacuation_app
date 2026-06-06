@@ -50,6 +50,7 @@ export const getDashboardData = query({
       scannedPlanId: user.scannedPlanId,
       scannedPlanLat: user.scannedPlanLat,
       scannedPlanLon: user.scannedPlanLon,
+      scannedAt: user.scannedAt,
       // Default to empty for now until they scan a building
       activeIncidents: [],
     };
@@ -78,6 +79,7 @@ export const uploadScannedPlan = mutation({
       scannedPlanId: args.storageId,
       scannedPlanLat: args.lat,
       scannedPlanLon: args.lon,
+      scannedAt: Date.now(),
     });
   },
 });
