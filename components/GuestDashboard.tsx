@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, TouchableOpacity, ActivityIndicator, TextInput, useWindowDimensions, Alert, Platform } from "react-native";
+import { View, Text, TouchableOpacity, ActivityIndicator, TextInput, useWindowDimensions, Alert, Platform, Modal, Image } from "react-native";
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
@@ -28,6 +28,7 @@ export default function GuestDashboard() {
   const { user } = useUser();
   const { width, height } = useWindowDimensions();
   const [isViewingProfile, setIsViewingProfile] = useState(false);
+  const [isViewingPlan, setIsViewingPlan] = useState(false);
   const [isScanned, setIsScanned] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [currentLocation, setCurrentLocation] = useState<Location.LocationObject | null>(null);
@@ -284,12 +285,18 @@ export default function GuestDashboard() {
       <View style={{ flex: 1 }} className="px-6 pb-12 justify-end w-full items-center">
         <TouchableOpacity 
           className={`w-full max-w-2xl ${isScanned ? 'bg-green-600 border-green-500' : isUploading ? 'bg-blue-600 border-blue-500' : 'bg-amber-500 border-amber-400'} border-4 rounded-3xl p-6 items-center flex-row justify-center shadow-lg`}
-          onPress={handleScanPlan}
+          onPress={() => {
+            if (isScanned) {
+              setIsViewingPlan(true);
+            } else {
+              handleScanPlan();
+            }
+          }}
           disabled={isUploading}
         >
-          {isUploading ? <ActivityIndicator color="white" size="large" className="mr-4" /> : <Text className="text-4xl mr-4">📸</Text>}
+          {isUploading ? <ActivityIndicator color="white" size="large" className="mr-4" /> : <Text className="text-4xl mr-4">{isScanned ? "🗺️" : "📸"}</Text>}
           <Text className="text-white font-extrabold text-2xl">
-            {isUploading ? "Uploading..." : isScanned ? "Plan Scanned & Verified" : "Scan Evacuation Plan"}
+            {isUploading ? "Uploading..." : isScanned ? "View Verified Plan" : "Scan Evacuation Plan"}
           </Text>
         </TouchableOpacity>
       </View>
@@ -300,6 +307,41 @@ export default function GuestDashboard() {
         onClose={() => setIsViewingProfile(false)} 
         dashboardData={dashboardData} 
       />
+
+      {/* View Plan Modal */}
+      <Modal visible={isViewingPlan} animationType="slide" presentationStyle="pageSheet">
+        <View className="flex-1 bg-neutral-900 px-6 pt-12 pb-8">
+          <View className="flex-row justify-between items-center mb-6">
+            <Text className="text-3xl font-extrabold text-white">Evacuation Plan</Text>
+            <TouchableOpacity onPress={() => setIsViewingPlan(false)} className="bg-neutral-800 w-10 h-10 rounded-full border border-neutral-700 items-center justify-center">
+              <Text className="text-white text-lg font-bold">✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          {dashboardData?.scannedPlanUrl ? (
+            <View className="flex-1 justify-center items-center bg-neutral-800 rounded-2xl overflow-hidden mb-6 border border-neutral-700">
+              <Image 
+                source={{ uri: dashboardData.scannedPlanUrl }} 
+                style={{ width: '100%', height: '100%', resizeMode: 'contain' }} 
+              />
+            </View>
+          ) : (
+            <View className="flex-1 justify-center items-center">
+              <Text className="text-neutral-500 text-lg">No image found.</Text>
+            </View>
+          )}
+
+          <TouchableOpacity 
+            onPress={() => {
+              setIsViewingPlan(false);
+              setTimeout(() => handleScanPlan(), 500); // Wait for modal to close
+            }}
+            className="bg-amber-500 py-4 rounded-xl items-center shadow-lg border-2 border-amber-400"
+          >
+            <Text className="text-white font-extrabold text-lg uppercase tracking-wider">Scan New Plan</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
     </View>
   );
 }

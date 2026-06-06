@@ -51,6 +51,7 @@ export const getDashboardData = query({
       scannedPlanLat: user.scannedPlanLat,
       scannedPlanLon: user.scannedPlanLon,
       scannedAt: user.scannedAt,
+      scannedPlanUrl: user.scannedPlanId ? await ctx.storage.getUrl(user.scannedPlanId) : null,
       // Default to empty for now until they scan a building
       activeIncidents: [],
     };
