@@ -6,19 +6,10 @@ export const grantConsent = mutation({
     clerkId: v.string(),
   },
   handler: async (ctx, args) => {
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerkId", (q) => q.eq("clerkId", args.clerkId))
-      .first();
-
-    if (!user) {
-      throw new Error("User not found");
-    }
-
     // Check if consent already exists
     const existingConsent = await ctx.db
       .query("locationConsent")
-      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .withIndex("by_clerkId", (q) => q.eq("clerkId", args.clerkId))
       .first();
 
     if (existingConsent) {
@@ -33,7 +24,7 @@ export const grantConsent = mutation({
 
     // Create new consent record
     const consentId = await ctx.db.insert("locationConsent", {
-      userId: user._id,
+      clerkId: args.clerkId,
       hasConsented: true,
       consentedAt: Date.now(),
     });
@@ -47,16 +38,9 @@ export const getConsentStatus = query({
   handler: async (ctx, args) => {
     if (!args.clerkId) return false;
 
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerkId", (q) => q.eq("clerkId", args.clerkId!))
-      .first();
-
-    if (!user) return false;
-
     const consent = await ctx.db
       .query("locationConsent")
-      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .withIndex("by_clerkId", (q) => q.eq("clerkId", args.clerkId!))
       .first();
 
     return consent?.hasConsented ?? false;

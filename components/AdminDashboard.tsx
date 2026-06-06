@@ -55,29 +55,7 @@ export default function AdminDashboard() {
           </TouchableOpacity>
         </View>
 
-        {/* Active Emergencies */}
-        <Text className="text-xl font-bold text-white mb-4">Active Incidents</Text>
-        {dashboardData.activeIncidents && dashboardData.activeIncidents.length > 0 ? (
-          dashboardData.activeIncidents.map((incident: any) => (
-             <View key={incident._id} className="bg-red-900/40 border border-red-700 p-4 rounded-2xl mb-4">
-                <View className="flex-row justify-between items-center">
-                   <Text className="text-white font-bold text-lg uppercase">{incident.type}</Text>
-                   <View className="bg-red-600 px-2 py-1 rounded">
-                      <Text className="text-white text-xs font-bold uppercase">{incident.severity}</Text>
-                   </View>
-                </View>
-                <Text className="text-neutral-300 mt-2 text-sm">Building ID: {incident.buildingId}</Text>
-                <Text className="text-neutral-400 text-xs mt-1">
-                  Reported: {new Date(incident.createdAt).toLocaleTimeString()}
-                </Text>
-             </View>
-          ))
-        ) : (
-          <View className="bg-neutral-800 border border-neutral-700 p-6 rounded-2xl items-center mb-8">
-            <Text className="text-4xl mb-2">✅</Text>
-            <Text className="text-neutral-400 text-center">No active incidents across your managed buildings.</Text>
-          </View>
-        )}
+
 
         {/* Managed Buildings */}
         <Text className="text-xl font-bold text-white mb-4">Managed Buildings</Text>
