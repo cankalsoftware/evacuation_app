@@ -42,6 +42,10 @@ export default defineSchema({
     longitude: v.number(),
     googlePlaceId: v.optional(v.string()),
     adminId: v.string(),
+    polygon: v.optional(v.array(
+      v.object({ lat: v.number(), lon: v.number() })
+    )), // Complex polygon boundary of the building
+    masterPlanId: v.optional(v.id("_storage")),
   }).index("by_coordinates", ["latitude", "longitude"])
     .index("by_admin", ["adminId"]),
 

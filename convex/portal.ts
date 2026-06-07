@@ -14,10 +14,17 @@ export const getDashboardData = query({
     if (!user) return null;
 
     if (user.role === "admin") {
-      const buildings = await ctx.db
+      const buildingsRaw = await ctx.db
         .query("buildings")
         .withIndex("by_admin", (q) => q.eq("adminId", args.clerkId!))
         .collect();
+
+      const buildings = await Promise.all(buildingsRaw.map(async (b) => {
+        return {
+          ...b,
+          masterPlanUrl: b.masterPlanId ? await ctx.storage.getUrl(b.masterPlanId) : null
+        };
+      }));
 
       return {
         role: "admin",
@@ -111,4 +118,71 @@ export const updateProfile = mutation({
   },
 });
 
+export const saveBuilding = mutation({
+  args: {
+    clerkId: v.string(),
+    name: v.string(),
+    address: v.string(),
+    latitude: v.number(),
+    longitude: v.number(),
+    polygon: v.array(v.object({ lat: v.number(), lon: v.number() })),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerkId", (q) => q.eq("clerkId", args.clerkId))
+      .first();
 
+    if (!user || user.role !== "admin") throw new Error("Unauthorized");
+    
+    if (args.polygon.length < 4) {
+      throw new Error("A building polygon must have at least 4 points.");
+    }
+
+    return await ctx.db.insert("buildings", {
+      adminId: args.clerkId,
+      name: args.name,
+      address: args.address,
+      latitude: args.latitude,
+      longitude: args.longitude,
+      polygon: args.polygon,
+    });
+  }
+});
+
+export const updateBuildingImage = mutation({
+  args: {
+    clerkId: v.string(),
+    buildingId: v.id("buildings"),
+    storageId: v.id("_storage"),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerkId", (q) => q.eq("clerkId", args.clerkId))
+      .first();
+
+    if (!user || user.role !== "admin") throw new Error("Unauthorized");
+    
+    await ctx.db.patch(args.buildingId, { masterPlanId: args.storageId });
+  }
+});
+
+export const updateBuildingPolygon = mutation({
+  args: {
+    clerkId: v.string(),
+    buildingId: v.id("buildings"),
+    polygon: v.array(v.object({ lat: v.number(), lon: v.number() })),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerkId", (q) => q.eq("clerkId", args.clerkId))
+      .first();
+
+    if (!user || user.role !== "admin") throw new Error("Unauthorized");
+    if (args.polygon.length < 4) throw new Error("A building polygon must have at least 4 points.");
+    
+    await ctx.db.patch(args.buildingId, { polygon: args.polygon });
+  }
+});
