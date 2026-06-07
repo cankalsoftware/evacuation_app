@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { View, Text, TouchableOpacity, ActivityIndicator, TextInput, useWindowDimensions, Alert, Platform, Modal, Image } from "react-native";
 import { useAuth, useUser } from "@clerk/clerk-expo";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "../convex/_generated/api";
 import * as Location from "expo-location";
 import * as ImagePicker from "expo-image-picker";
 import ProfileSettingsScreen from "./ProfileSettingsScreen";
+import EvacuationMode from "./EvacuationMode";
 
 // Calculate distance between two coordinates in meters using Haversine formula
 function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
@@ -31,12 +32,21 @@ export default function GuestDashboard() {
   const [isViewingPlan, setIsViewingPlan] = useState(false);
   const [isScanned, setIsScanned] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [currentLocation, setCurrentLocation] = useState<Location.LocationObject | null>(null);
+  const [isEvacuating, setIsEvacuating] = useState(false);
+
+  // Draft state for confirmation modal
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [draftPlan, setDraftPlan] = useState<{storageId: any, lat: number, lon: number} | null>(null);
+  const [draftRoom, setDraftRoom] = useState("");
+  const [draftFloor, setDraftFloor] = useState("");
 
   const dashboardData = useQuery(api.portal.getDashboardData, { clerkId: user?.id });
   const updateProfile = useMutation(api.portal.updateProfile);
   const generateUploadUrl = useMutation(api.portal.generateUploadUrl);
   const uploadScannedPlan = useMutation(api.portal.uploadScannedPlan);
+  const extractMapDetails = useAction(api.vision.extractMapDetails);
 
   const processImage = async (result: ImagePicker.ImagePickerResult, loc: Location.LocationObject, isCamera: boolean) => {
     if (result.canceled || !result.assets || result.assets.length === 0) return;
@@ -89,22 +99,43 @@ export default function GuestDashboard() {
       });
       const { storageId } = await uploadResult.json();
       
-      if (user?.id) {
-        await uploadScannedPlan({
-          clerkId: user.id,
-          storageId,
-          lat: imageLat,
-          lon: imageLon,
-        });
-      }
+      setIsUploading(false);
+      setIsAnalyzing(true);
+      
+      // Call AI to extract details
+      const aiData = await extractMapDetails({ storageId });
+      
+      setDraftPlan({ storageId, lat: imageLat, lon: imageLon });
+      setDraftRoom(aiData?.roomNumber || "");
+      setDraftFloor(aiData?.floorLevel || "");
+      
+      setIsAnalyzing(false);
+      setShowConfirmModal(true); // Open modal instead of saving directly
 
-      setIsScanned(true);
-      Alert.alert("Success", `Evacuation plan verified and uploaded! The approximate distance from your live location was ${Math.round(dist)} meters.`);
     } catch (err) {
       console.log(err);
       Alert.alert("Upload Error", "Failed to upload the image to the server.");
-    } finally {
       setIsUploading(false);
+      setIsAnalyzing(false);
+    }
+  };
+
+  const handleConfirmPlan = async () => {
+    if (!user?.id || !draftPlan) return;
+    try {
+      await uploadScannedPlan({
+        clerkId: user.id,
+        storageId: draftPlan.storageId,
+        lat: draftPlan.lat,
+        lon: draftPlan.lon,
+        roomNumber: draftRoom,
+        floorLevel: draftFloor,
+      });
+      setShowConfirmModal(false);
+      setIsScanned(true);
+      Alert.alert("Success", "Evacuation plan verified and uploaded!");
+    } catch (e) {
+      Alert.alert("Error", "Failed to save the plan.");
     }
   };
 
@@ -274,7 +305,13 @@ export default function GuestDashboard() {
         <TouchableOpacity 
           style={{ width: panicButtonSize, height: panicButtonSize, borderRadius: panicButtonSize / 2 }}
           className="bg-red-600 items-center justify-center shadow-[0_0_80px_rgba(220,38,38,0.6)] border-8 border-red-500"
-          onPress={() => console.log("Panic Triggered at", currentLocation)}
+          onPress={() => {
+            if (!dashboardData?.scannedPlanUrl) {
+              Alert.alert("No Plan", "Please scan a plan before evacuating.");
+              return;
+            }
+            setIsEvacuating(true);
+          }}
         >
           <Text style={{ fontSize: panicButtonSize * 0.3 }} className="mb-2">🚨</Text>
           <Text style={{ fontSize: panicButtonSize * 0.15 }} className="text-white font-black uppercase tracking-widest">Panic</Text>
@@ -284,7 +321,7 @@ export default function GuestDashboard() {
       {/* FOOTER (20%) */}
       <View style={{ flex: 1 }} className="px-6 pb-12 justify-end w-full items-center">
         <TouchableOpacity 
-          className={`w-full max-w-2xl ${isScanned ? 'bg-green-600 border-green-500' : isUploading ? 'bg-blue-600 border-blue-500' : 'bg-amber-500 border-amber-400'} border-4 rounded-3xl p-6 items-center flex-row justify-center shadow-lg`}
+          className={`w-full max-w-2xl ${isScanned ? 'bg-green-600 border-green-500' : isUploading || isAnalyzing ? 'bg-blue-600 border-blue-500' : 'bg-amber-500 border-amber-400'} border-4 rounded-3xl p-6 items-center flex-row justify-center shadow-lg`}
           onPress={() => {
             if (isScanned) {
               setIsViewingPlan(true);
@@ -292,11 +329,11 @@ export default function GuestDashboard() {
               handleScanPlan();
             }
           }}
-          disabled={isUploading}
+          disabled={isUploading || isAnalyzing}
         >
-          {isUploading ? <ActivityIndicator color="white" size="large" className="mr-4" /> : <Text className="text-4xl mr-4">{isScanned ? "🗺️" : "📸"}</Text>}
+          {isUploading || isAnalyzing ? <ActivityIndicator color="white" size="large" className="mr-4" /> : <Text className="text-4xl mr-4">{isScanned ? "🗺️" : "📸"}</Text>}
           <Text className="text-white font-extrabold text-2xl">
-            {isUploading ? "Uploading..." : isScanned ? "View Verified Plan" : "Scan Evacuation Plan"}
+            {isUploading ? "Uploading..." : isAnalyzing ? "AI Analyzing..." : isScanned ? "View Verified Plan" : "Scan Evacuation Plan"}
           </Text>
         </TouchableOpacity>
       </View>
@@ -324,6 +361,10 @@ export default function GuestDashboard() {
                 source={{ uri: dashboardData.scannedPlanUrl }} 
                 style={{ width: '100%', height: '100%', resizeMode: 'contain' }} 
               />
+              <View className="absolute bottom-4 left-4 right-4 bg-black/60 p-4 rounded-xl">
+                <Text className="text-white font-bold text-lg">Room: {dashboardData.roomNumber || "Unknown"}</Text>
+                <Text className="text-neutral-300">Floor: {dashboardData.floorLevel || "Unknown"}</Text>
+              </View>
             </View>
           ) : (
             <View className="flex-1 justify-center items-center">
@@ -341,6 +382,57 @@ export default function GuestDashboard() {
             <Text className="text-white font-extrabold text-lg uppercase tracking-wider">Scan New Plan</Text>
           </TouchableOpacity>
         </View>
+      </Modal>
+
+      {/* Confirmation Modal */}
+      <Modal visible={showConfirmModal} animationType="fade" transparent>
+        <View className="flex-1 bg-black/80 justify-center items-center px-6">
+          <View className="bg-neutral-900 border border-neutral-700 p-6 rounded-3xl w-full max-w-sm">
+            <Text className="text-xl font-bold text-white mb-2">Confirm Location</Text>
+            <Text className="text-neutral-400 mb-6">Our AI detected the following details from your map. Please confirm or edit them.</Text>
+            
+            <Text className="text-neutral-400 text-xs mb-1 uppercase font-bold">Room Number</Text>
+            <TextInput
+              className="bg-neutral-800 border border-neutral-700 rounded-xl p-4 text-white text-lg mb-4"
+              value={draftRoom}
+              onChangeText={setDraftRoom}
+              placeholder="e.g. 204"
+              placeholderTextColor="#525252"
+            />
+
+            <Text className="text-neutral-400 text-xs mb-1 uppercase font-bold">Floor Level</Text>
+            <TextInput
+              className="bg-neutral-800 border border-neutral-700 rounded-xl p-4 text-white text-lg mb-8"
+              value={draftFloor}
+              onChangeText={setDraftFloor}
+              placeholder="e.g. 2"
+              placeholderTextColor="#525252"
+            />
+
+            <View className="flex-row space-x-4">
+              <TouchableOpacity 
+                className="flex-1 bg-neutral-800 py-4 rounded-xl items-center border border-neutral-700"
+                onPress={() => setShowConfirmModal(false)}
+              >
+                <Text className="text-white font-bold">Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                className="flex-1 bg-green-600 py-4 rounded-xl items-center border border-green-500"
+                onPress={handleConfirmPlan}
+              >
+                <Text className="text-white font-bold text-lg">Confirm</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Evacuation Mode Modal (Full Screen) */}
+      <Modal visible={isEvacuating} animationType="fade" presentationStyle="fullScreen">
+        <EvacuationMode 
+          dashboardData={dashboardData} 
+          onClose={() => setIsEvacuating(false)} 
+        />
       </Modal>
     </View>
   );

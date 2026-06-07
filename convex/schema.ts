@@ -23,6 +23,8 @@ export default defineSchema({
     latitude: v.number(),
     longitude: v.number(),
     scannedAt: v.number(),
+    roomNumber: v.optional(v.string()),
+    floorLevel: v.optional(v.string()),
   }).index("by_clerkId", ["clerkId"]),
 
   locationConsent: defineTable({

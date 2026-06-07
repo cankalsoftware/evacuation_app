@@ -11,6 +11,7 @@
 import type * as consent from "../consent.js";
 import type * as portal from "../portal.js";
 import type * as users from "../users.js";
+import type * as vision from "../vision.js";
 
 import type {
   ApiFromModules,
@@ -22,6 +23,7 @@ declare const fullApi: ApiFromModules<{
   consent: typeof consent;
   portal: typeof portal;
   users: typeof users;
+  vision: typeof vision;
 }>;
 
 /**

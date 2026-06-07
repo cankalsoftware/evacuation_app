@@ -40,6 +40,8 @@ export const getDashboardData = query({
       scannedPlanLat: plan?.latitude,
       scannedPlanLon: plan?.longitude,
       scannedAt: plan?.scannedAt,
+      roomNumber: plan?.roomNumber,
+      floorLevel: plan?.floorLevel,
       scannedPlanUrl: plan?.storageId ? await ctx.storage.getUrl(plan.storageId) : null,
     };
   },
@@ -55,6 +57,8 @@ export const uploadScannedPlan = mutation({
     storageId: v.id("_storage"),
     lat: v.number(),
     lon: v.number(),
+    roomNumber: v.optional(v.string()),
+    floorLevel: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const existingPlan = await ctx.db
@@ -68,6 +72,8 @@ export const uploadScannedPlan = mutation({
         latitude: args.lat,
         longitude: args.lon,
         scannedAt: Date.now(),
+        ...(args.roomNumber !== undefined && { roomNumber: args.roomNumber }),
+        ...(args.floorLevel !== undefined && { floorLevel: args.floorLevel }),
       });
     } else {
       await ctx.db.insert("plans", {
@@ -76,6 +82,8 @@ export const uploadScannedPlan = mutation({
         latitude: args.lat,
         longitude: args.lon,
         scannedAt: Date.now(),
+        roomNumber: args.roomNumber,
+        floorLevel: args.floorLevel,
       });
     }
   },
