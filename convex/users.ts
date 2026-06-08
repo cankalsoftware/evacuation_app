@@ -53,3 +53,24 @@ export const getUser = query({
       .first();
   },
 });
+
+export const updateAdminProfile = mutation({
+  args: {
+    clerkId: v.string(),
+    name: v.string(),
+    phone: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const existingUser = await ctx.db
+      .query("users")
+      .withIndex("by_clerkId", (q) => q.eq("clerkId", args.clerkId))
+      .first();
+
+    if (!existingUser) throw new Error("User not found");
+
+    await ctx.db.patch(existingUser._id, {
+      name: args.name,
+      phone: args.phone,
+    });
+  },
+});

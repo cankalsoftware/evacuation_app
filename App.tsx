@@ -11,6 +11,7 @@ import { api } from "./convex/_generated/api";
 import AuthScreen from "./components/AuthScreen";
 import LocationConsentScreen from "./components/LocationConsentScreen";
 import MainScreen from "./components/MainScreen";
+import Toast from "./components/Toast";
 
 const convex = new ConvexReactClient(process.env.EXPO_PUBLIC_CONVEX_URL!, {
   unsavedChangesWarning: false,
@@ -41,15 +42,23 @@ function RootNavigator() {
 
   useEffect(() => {
     if (isSignedIn && userId && user?.primaryEmailAddress?.emailAddress && !hasSynced) {
-      const role = typeof user.publicMetadata?.role === 'string' ? user.publicMetadata.role : undefined;
-      
-      syncUser({ 
-        clerkId: userId,
-        email: user.primaryEmailAddress.emailAddress,
-        role: role
-      }).then(() => setHasSynced(true));
+      const { Platform } = require('react-native');
+      const getRolePromise = Platform.OS === 'web' 
+        ? Promise.resolve(localStorage.getItem('requested_role'))
+        : SecureStore.getItemAsync('requested_role');
+
+      getRolePromise.then((savedRole: any) => {
+        // If a role was saved during login, use it. Otherwise, default to whatever they had before, or guest.
+        const role = savedRole || (typeof user.publicMetadata?.role === 'string' ? user.publicMetadata.role : "guest");
+        
+        syncUser({ 
+          clerkId: userId,
+          email: user.primaryEmailAddress!.emailAddress,
+          role: role
+        }).then(() => setHasSynced(true)).catch((err: any) => console.error("Sync failed:", err));
+      }).catch((err: any) => console.error("SecureStore failed:", err));
     }
-  }, [isSignedIn, userId, user?.primaryEmailAddress?.emailAddress, user?.publicMetadata?.role, hasSynced, syncUser]);
+  }, [isSignedIn, userId, user?.primaryEmailAddress?.emailAddress, hasSynced, syncUser]);
 
   const hasConsented = useQuery(api.consent.getConsentStatus, 
     { clerkId: userId ?? undefined }
@@ -90,6 +99,7 @@ export default function App() {
     >
       <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
         <RootNavigator />
+        <Toast />
         <StatusBar style="light" />
       </ConvexProviderWithClerk>
     </ClerkProvider>

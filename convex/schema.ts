@@ -7,11 +7,6 @@ export default defineSchema({
     email: v.optional(v.string()), // Optional until verified or provided
     phone: v.optional(v.string()), // User's telephone number
     name: v.optional(v.string()), // User's full name
-    // Legacy fields (kept optional to prevent schema validation crashes on old records)
-    scannedPlanId: v.optional(v.id("_storage")),
-    scannedPlanLat: v.optional(v.number()),
-    scannedPlanLon: v.optional(v.number()),
-    scannedAt: v.optional(v.number()),
     
     role: v.union(v.literal("guest"), v.literal("admin")),
     createdAt: v.number(),

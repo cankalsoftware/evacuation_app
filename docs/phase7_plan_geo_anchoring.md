@@ -28,5 +28,43 @@ polygon: v.array(
 ### 2. The Admin UI (`AdminDashboard.tsx`)
 We embed a React Native Map in the dashboard. The Admin clicks the map to drop pins, drawing the shape of their building. We enforce a minimum of 4 pins before the "Save" button unlocks.
 
+---
+
+## Phase 7.5: Admin Onboarding & Role Selection
+
+### 1. Role Selection on Signup
+- Add a Role Selection toggle (Guest vs Facility Admin) below the email input on `AuthScreen.tsx`.
+- Store the selected role locally in `SecureStore` so the app remembers what they chose while Clerk handles the OTP email.
+
+### 2. Database Sync
+- Update `App.tsx` `syncUser` to read the chosen role from `SecureStore` and pass it to Convex.
+- Convex registers the new user in the database with the requested role.
+
+### 3. Admin Profile Setup Page
+- Add a check in `AdminDashboard.tsx`: `if (!dashboardData.name || !dashboardData.phone)`.
+- If true, force the user to complete the `AdminSetupView`.
+- Provide a gear icon ⚙️ next to the Sign Out button to access this setup page later to edit their details.
+
+### 4. Backend Mutation
+- Create `updateAdminProfile(clerkId, name, phone)` in `convex/users.ts`.
+
+---
+
+## Phase 7.6: Authentication Redesign
+Transition from a purely passwordless (Email OTP every time) login to a traditional Password-based authentication system to speed up logins for returning users.
+
+### 1. New Registration Flow (New Users)
+- Requires Email, Password, and an OTP verification code sent to their email to prove ownership and stop bots.
+- User selects Guest or Admin role during registration.
+
+### 2. New Login Flow (Returning Users)
+- Only requires Email and Password. 
+- No OTP required to log in.
+
+### 3. UI Changes (`AuthScreen.tsx`)
+- Replace the "FireVision" text with the uploaded `FireVision.png` logo.
+- Add a tab toggle at the top of the form to switch between "Sign In" and "Register".
+- Add a **Password** `<TextInput>` field below the Email field.
+
 ### 3. The Guest UI (`EvacuationMode.tsx`)
 When the Guest app initializes, we send their live GPS to Convex. Convex runs a "Ray-Casting" algorithm to check if their coordinate falls inside *any* of the Admin polygons. If it does, they instantly receive the Evacuation Plan!

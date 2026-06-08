@@ -1,3 +1,4 @@
+import { showToast } from "./Toast";
 import React, { useState, useEffect } from "react";
 import { View, Text, TouchableOpacity, ActivityIndicator, TextInput, useWindowDimensions, Alert, Platform, Modal, Image } from "react-native";
 import { useAuth, useUser } from "@clerk/clerk-expo";
@@ -66,7 +67,7 @@ export default function GuestDashboard() {
            imageLat = loc.coords.latitude;
            imageLon = loc.coords.longitude;
          } else {
-           Alert.alert("No Location Data", "The selected image does not contain EXIF GPS data. Please take a photo with the camera instead, or use an image with location data.");
+           showToast("The selected image does not contain EXIF GPS data. Please take a photo with the camera instead, or use an image with location data.", "error");
            return;
          }
       } else {
@@ -79,10 +80,7 @@ export default function GuestDashboard() {
       dist = getDistance(loc.coords.latitude, loc.coords.longitude, imageLat, imageLon);
       
       if (dist > 50) {
-        Alert.alert(
-          "Location Mismatch",
-          `Image location is too far from your current location (${Math.round(dist)} meters away). Maximum allowed distance is 50m.`
-        );
+        showToast(`Image location is too far from your current location (${Math.round(dist)} meters away). Maximum allowed distance is 50m.`, "error");
         return;
       }
     }
@@ -114,7 +112,7 @@ export default function GuestDashboard() {
 
     } catch (err) {
       console.log(err);
-      Alert.alert("Upload Error", "Failed to upload the image to the server.");
+      showToast("Failed to upload the image to the server.", "error");
       setIsUploading(false);
       setIsAnalyzing(false);
     }
@@ -133,9 +131,9 @@ export default function GuestDashboard() {
       });
       setShowConfirmModal(false);
       setIsScanned(true);
-      Alert.alert("Success", "Evacuation plan verified and uploaded!");
+      showToast("Evacuation plan verified and uploaded!");
     } catch (e) {
-      Alert.alert("Error", "Failed to save the plan.");
+      showToast("Failed to save the plan.", "error");
     }
   };
 
@@ -145,7 +143,7 @@ export default function GuestDashboard() {
       if (!loc) {
         const { status } = await Location.getForegroundPermissionsAsync();
         if (status !== 'granted') {
-          Alert.alert("Permission Denied", "Location permission is required to verify the scan.");
+          showToast("Location permission is required to verify the scan.", "error");
           return;
         }
         loc = await Location.getCurrentPositionAsync({});
@@ -156,7 +154,7 @@ export default function GuestDashboard() {
       if (Platform.OS === 'web') {
         const libPerm = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (libPerm.granted === false) {
-          Alert.alert("Permission Denied", "Library permission is required!");
+          showToast("Library permission is required!", "error");
           return;
         }
         const result = await ImagePicker.launchImageLibraryAsync({ exif: true });
@@ -173,7 +171,7 @@ export default function GuestDashboard() {
             onPress: async () => {
               const camPerm = await ImagePicker.requestCameraPermissionsAsync();
               if (camPerm.granted === false) {
-                Alert.alert("Permission Denied", "Camera permission is required!");
+                showToast("Camera permission is required!", "error");
                 return;
               }
               const result = await ImagePicker.launchCameraAsync({ exif: true });
@@ -185,7 +183,7 @@ export default function GuestDashboard() {
             onPress: async () => {
               const libPerm = await ImagePicker.requestMediaLibraryPermissionsAsync();
               if (libPerm.granted === false) {
-                Alert.alert("Permission Denied", "Library permission is required!");
+                showToast("Library permission is required!", "error");
                 return;
               }
               const result = await ImagePicker.launchImageLibraryAsync({ exif: true });
@@ -197,7 +195,7 @@ export default function GuestDashboard() {
       );
     } catch (e) {
       console.log(e);
-      Alert.alert("Error", "An error occurred while preparing the scanner.");
+      showToast("An error occurred while preparing the scanner.", "error");
     }
   };
 
@@ -307,7 +305,7 @@ export default function GuestDashboard() {
           className="bg-red-600 items-center justify-center shadow-[0_0_80px_rgba(220,38,38,0.6)] border-8 border-red-500"
           onPress={() => {
             if (!dashboardData?.scannedPlanUrl) {
-              Alert.alert("No Plan", "Please scan a plan before evacuating.");
+              showToast("Please scan a plan before evacuating.", "error");
               return;
             }
             setIsEvacuating(true);

@@ -1,3 +1,4 @@
+import { showToast } from "./Toast";
 import React from "react";
 import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Modal, TextInput, Platform, Image } from "react-native";
 import { useAuth, useUser } from "@clerk/clerk-expo";
@@ -35,6 +36,12 @@ export default function AdminDashboard() {
   const [bAddress, setBAddress] = React.useState("");
   const [bPins, setBPins] = React.useState<{lat: number, lon: number}[]>([]);
 
+  const [showSettings, setShowSettings] = React.useState(false);
+  const [setupName, setSetupName] = React.useState("");
+  const [setupPhone, setSetupPhone] = React.useState("");
+  const [isSavingSetup, setIsSavingSetup] = React.useState(false);
+  const updateAdminProfile = useMutation(api.users.updateAdminProfile);
+
   // Keep selectedBuilding in sync with database updates (like image uploads)
   React.useEffect(() => {
     if (selectedBuilding && dashboardData?.buildings) {
@@ -53,7 +60,7 @@ export default function AdminDashboard() {
 
   const handleSaveBuilding = async () => {
     if (bPins.length < 4) {
-      alert("Please drop at least 4 pins to create a polygon footprint.");
+      showToast("Please drop at least 4 pins to create a polygon footprint.");
       return;
     }
     if (!bName || !user?.id) return;
@@ -71,10 +78,10 @@ export default function AdminDashboard() {
       setBName("");
       setBAddress("");
       setBPins([]);
-      alert("Building registered successfully!");
+      showToast("Building registered successfully!");
     } catch (e) {
       console.log(e);
-      alert("Error saving building.");
+      showToast("Error saving building.", "error");
     }
   };
 
@@ -109,10 +116,10 @@ export default function AdminDashboard() {
           storageId
         });
       }
-      alert("Floor plan uploaded successfully!");
+      showToast("Floor plan uploaded successfully!");
     } catch (e) {
       console.log(e);
-      alert("Upload failed.");
+      showToast("Upload failed.", "error");
     } finally {
       setIsUploading(false);
     }
@@ -134,20 +141,118 @@ export default function AdminDashboard() {
     );
   }
 
+  const needsSetup = !dashboardData.name || !dashboardData.phone;
+  if (needsSetup || showSettings) {
+    return (
+      <View className="flex-1 bg-neutral-900 pt-16 px-6">
+        <View className="flex-row justify-between items-center mb-8">
+          <Text className="text-3xl font-extrabold text-white">
+            {needsSetup ? "Admin Setup" : "Admin Settings"}
+          </Text>
+          {!needsSetup && (
+            <TouchableOpacity onPress={() => setShowSettings(false)} className="bg-neutral-800 p-2 rounded-full">
+              <Text className="text-white font-bold">✕</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <Text className="text-neutral-400 mb-6">
+          {needsSetup 
+            ? "Welcome to FireVision Admin! Please provide your emergency contact details before continuing." 
+            : "Update your emergency contact information below."}
+        </Text>
+
+        <View className="bg-neutral-800 p-6 rounded-3xl border border-neutral-700">
+          <Text className="text-white font-bold mb-2">Full Name</Text>
+          <TextInput
+            className="bg-neutral-900 border border-neutral-700 text-white p-4 rounded-xl mb-6"
+            placeholder="John Doe"
+            placeholderTextColor="#666"
+            value={setupName || dashboardData.name || ""}
+            onChangeText={setSetupName}
+          />
+
+          <Text className="text-white font-bold mb-2">Emergency Phone Number</Text>
+          <TextInput
+            className="bg-neutral-900 border border-neutral-700 text-white p-4 rounded-xl mb-8"
+            placeholder="+1 234 567 8900"
+            placeholderTextColor="#666"
+            keyboardType="phone-pad"
+            value={setupPhone || dashboardData.phone || ""}
+            onChangeText={setSetupPhone}
+          />
+
+          <TouchableOpacity 
+            className={`bg-red-600 py-4 rounded-xl items-center mb-6 ${isSavingSetup ? 'opacity-50' : ''}`}
+            disabled={isSavingSetup || (!setupName && !dashboardData.name) || (!setupPhone && !dashboardData.phone)}
+            onPress={async () => {
+              setIsSavingSetup(true);
+              try {
+                await updateAdminProfile({
+                  clerkId: user?.id || "",
+                  name: setupName || dashboardData.name || "",
+                  phone: setupPhone || dashboardData.phone || "",
+                });
+                setShowSettings(false);
+              } catch(e) {
+                showToast("Error saving profile", "error");
+              } finally {
+                setIsSavingSetup(false);
+              }
+            }}
+          >
+            {isSavingSetup ? <ActivityIndicator color="white" /> : <Text className="text-white font-bold text-lg">Save Details</Text>}
+          </TouchableOpacity>
+
+          {!needsSetup && (
+            <TouchableOpacity 
+              className="bg-neutral-800 border border-neutral-700 py-4 rounded-xl items-center flex-row justify-center"
+              onPress={async () => {
+                try {
+                  const passkey = await user?.createPasskey();
+                  if (passkey) showToast("Passkey created successfully! You can now use FaceID/TouchID to sign in.");
+                } catch (e: any) {
+                  showToast(e.errors?.[0]?.longMessage || e.message || "Error creating passkey. Your device might not support it.");
+                }
+              }}
+            >
+              <Text className="text-2xl mr-2">🔑</Text>
+              <Text className="text-white font-bold text-lg">Create Biometric Passkey</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {needsSetup && (
+          <TouchableOpacity className="mt-8 self-center" onPress={() => signOut()}>
+            <Text className="text-neutral-500">Sign Out</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  }
+
   return (
     <View className="flex-1 bg-neutral-900 pt-16">
       {/* Header */}
       <View className="px-6 flex-row justify-between items-center mb-6">
         <View>
           <Text className="text-3xl font-extrabold text-white">Admin Console</Text>
-          <Text className="text-red-400 font-bold">{user?.primaryEmailAddress?.emailAddress}</Text>
+          <Text className="text-red-400 font-bold">{dashboardData.name || user?.primaryEmailAddress?.emailAddress}</Text>
         </View>
-        <TouchableOpacity 
-          className="bg-neutral-800 p-3 rounded-full border border-neutral-700"
-          onPress={() => signOut()}
-        >
-          <Text className="text-white text-sm">Sign Out</Text>
-        </TouchableOpacity>
+        <View className="flex-row items-center">
+          <TouchableOpacity 
+            className="bg-neutral-800 p-3 rounded-full border border-neutral-700 mr-2"
+            onPress={() => setShowSettings(true)}
+          >
+            <Text className="text-white">⚙️</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            className="bg-neutral-800 p-3 rounded-full border border-neutral-700"
+            onPress={() => signOut()}
+          >
+            <Text className="text-white text-sm">Sign Out</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView className="flex-1 px-6">
@@ -158,9 +263,12 @@ export default function AdminDashboard() {
             <Text className="text-2xl mb-1">📢</Text>
             <Text className="text-red-400 font-bold text-center text-xs">Evacuate All</Text>
           </TouchableOpacity>
-          <TouchableOpacity className="flex-1 bg-neutral-800 border border-neutral-700 p-4 rounded-2xl items-center">
+          <TouchableOpacity 
+            className="flex-1 bg-neutral-800 border border-neutral-700 p-4 rounded-2xl items-center"
+            onPress={() => setIsRegistering(true)}
+          >
             <Text className="text-2xl mb-1">🗺️</Text>
-            <Text className="text-white font-bold text-center text-xs">Upload Plan</Text>
+            <Text className="text-white font-bold text-center text-xs">Add Location</Text>
           </TouchableOpacity>
         </View>
 
@@ -254,7 +362,7 @@ export default function AdminDashboard() {
                       {lat: 51.471, lon: -2.123},
                       {lat: 51.471, lon: -2.124}
                     ]);
-                    alert("4 Test Pins Generated! You can now save the building.");
+                    showToast("4 Test Pins Generated! You can now save the building.");
                   }}
                 >
                   <Text className="text-white font-bold">{bPins.length > 0 ? "Test Polygon Generated!" : "Generate Test Polygon"}</Text>
@@ -386,9 +494,9 @@ export default function AdminDashboard() {
                             polygon: editingPins
                           });
                           setSelectedBuilding({...selectedBuilding, polygon: editingPins});
-                          alert("Polygon updated successfully!");
+                          showToast("Polygon updated successfully!");
                         } catch(e) {
-                          alert("Error saving polygon");
+                          showToast("Error saving polygon", "error");
                         }
                       }}
                     >
@@ -460,9 +568,9 @@ export default function AdminDashboard() {
                           polygon: editingPins
                         });
                         setSelectedBuilding({...selectedBuilding, polygon: editingPins});
-                        alert("Coordinates manually updated successfully!");
+                        showToast("Coordinates manually updated successfully!");
                       } catch(e) {
-                        alert("Error saving polygon");
+                        showToast("Error saving polygon", "error");
                       }
                     }}
                   >

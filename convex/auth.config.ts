@@ -1,8 +1,8 @@
 export default {
   providers: [
     {
-      // Replace this with your Clerk Issuer URL from the JWT template
-      domain: process.env.CLERK_JWT_ISSUER_DOMAIN,
+      // Trailing slash is REQUIRED by Clerk's OIDC implementation
+      domain: "https://stirring-mule-87.clerk.accounts.dev/",
       applicationID: "convex",
     },
   ],

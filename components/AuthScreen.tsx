@@ -1,57 +1,108 @@
+import { showToast } from "./Toast";
 import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Image } from "react-native";
 import { useSignIn, useSignUp } from "@clerk/clerk-expo";
 
 export default function AuthScreen() {
   const { isLoaded: isSignUpLoaded, signUp, setActive: setSignUpActive } = useSignUp();
   const { isLoaded: isSignInLoaded, signIn, setActive: setSignInActive } = useSignIn();
 
+  const [isLoginMode, setIsLoginMode] = useState(true);
+  const [isForgotPasswordMode, setIsForgotPasswordMode] = useState(false);
   const [emailAddress, setEmailAddress] = useState("");
+  const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [pendingVerification, setPendingVerification] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [selectedRole, setSelectedRole] = useState<"guest" | "admin">("guest");
 
   if (!isSignUpLoaded || !isSignInLoaded) return null;
 
-  const requestOTP = async () => {
+  const validatePassword = (pwd: string) => {
+    const isOnlyNumbers = /^\d+$/.test(pwd);
+    if (isOnlyNumbers) {
+      if (pwd.length < 6) {
+        return "PIN must be at least 6 digits.";
+      }
+      return null;
+    } else {
+      if (pwd.length < 8) {
+        return "Passwords must be at least 8 characters.";
+      }
+      const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(pwd);
+      if (!hasSpecialChar) {
+        return "Passwords must contain at least one special character.";
+      }
+      return null;
+    }
+  };
+
+  const getClerkPassword = (pwd: string) => {
+    // Hack to bypass Clerk's 8-character minimum: secretly pad 6 or 7 digit PINs with "A!"
+    if (/^\d{6,7}$/.test(pwd)) {
+      return pwd + "A!";
+    }
+    return pwd;
+  };
+
+  const handlePasskeySignIn = async () => {
     setLoading(true);
     setError("");
     try {
-      // Try to sign in first
-      try {
-        const { supportedFirstFactors } = await signIn.create({
+      const completeSignIn = await signIn.authenticateWithPasskey();
+      if (completeSignIn.status === "complete") {
+        await setSignInActive({ session: completeSignIn.createdSessionId });
+      }
+    } catch (err: any) {
+      console.log(err);
+      setError(err.errors?.[0]?.longMessage || err.message || "Passkey sign-in failed.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAuth = async () => {
+    setLoading(true);
+    setError("");
+    const clerkPassword = getClerkPassword(password);
+
+    try {
+      if (isForgotPasswordMode) {
+        await signIn.create({
+          strategy: "reset_password_email_code",
           identifier: emailAddress,
         });
-
-        const isEmailFactor = supportedFirstFactors?.find(
-          (factor) => factor.strategy === "email_code"
-        );
-
-        if (isEmailFactor) {
-          await signIn.prepareFirstFactor({
-            strategy: "email_code",
-            emailAddressId: isEmailFactor.emailAddressId,
-          });
-          setPendingVerification(true);
+        setPendingVerification(true);
+      } else if (isLoginMode) {
+        // LOGIN FLOW (Password)
+        const completeSignIn = await signIn.create({
+          identifier: emailAddress,
+          password: clerkPassword,
+        });
+        if (completeSignIn.status === "complete") {
+          await setSignInActive({ session: completeSignIn.createdSessionId });
+        } else {
+          setError("Failed to sign in. Please check your credentials.");
+        }
+      } else {
+        // REGISTER FLOW
+        const validationError = validatePassword(password);
+        if (validationError) {
+          setError(validationError);
           setLoading(false);
           return;
         }
-      } catch (err: any) {
-        // If user doesn't exist, Clerk throws an error, so we sign up instead
-        if (err.errors && err.errors[0]?.code === "form_identifier_not_found") {
-          await signUp.create({
-            emailAddress: emailAddress,
-            password: "FireVision" + Math.random().toString(36).slice(-8) + "1!A",
-          });
-          await signUp.prepareEmailAddressVerification({ strategy: "email_code" });
-          setPendingVerification(true);
-        } else {
-          throw err;
-        }
+
+        await signUp.create({
+          emailAddress,
+          password: clerkPassword,
+        });
+        await signUp.prepareEmailAddressVerification({ strategy: "email_code" });
+        setPendingVerification(true);
       }
     } catch (err: any) {
-      setError(err.errors?.[0]?.message || "Something went wrong.");
+      setError(err.errors?.[0]?.longMessage || err.errors?.[0]?.message || "Something went wrong.");
     } finally {
       setLoading(false);
     }
@@ -61,21 +112,40 @@ export default function AuthScreen() {
     setLoading(true);
     setError("");
     try {
-      // If we are in sign up flow
-      if (signUp.unverifiedFields.includes("email_address")) {
-        const completeSignUp = await signUp.attemptEmailAddressVerification({ code });
-        if (completeSignUp.status === "complete") {
-          await setSignUpActive({ session: completeSignUp.createdSessionId });
-        } else {
-          setError(`Sign Up incomplete: missing ${completeSignUp.missingFields?.join(", ")}`);
+      if (isForgotPasswordMode) {
+        const validationError = validatePassword(password);
+        if (validationError) {
+          setError(validationError);
+          setLoading(false);
+          return;
         }
-      } else {
-        // We are in sign in flow
-        const completeSignIn = await signIn.attemptFirstFactor({ strategy: "email_code", code });
+
+        const clerkPassword = getClerkPassword(password);
+
+        const completeSignIn = await signIn.attemptFirstFactor({
+          strategy: "reset_password_email_code",
+          code,
+          password: clerkPassword,
+        });
         if (completeSignIn.status === "complete") {
           await setSignInActive({ session: completeSignIn.createdSessionId });
         } else {
-          setError(`Sign In incomplete: status is ${completeSignIn.status}`);
+          setError("Failed to reset password.");
+        }
+      } else {
+        // OTP is only for Registration in this new flow
+        const completeSignUp = await signUp.attemptEmailAddressVerification({ code });
+        if (completeSignUp.status === "complete") {
+          const { Platform } = require('react-native');
+          if (Platform.OS !== 'web') {
+            const SecureStore = require('expo-secure-store');
+            await SecureStore.setItemAsync('requested_role', selectedRole);
+          } else {
+            localStorage.setItem('requested_role', selectedRole);
+          }
+          await setSignUpActive({ session: completeSignUp.createdSessionId });
+        } else {
+          setError(`Sign Up incomplete: missing ${completeSignUp.missingFields?.join(", ")}`);
         }
       }
     } catch (err: any) {
@@ -89,8 +159,30 @@ export default function AuthScreen() {
   return (
     <View className="flex-1 bg-neutral-900 items-center justify-center p-6">
       <View className="w-full max-w-sm bg-neutral-800 p-8 rounded-3xl shadow-xl border border-neutral-700">
-        <Text className="text-3xl font-extrabold text-white mb-2 text-center">FireVision</Text>
-        <Text className="text-neutral-400 mb-8 text-center">Enter your email to continue</Text>
+
+        <View className="items-center mb-6 w-full">
+          <Image
+            source={require('../FireVision.png')}
+            style={{ width: '100%', height: 100, resizeMode: 'contain', marginBottom: 16 }}
+          />
+        </View>
+
+        {!pendingVerification && !isForgotPasswordMode && (
+          <View className="flex-row mb-6 bg-neutral-900 rounded-xl p-1 border border-neutral-700">
+            <TouchableOpacity 
+              className={`flex-1 py-3 rounded-lg items-center ${isLoginMode && !isForgotPasswordMode ? 'bg-red-600' : 'bg-transparent'}`}
+              onPress={() => { setIsLoginMode(true); setIsForgotPasswordMode(false); setError(""); }}
+            >
+              <Text className={`font-bold ${isLoginMode && !isForgotPasswordMode ? 'text-white' : 'text-neutral-400'}`}>Sign In</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              className={`flex-1 py-3 rounded-lg items-center ${!isLoginMode && !isForgotPasswordMode ? 'bg-red-600' : 'bg-transparent'}`}
+              onPress={() => { setIsLoginMode(false); setIsForgotPasswordMode(false); setError(""); }}
+            >
+              <Text className={`font-bold ${!isLoginMode && !isForgotPasswordMode ? 'text-white' : 'text-neutral-400'}`}>Register</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {error ? <Text className="text-red-400 text-center mb-4">{error}</Text> : null}
 
@@ -106,17 +198,101 @@ export default function AuthScreen() {
               onChangeText={setEmailAddress}
               editable={!loading}
             />
+
+            {!isForgotPasswordMode && (
+              <TextInput
+                className="bg-neutral-900 border border-neutral-700 text-white rounded-xl px-4 py-4 mb-4 text-lg"
+                autoCapitalize="none"
+                placeholder="Password or PIN"
+                placeholderTextColor="#666"
+                secureTextEntry={true}
+                value={password}
+                onChangeText={setPassword}
+                editable={!loading}
+              />
+            )}
+
+            {!isLoginMode && !isForgotPasswordMode && (
+              <View className="mb-4 mt-2">
+                <Text className="text-neutral-400 text-xs text-center mb-2">Select your role:</Text>
+                <View className="flex-row bg-neutral-900 rounded-xl p-1 border border-neutral-700">
+                  <TouchableOpacity 
+                    className={`flex-1 py-3 rounded-lg items-center ${selectedRole === 'guest' ? 'bg-neutral-700' : 'bg-transparent'}`}
+                    onPress={() => setSelectedRole('guest')}
+                  >
+                    <Text className={`font-bold ${selectedRole === 'guest' ? 'text-white' : 'text-neutral-400'}`}>Guest</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    className={`flex-1 py-3 rounded-lg items-center ${selectedRole === 'admin' ? 'bg-neutral-700' : 'bg-transparent'}`}
+                    onPress={() => setSelectedRole('admin')}
+                  >
+                    <Text className={`font-bold ${selectedRole === 'admin' ? 'text-white' : 'text-neutral-400'}`}>Admin</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
+            {isLoginMode && !isForgotPasswordMode && (
+              <TouchableOpacity className="mb-4 items-end" onPress={() => setIsForgotPasswordMode(true)}>
+                <Text className="text-red-400 text-sm">Forgot Password?</Text>
+              </TouchableOpacity>
+            )}
+
             <TouchableOpacity 
-              className={`bg-red-600 rounded-xl py-4 items-center ${loading ? 'opacity-50' : 'opacity-100'}`}
-              onPress={requestOTP}
-              disabled={loading || emailAddress.length < 5}
+              className={`bg-red-600 border border-neutral-700 rounded-xl py-4 items-center mb-4 ${loading ? 'opacity-50' : 'opacity-100'}`}
+              onPress={handleAuth}
+              disabled={loading || emailAddress.length < 5 || (!isForgotPasswordMode && password.length < 4)}
             >
-              {loading ? <ActivityIndicator color="white" /> : <Text className="text-white font-bold text-lg">Send Code</Text>}
+              {loading ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <Text className="text-white font-bold text-lg">
+                  {isForgotPasswordMode ? "Send Reset Code" : isLoginMode ? "Sign In" : "Register"}
+                </Text>
+              )}
             </TouchableOpacity>
+            
+            {isForgotPasswordMode && (
+               <TouchableOpacity className="mb-4" onPress={() => setIsForgotPasswordMode(false)}>
+                  <Text className="text-neutral-400 text-center">Back to Login</Text>
+               </TouchableOpacity>
+            )}
+
+            {isLoginMode && !isForgotPasswordMode && (
+              <View className="flex-row items-center mb-4 mt-2">
+                <View className="flex-1 h-px bg-neutral-700" />
+                <Text className="text-neutral-500 px-4 text-xs font-bold">OR USE BIOMETRICS</Text>
+                <View className="flex-1 h-px bg-neutral-700" />
+              </View>
+            )}
+
+            {isLoginMode && !isForgotPasswordMode && (
+              <TouchableOpacity 
+                className={`bg-neutral-800 rounded-xl py-4 items-center flex-row justify-center mb-4 ${loading ? 'opacity-50' : 'opacity-100'}`}
+                onPress={handlePasskeySignIn}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color="white" />
+                ) : (
+                  <>
+                    <Text className="text-2xl mr-2">🔑</Text>
+                    <Text className="text-white font-extrabold text-lg">Sign in with Passkey</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
           </>
         ) : (
           <>
-             <TextInput
+            <Text className="text-white text-center font-bold mb-4">
+              {isForgotPasswordMode ? "Reset your password" : "Verify your email"}
+            </Text>
+            <Text className="text-neutral-400 text-center text-sm mb-6">
+              We sent a 6-digit code to your email. Enter it below.
+            </Text>
+
+            <TextInput
               className="bg-neutral-900 border border-neutral-700 text-white rounded-xl px-4 py-4 mb-4 text-lg text-center tracking-[1em]"
               placeholder="123456"
               placeholderTextColor="#666"
@@ -126,16 +302,30 @@ export default function AuthScreen() {
               onChangeText={setCode}
               editable={!loading}
             />
+
+            {isForgotPasswordMode && (
+              <TextInput
+                className="bg-neutral-900 border border-neutral-700 text-white rounded-xl px-4 py-4 mb-6 text-lg"
+                autoCapitalize="none"
+                placeholder="New Password or PIN"
+                placeholderTextColor="#666"
+                secureTextEntry={true}
+                value={password}
+                onChangeText={setPassword}
+                editable={!loading}
+              />
+            )}
+
             <TouchableOpacity 
               className={`bg-red-600 rounded-xl py-4 items-center ${loading ? 'opacity-50' : 'opacity-100'}`}
               onPress={verifyOTP}
-              disabled={loading || code.length !== 6}
+              disabled={loading || code.length !== 6 || (isForgotPasswordMode && password.length < 4)}
             >
-              {loading ? <ActivityIndicator color="white" /> : <Text className="text-white font-bold text-lg">Verify & Login</Text>}
+              {loading ? <ActivityIndicator color="white" /> : <Text className="text-white font-bold text-lg">{isForgotPasswordMode ? "Reset Password & Login" : "Verify & Login"}</Text>}
             </TouchableOpacity>
-            
+
             <TouchableOpacity className="mt-4" onPress={() => setPendingVerification(false)}>
-               <Text className="text-neutral-400 text-center">Use a different email</Text>
+              <Text className="text-neutral-400 text-center">Back</Text>
             </TouchableOpacity>
           </>
         )}
