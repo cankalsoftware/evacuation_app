@@ -185,7 +185,51 @@ export const updateBuildingPolygon = mutation({
     if (!user || user.role !== "admin") throw new Error("Unauthorized");
     if (args.polygon.length < 4) throw new Error("A building polygon must have at least 4 points.");
     
-    await ctx.db.patch(args.buildingId, { polygon: args.polygon });
+    await ctx.db.patch(args.buildingId, { 
+      polygon: args.polygon,
+      latitude: args.polygon[0].lat,
+      longitude: args.polygon[0].lon
+    });
+  }
+});
+
+export const updateBuildingInfo = mutation({
+  args: {
+    clerkId: v.string(),
+    buildingId: v.id("buildings"),
+    name: v.string(),
+    address: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerkId", (q) => q.eq("clerkId", args.clerkId))
+      .first();
+
+    if (!user || user.role !== "admin") throw new Error("Unauthorized");
+    
+    await ctx.db.patch(args.buildingId, { 
+      name: args.name,
+      address: args.address
+    });
+  }
+});
+
+export const deleteBuilding = mutation({
+  args: {
+    clerkId: v.string(),
+    buildingId: v.id("buildings"),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerkId", (q) => q.eq("clerkId", args.clerkId))
+      .first();
+
+    if (!user || user.role !== "admin") throw new Error("Unauthorized");
+    
+    // We optionally might want to delete the masterPlanId image from storage, but keeping it simple for now
+    await ctx.db.delete(args.buildingId);
   }
 });
 

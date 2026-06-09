@@ -1,6 +1,6 @@
 import { showToast } from "./Toast";
 import React from "react";
-import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Modal, TextInput, Platform, Image } from "react-native";
+import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Modal, TextInput, Platform, Image, Alert } from "react-native";
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
@@ -67,11 +67,16 @@ export default function AdminDashboard() {
   const generateUploadUrl = useMutation(api.portal.generateUploadUrl);
   const updateBuildingImage = useMutation(api.portal.updateBuildingImage);
   const updateBuildingPolygon = useMutation(api.portal.updateBuildingPolygon);
+  const updateBuildingInfo = useMutation(api.portal.updateBuildingInfo);
+  const deleteBuilding = useMutation(api.portal.deleteBuilding);
 
   const [isRegistering, setIsRegistering] = React.useState(false);
   const [selectedBuilding, setSelectedBuilding] = React.useState<any>(null);
   const [isUploading, setIsUploading] = React.useState(false);
   const [editingPins, setEditingPins] = React.useState<{lat: number, lon: number}[] | null>(null);
+  const [editBName, setEditBName] = React.useState("");
+  const [editBAddress, setEditBAddress] = React.useState("");
+  const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
 
   const [bName, setBName] = React.useState("");
   const [bAddress, setBAddress] = React.useState("");
@@ -367,15 +372,18 @@ export default function AdminDashboard() {
                   </View>
                   <TouchableOpacity 
                     className="bg-blue-600 px-4 py-2 rounded-lg ml-4"
-                  onPress={() => {
-                    setSelectedBuilding(building);
-                    setEditingPins(building.polygon || []);
-                  }}
-                >
-                  <Text className="text-white font-bold">Manage</Text>
+                    onPress={() => {
+                      setSelectedBuilding(building);
+                      setEditingPins(building.polygon || []);
+                      setEditBName(building.name);
+                      setEditBAddress(building.address === "No Address Provided" ? "" : building.address);
+                    }}
+                  >
+                    <Text className="text-white font-bold">Manage</Text>
                 </TouchableOpacity>
              </View>
-          ))
+             );
+          })
         ) : (
           <View className="bg-neutral-800 border border-neutral-700 p-6 rounded-2xl items-center mb-8">
              <Text className="text-neutral-400 text-center">You have not registered any buildings yet.</Text>
@@ -393,7 +401,7 @@ export default function AdminDashboard() {
 
       {/* Register Building Modal */}
       <Modal visible={isRegistering} animationType="slide" presentationStyle="pageSheet">
-        <View className="flex-1 bg-neutral-900 pt-12 px-6">
+        <ScrollView className="flex-1 bg-neutral-900 pt-12 px-6">
           <View className="flex-row justify-between items-center mb-6">
             <Text className="text-2xl font-extrabold text-white">New Building</Text>
             <TouchableOpacity onPress={() => setIsRegistering(false)} className="bg-neutral-800 p-2 rounded-full border border-neutral-700">
@@ -435,13 +443,13 @@ export default function AdminDashboard() {
           )}
 
           {!bName ? (
-            <View className="flex-1 bg-neutral-800 rounded-2xl justify-center items-center p-6 border border-neutral-700 opacity-50">
-              <Text className="text-2xl mb-2">🔒</Text>
+            <View className="bg-neutral-800 rounded-2xl justify-center items-center p-6 border border-neutral-700 opacity-50" style={{ height: 300 }}>
+              <Text className="text-2xl mb-2">📸</Text>
               <Text className="text-white font-bold text-center">Enter a Building Name first</Text>
               <Text className="text-neutral-400 text-center text-xs mt-2">The map drawing tools will unlock once you name the building above.</Text>
             </View>
           ) : (
-            <View className="flex-1 bg-neutral-800 rounded-2xl overflow-hidden mb-6 border border-neutral-700 relative">
+            <View className="bg-neutral-800 rounded-2xl overflow-hidden mb-6 border border-neutral-700 relative" style={{ height: 300 }}>
               {Platform.OS === 'web' || !MapView ? (
               <View className="flex-1 justify-center items-center p-6">
                 <Text className="text-white text-center mb-4">Interactive Maps are not supported in the Web Simulator.</Text>
@@ -548,7 +556,7 @@ export default function AdminDashboard() {
               <Text className="text-white font-bold text-lg">Save Building</Text>
             )}
           </TouchableOpacity>
-        </View>
+        </ScrollView>
       </Modal>
 
       {/* Manage Building Modal */}
@@ -557,15 +565,50 @@ export default function AdminDashboard() {
           <ScrollView className="flex-1 bg-neutral-900 pt-12 px-6">
             <View className="flex-row justify-between items-center mb-6">
               <Text className="text-2xl font-extrabold text-white">Manage Building</Text>
-              <TouchableOpacity onPress={() => { setSelectedBuilding(null); setEditingPins(null); }} className="bg-neutral-800 p-2 rounded-full border border-neutral-700">
+                  <TouchableOpacity onPress={() => { setSelectedBuilding(null); setEditingPins(null); }} className="bg-neutral-800 p-2 rounded-full border border-neutral-700">
                 <Text className="text-white font-bold">✕</Text>
               </TouchableOpacity>
             </View>
 
-            <View className="bg-neutral-800 p-6 rounded-2xl border border-neutral-700 mb-6">
-              <Text className="text-white text-xl font-bold mb-1">{selectedBuilding.name}</Text>
-              <Text className="text-neutral-400">{selectedBuilding.address}</Text>
-            </View>
+              <View className="bg-neutral-800 p-6 rounded-2xl border border-neutral-700 mb-6">
+                <Text className="text-white font-bold mb-2">Building Name</Text>
+                <TextInput
+                  className="bg-neutral-900 border border-neutral-700 rounded-xl p-4 text-white mb-4"
+                  value={editBName}
+                  onChangeText={setEditBName}
+                  placeholder="Building Name"
+                  placeholderTextColor="#525252"
+                />
+                <Text className="text-white font-bold mb-2">Address (Optional)</Text>
+                <TextInput
+                  className="bg-neutral-900 border border-neutral-700 rounded-xl p-4 text-white mb-4"
+                  value={editBAddress}
+                  onChangeText={setEditBAddress}
+                  placeholder="Address"
+                  placeholderTextColor="#525252"
+                />
+                <TouchableOpacity 
+                  className={`py-3 rounded-xl items-center ${editBName !== selectedBuilding.name || editBAddress !== selectedBuilding.address ? 'bg-blue-600' : 'bg-neutral-700'}`}
+                  disabled={editBName === selectedBuilding.name && (editBAddress === selectedBuilding.address || (editBAddress === "" && selectedBuilding.address === "No Address Provided"))}
+                  onPress={async () => {
+                    try {
+                      const finalAddress = editBAddress || "No Address Provided";
+                      await updateBuildingInfo({
+                        clerkId: user?.id || "",
+                        buildingId: selectedBuilding._id,
+                        name: editBName,
+                        address: finalAddress,
+                      });
+                      setSelectedBuilding({...selectedBuilding, name: editBName, address: finalAddress});
+                      showToast("Building details updated!");
+                    } catch(e) {
+                      showToast("Error updating building", "error");
+                    }
+                  }}
+                >
+                  <Text className="text-white font-bold">Save Details</Text>
+                </TouchableOpacity>
+              </View>
 
             <Text className="text-white font-bold text-lg mb-4">Polygon Footprint</Text>
             <View className="bg-neutral-800 rounded-2xl overflow-hidden mb-6 border border-neutral-700 relative" style={{ height: 300 }}>
@@ -573,10 +616,24 @@ export default function AdminDashboard() {
                 <View className="flex-1 justify-center items-center p-6">
                   <Text className="text-white text-center mb-4">Interactive Maps are not supported in the Web Simulator.</Text>
                   <Text className="text-neutral-400 text-center text-sm mb-4">Please open this Admin Console on a physical mobile device via Expo Go to view or edit the Polygon pins.</Text>
-                  <View className="flex-row items-center bg-green-900/50 p-4 rounded-xl border border-green-700">
-                    <Text className="text-green-500 font-bold mr-2">✓</Text>
+                  <View className="flex-row items-center bg-green-900/50 p-4 rounded-xl border border-green-700 mb-4">
+                    <Text className="text-green-500 font-bold mr-2">✅</Text>
                     <Text className="text-green-500 text-xs flex-1">This building has {selectedBuilding.polygon?.length || 0} pins saved.</Text>
                   </View>
+                  <TouchableOpacity 
+                    className={`px-6 py-3 rounded-xl ${editingPins?.length > 0 ? 'bg-green-600' : 'bg-blue-600'}`}
+                    onPress={() => {
+                      setEditingPins([
+                        {lat: 51.472, lon: -2.124},
+                        {lat: 51.472, lon: -2.123},
+                        {lat: 51.471, lon: -2.123},
+                        {lat: 51.471, lon: -2.124}
+                      ]);
+                      showToast("4 Test Pins Generated! You can now update the building footprint.");
+                    }}
+                  >
+                    <Text className="text-white font-bold">{editingPins?.length > 0 ? "Test Polygon Generated!" : "Generate Test Polygon"}</Text>
+                  </TouchableOpacity>
                 </View>
               ) : (
                 <>
@@ -782,12 +839,50 @@ export default function AdminDashboard() {
               </View>
             )}
 
-            <TouchableOpacity className="bg-red-900/30 border border-red-700 py-4 rounded-xl items-center mb-12">
+            <TouchableOpacity 
+              className="bg-red-900/30 border border-red-700 py-4 rounded-xl items-center mb-12"
+              onPress={() => setShowDeleteConfirm(true)}
+            >
               <Text className="text-red-400 font-bold">Delete Building</Text>
             </TouchableOpacity>
           </ScrollView>
         )}
       </Modal>
+      {/* Delete Confirmation Modal */}
+      <Modal visible={showDeleteConfirm} animationType="fade" transparent>
+        <View className="flex-1 bg-black/80 justify-center items-center px-6">
+          <View className="bg-neutral-900 border border-neutral-700 p-6 rounded-3xl w-full max-w-sm">
+            <Text className="text-xl font-bold text-white mb-2">Delete Building</Text>
+            <Text className="text-neutral-400 mb-6">Are you sure you want to delete {selectedBuilding?.name}? This action cannot be undone and will permanently remove all associated maps and layouts.</Text>
+            
+            <View className="flex-row space-x-4">
+              <TouchableOpacity 
+                className="flex-1 bg-neutral-800 py-4 rounded-xl items-center border border-neutral-700 mr-2"
+                onPress={() => setShowDeleteConfirm(false)}
+              >
+                <Text className="text-white font-bold">Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                className="flex-1 bg-red-600 py-4 rounded-xl items-center border border-red-500"
+                onPress={async () => {
+                  try {
+                    await deleteBuilding({ clerkId: user?.id || "", buildingId: selectedBuilding._id });
+                    setShowDeleteConfirm(false);
+                    setSelectedBuilding(null);
+                    showToast("Building deleted successfully");
+                  } catch (e) {
+                    setShowDeleteConfirm(false);
+                    showToast("Failed to delete building", "error");
+                  }
+                }}
+              >
+                <Text className="text-white font-bold text-lg">Delete</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 }
