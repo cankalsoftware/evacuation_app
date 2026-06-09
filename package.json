@@ -4,6 +4,7 @@
   "main": "index.ts",
   "dependencies": {
     "@clerk/clerk-expo": "^2.19.31",
+    "@expo/vector-icons": "^15.0.2",
     "convex": "^1.40.0",
     "expo": "~56.0.9",
     "expo-image-picker": "~56.0.16",
