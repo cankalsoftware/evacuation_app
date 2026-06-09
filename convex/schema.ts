@@ -33,8 +33,8 @@ export default defineSchema({
   buildings: defineTable({
     name: v.string(),
     address: v.string(),
-    latitude: v.number(),
-    longitude: v.number(),
+    latitude: v.optional(v.number()),
+    longitude: v.optional(v.number()),
     googlePlaceId: v.optional(v.string()),
     adminId: v.string(),
     polygon: v.optional(v.array(

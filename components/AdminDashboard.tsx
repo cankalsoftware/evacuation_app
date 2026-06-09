@@ -18,6 +18,47 @@ if (Platform.OS !== 'web') {
   } catch (e) {}
 }
 
+// Math helpers to detect if polygon lines criss-cross (self-intersect)
+function onSegment(p: any, q: any, r: any) {
+  return q.lat <= Math.max(p.lat, r.lat) && q.lat >= Math.min(p.lat, r.lat) &&
+         q.lon <= Math.max(p.lon, r.lon) && q.lon >= Math.min(p.lon, r.lon);
+}
+
+function orientation(p: any, q: any, r: any) {
+  const val = (q.lon - p.lon) * (r.lat - q.lat) - (q.lat - p.lat) * (r.lon - q.lon);
+  if (val === 0) return 0;
+  return (val > 0) ? 1 : 2;
+}
+
+function doIntersect(p1: any, q1: any, p2: any, q2: any) {
+  const o1 = orientation(p1, q1, p2);
+  const o2 = orientation(p1, q1, q2);
+  const o3 = orientation(p2, q2, p1);
+  const o4 = orientation(p2, q2, q1);
+
+  if (o1 !== o2 && o3 !== o4) return true;
+  if (o1 === 0 && onSegment(p1, p2, q1)) return true;
+  if (o2 === 0 && onSegment(p1, q2, q1)) return true;
+  if (o3 === 0 && onSegment(p2, p1, q2)) return true;
+  if (o4 === 0 && onSegment(p2, q1, q2)) return true;
+  return false;
+}
+
+function hasSelfIntersection(polygon: {lat: number, lon: number}[]) {
+  if (!polygon || polygon.length < 4) return false;
+  for (let i = 0; i < polygon.length; i++) {
+    const p1 = polygon[i];
+    const q1 = polygon[(i + 1) % polygon.length];
+    for (let j = i + 2; j < polygon.length; j++) {
+      if (i === 0 && j === polygon.length - 1) continue;
+      const p2 = polygon[j];
+      const q2 = polygon[(j + 1) % polygon.length];
+      if (doIntersect(p1, q1, p2, q2)) return true;
+    }
+  }
+  return false;
+}
+
 export default function AdminDashboard() {
   const { signOut } = useAuth();
   const { user } = useUser();
@@ -35,6 +76,7 @@ export default function AdminDashboard() {
   const [bName, setBName] = React.useState("");
   const [bAddress, setBAddress] = React.useState("");
   const [bPins, setBPins] = React.useState<{lat: number, lon: number}[]>([]);
+  const [bImageUri, setBImageUri] = React.useState<string | null>(null);
 
   const [showSettings, setShowSettings] = React.useState(false);
   const [setupName, setSetupName] = React.useState("");
@@ -59,29 +101,53 @@ export default function AdminDashboard() {
   };
 
   const handleSaveBuilding = async () => {
-    if (bPins.length < 4) {
-      showToast("Please drop at least 4 pins to create a polygon footprint.");
+    if (bPins.length > 0 && bPins.length < 4) {
+      showToast("Please drop at least 4 pins to create a polygon footprint, or leave it empty to configure later.");
       return;
     }
     if (!bName || !user?.id) return;
 
     try {
+      setIsUploading(true);
+      let storageId: string | undefined = undefined;
+      
+      // Upload the image first if provided
+      if (bImageUri) {
+        const postUrl = await generateUploadUrl();
+        const response = await fetch(bImageUri);
+        const blob = await response.blob();
+        const uploadResult = await fetch(postUrl, {
+          method: "POST",
+          headers: { "Content-Type": blob.type },
+          body: blob,
+        });
+        const result = await uploadResult.json();
+        storageId = result.storageId;
+      }
+
       await saveBuilding({
         clerkId: user.id,
         name: bName,
         address: bAddress || "No Address Provided",
-        latitude: bPins[0].lat,
-        longitude: bPins[0].lon,
-        polygon: bPins,
+        ...(bPins.length >= 4 && { 
+          latitude: bPins[0].lat, 
+          longitude: bPins[0].lon, 
+          polygon: bPins 
+        }),
+        ...(storageId && { masterPlanId: storageId }),
       });
+      
       setIsRegistering(false);
       setBName("");
       setBAddress("");
       setBPins([]);
+      setBImageUri(null);
       showToast("Building registered successfully!");
     } catch (e) {
       console.log(e);
       showToast("Error saving building.", "error");
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -234,12 +300,12 @@ export default function AdminDashboard() {
   return (
     <View className="flex-1 bg-neutral-900 pt-16">
       {/* Header */}
-      <View className="px-6 flex-row justify-between items-center mb-6">
-        <View>
-          <Text className="text-3xl font-extrabold text-white">Admin Console</Text>
-          <Text className="text-red-400 font-bold">{dashboardData.name || user?.primaryEmailAddress?.emailAddress}</Text>
+      <View className="px-6 flex-row justify-between items-center mb-6 w-full">
+        <View className="flex-1 mr-4">
+          <Text className="text-2xl font-extrabold text-white" numberOfLines={1} adjustsFontSizeToFit>Admin Console</Text>
+          <Text className="text-red-400 font-bold text-xs mt-1" numberOfLines={1} ellipsizeMode="tail">{dashboardData.name || user?.primaryEmailAddress?.emailAddress}</Text>
         </View>
-        <View className="flex-row items-center">
+        <View className="flex-row items-center shrink-0">
           <TouchableOpacity 
             className="bg-neutral-800 p-3 rounded-full border border-neutral-700 mr-2"
             onPress={() => setShowSettings(true)}
@@ -277,14 +343,30 @@ export default function AdminDashboard() {
         {/* Managed Buildings */}
         <Text className="text-xl font-bold text-white mb-4">Managed Buildings</Text>
         {dashboardData.buildings && dashboardData.buildings.length > 0 ? (
-          dashboardData.buildings.map((building: any) => (
-             <View key={building._id} className="bg-neutral-800 border border-neutral-700 p-4 rounded-2xl mb-4 flex-row justify-between items-center">
-                <View className="flex-1">
-                  <Text className="text-white font-bold text-lg">{building.name}</Text>
-                  <Text className="text-neutral-400 text-sm mt-1">{building.address}</Text>
-                </View>
-                <TouchableOpacity 
-                  className="bg-blue-600 px-4 py-2 rounded-lg ml-4"
+          dashboardData.buildings.map((building: any) => {
+             const isComplete = building.polygon && building.polygon.length >= 4 && building.masterPlanId;
+             return (
+               <View key={building._id} className="bg-neutral-800 border border-neutral-700 p-4 rounded-2xl mb-4 flex-row justify-between items-center">
+                  <View className="flex-1">
+                    <View className="flex-row items-center mb-1">
+                      <Text className="text-white font-bold text-lg mr-2">{building.name}</Text>
+                      {isComplete ? (
+                        <View className="bg-green-900/30 px-2 py-1 rounded-md border border-green-500/30">
+                          <Text className="text-green-400 text-[10px] font-bold">🟢 ACTIVE</Text>
+                        </View>
+                      ) : (
+                        <View className="bg-red-900/30 px-2 py-1 rounded-md border border-red-500/30">
+                          <Text className="text-red-400 text-[10px] font-bold">🔴 INCOMPLETE</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text className="text-neutral-400 text-sm">{building.address}</Text>
+                    {!isComplete && (
+                      <Text className="text-red-400/80 text-xs mt-1">Missing Map or GPS Polygon</Text>
+                    )}
+                  </View>
+                  <TouchableOpacity 
+                    className="bg-blue-600 px-4 py-2 rounded-lg ml-4"
                   onPress={() => {
                     setSelectedBuilding(building);
                     setEditingPins(building.polygon || []);
@@ -334,8 +416,23 @@ export default function AdminDashboard() {
             onChangeText={setBAddress}
           />
 
-          <Text className="text-neutral-300 font-bold mb-2">Draw Footprint ({bPins.length} pins)</Text>
-          <Text className="text-neutral-500 text-xs mb-4">Tap on the map to drop pins around the perimeter of the building. Minimum 4 pins required.</Text>
+          <View className="flex-row items-center mb-2">
+            <Text className="text-neutral-300 font-bold">Draw Footprint ({bPins.length} pins)</Text>
+            <TouchableOpacity 
+              className="bg-red-900/40 w-6 h-6 rounded-full items-center justify-center ml-2 border border-red-500/50"
+              onPress={() => alert("Draw the pins sequentially around the outside wall of the building. Do not mix up the order or criss-cross the lines across the middle of the building. If the lines cross, the detection will fail.")}
+            >
+              <Text className="text-red-500 font-bold text-xs">?</Text>
+            </TouchableOpacity>
+          </View>
+          <Text className="text-neutral-500 text-xs mb-4">Tap on the map to drop pins sequentially around the perimeter. Minimum 4 pins required.</Text>
+
+          {hasSelfIntersection(bPins) && (
+            <View className="bg-red-900/30 p-3 rounded-xl border border-red-500/50 mb-4 flex-row items-center">
+              <Text className="text-red-500 mr-2">⚠️</Text>
+              <Text className="text-red-400 text-xs flex-1 font-bold">Polygon lines are criss-crossing! Please clear and draw the perimeter sequentially.</Text>
+            </View>
+          )}
 
           {!bName ? (
             <View className="flex-1 bg-neutral-800 rounded-2xl justify-center items-center p-6 border border-neutral-700 opacity-50">
@@ -403,12 +500,53 @@ export default function AdminDashboard() {
           </View>
           )}
 
+          <Text className="text-neutral-300 font-bold mb-2">Master Plan Image</Text>
           <TouchableOpacity 
-            className={`py-4 rounded-xl items-center mb-8 ${bPins.length >= 4 && bName ? 'bg-green-600' : 'bg-neutral-800'}`}
-            onPress={handleSaveBuilding}
-            disabled={bPins.length < 4 || !bName}
+            className="bg-neutral-800 border border-neutral-700 rounded-xl p-4 items-center mb-6"
+            onPress={async () => {
+              const libPerm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+              if (libPerm.granted === false) {
+                showToast("Library permission is required!", "error");
+                return;
+              }
+              const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                quality: 0.8,
+              });
+              if (!result.canceled) {
+                setBImageUri(result.assets[0].uri);
+              }
+            }}
           >
-            <Text className="text-white font-bold text-lg">Save Building Footprint</Text>
+            {bImageUri ? (
+              <View className="w-full relative">
+                <Image source={{ uri: bImageUri }} className="w-full h-40 rounded-lg mb-2 bg-neutral-900" resizeMode="cover" />
+                {Platform.OS === 'web' && (
+                  <View className="absolute inset-0 items-center justify-center bg-black/60 rounded-lg pointer-events-none">
+                    <Text className="text-4xl mb-2">✅</Text>
+                    <Text className="text-white font-bold text-center">Image Selected</Text>
+                    <Text className="text-white/70 text-xs text-center px-4 mt-1">(Web preview may appear blank, but the file is attached)</Text>
+                  </View>
+                )}
+              </View>
+            ) : (
+              <View className="items-center py-6">
+                <Text className="text-3xl mb-2">📸</Text>
+                <Text className="text-white font-bold">Select Master Plan</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            className={`py-4 rounded-xl items-center mb-8 ${bName && !hasSelfIntersection(bPins) ? 'bg-green-600' : 'bg-neutral-800'}`}
+            onPress={handleSaveBuilding}
+            disabled={!bName || hasSelfIntersection(bPins) || isUploading}
+          >
+            {isUploading ? (
+              <ActivityIndicator color="white" />
+            ) : (
+              <Text className="text-white font-bold text-lg">Save Building</Text>
+            )}
           </TouchableOpacity>
         </View>
       </Modal>
@@ -483,7 +621,7 @@ export default function AdminDashboard() {
                   >
                     <Text className="text-white text-xs font-bold">Clear Pins</Text>
                   </TouchableOpacity>
-                  {editingPins && editingPins !== selectedBuilding.polygon && editingPins.length >= 4 && (
+                  {editingPins && editingPins !== selectedBuilding.polygon && editingPins.length >= 4 && !hasSelfIntersection(editingPins) && (
                     <TouchableOpacity 
                       className="absolute bottom-4 right-4 bg-green-600 p-3 rounded-full"
                       onPress={async () => {
@@ -507,15 +645,39 @@ export default function AdminDashboard() {
               )}
             </View>
 
-            <Text className="text-white font-bold text-lg mb-2">Manual Coordinate Editor</Text>
-            <Text className="text-neutral-400 text-xs mb-4">You can manually fine-tune the exact GPS coordinates of your pins below. Useful for fixing inaccurate taps.</Text>
+            <View className="flex-row items-center mb-2">
+              <Text className="text-white font-bold text-lg">Manual Coordinate Editor</Text>
+              <TouchableOpacity 
+                className="bg-red-900/40 w-6 h-6 rounded-full items-center justify-center ml-2 border border-red-500/50"
+                onPress={() => alert("Ensure the coordinates trace the perimeter sequentially. Mixing the order will cause lines to criss-cross and break the detection math.")}
+              >
+                <Text className="text-red-500 font-bold text-xs">?</Text>
+              </TouchableOpacity>
+            </View>
+            <Text className="text-neutral-400 text-sm mb-4">You can manually fine-tune the exact GPS coordinates of your pins below. Useful for fixing inaccurate taps.</Text>
             
+            {hasSelfIntersection(editingPins) && (
+              <View className="bg-red-900/30 p-3 rounded-xl border border-red-500/50 mb-4 flex-row items-center">
+                <Text className="text-red-500 mr-2">⚠️</Text>
+                <Text className="text-red-400 text-xs flex-1 font-bold">Polygon lines are criss-crossing! Please adjust the coordinates so they trace sequentially without crossing.</Text>
+              </View>
+            )}
+
             <View className="bg-neutral-800 rounded-2xl p-4 border border-neutral-700 mb-6">
+              <View className="flex-row items-center mb-3 px-1">
+                <Text className="text-neutral-500 w-10 text-sm font-bold"></Text>
+                <Text className="flex-1 text-neutral-400 text-sm font-bold ml-1">Latitude ↕️</Text>
+                <Text className="flex-1 text-neutral-400 text-sm font-bold ml-1">Longitude ↔️</Text>
+                <View className="w-10 ml-2" />
+              </View>
               {editingPins?.map((p: any, i: number) => (
-                <View key={i} className="flex-row items-center mb-3">
-                  <Text className="text-neutral-500 w-8 text-xs font-bold">P{i+1}</Text>
-                  <TextInput
-                    className="flex-1 bg-neutral-900 border border-neutral-700 text-white p-2 rounded-lg mr-2 text-xs"
+                <View key={i} className="flex-row items-center mb-3 w-full">
+                  <Text className="text-neutral-500 w-10 text-sm font-bold">P{i+1}</Text>
+                  
+                  <View className="flex-1 mr-2">
+                    <TextInput
+                      style={{ minWidth: 0 }}
+                      className="bg-neutral-900 border border-neutral-700 text-white p-3 rounded-lg text-sm w-full"
                     value={p.lat.toString()}
                     keyboardType="numeric"
                     onChangeText={(val) => {
@@ -524,8 +686,12 @@ export default function AdminDashboard() {
                       setEditingPins(newPins);
                     }}
                   />
-                  <TextInput
-                    className="flex-1 bg-neutral-900 border border-neutral-700 text-white p-2 rounded-lg text-xs"
+                  </View>
+
+                  <View className="flex-1">
+                    <TextInput
+                      style={{ minWidth: 0 }}
+                      className="bg-neutral-900 border border-neutral-700 text-white p-3 rounded-lg text-sm w-full"
                     value={p.lon.toString()}
                     keyboardType="numeric"
                     onChangeText={(val) => {
@@ -534,6 +700,8 @@ export default function AdminDashboard() {
                       setEditingPins(newPins);
                     }}
                   />
+                  </View>
+
                   <TouchableOpacity 
                     className="ml-2 bg-red-900/50 p-2 rounded-lg"
                     onPress={() => {
@@ -554,12 +722,12 @@ export default function AdminDashboard() {
                     setEditingPins(newPins);
                   }}
                 >
-                  <Text className="text-white font-bold text-xs">+ Add Pin</Text>
+                  <Text className="text-white font-bold text-sm">+ Add Pin</Text>
                 </TouchableOpacity>
 
-                {editingPins && editingPins !== selectedBuilding.polygon && editingPins.length >= 4 && (
+                {editingPins && editingPins !== selectedBuilding.polygon && editingPins.length >= 4 && !hasSelfIntersection(editingPins) && (
                   <TouchableOpacity 
-                    className="bg-green-600 px-6 py-2 rounded-lg"
+                    className="bg-green-600 px-6 py-3 rounded-lg"
                     onPress={async () => {
                       try {
                         await updateBuildingPolygon({
@@ -574,7 +742,7 @@ export default function AdminDashboard() {
                       }
                     }}
                   >
-                    <Text className="text-white font-bold text-xs">Save Changes</Text>
+                    <Text className="text-white font-bold text-sm">Save Changes</Text>
                   </TouchableOpacity>
                 )}
               </View>

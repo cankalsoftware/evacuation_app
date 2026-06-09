@@ -68,3 +68,25 @@ Transition from a purely passwordless (Email OTP every time) login to a traditio
 
 ### 3. The Guest UI (`EvacuationMode.tsx`)
 When the Guest app initializes, we send their live GPS to Convex. Convex runs a "Ray-Casting" algorithm to check if their coordinate falls inside *any* of the Admin polygons. If it does, they instantly receive the Evacuation Plan!
+
+---
+
+## Detailed Implementation Plan (Approved)
+
+### 1. Convex Backend (`convex/portal.ts`)
+- Implement a `isPointInPolygon` helper function using the standard Ray-Casting algorithm.
+- Create a new Convex query `getAutoPushedBuilding({ lat, lon })`.
+- This query will fetch all registered buildings from the database.
+- It will loop through the buildings and run the ray-casting algorithm to check if the provided `(lat, lon)` coordinate falls inside any building's `polygon`.
+- If a match is found and the building has a `masterPlanId`, it resolves the image URL and returns the building details.
+
+### 2. Frontend Guest UI (`components/GuestDashboard.tsx`)
+- Utilize Convex's `useQuery` to continuously query `getAutoPushedBuilding` whenever the Guest's `currentLocation` updates.
+- **State Logic Update**:
+  - **Priority 1 (Auto-Push)**: If `getAutoPushedBuilding` returns a building, instantly set the app to "Verified" mode (`isScanned = true`). We will display a special UI indicating "Auto-connected to [Building Name]".
+  - **Priority 2 (Manual Scan)**: If the user is *not* inside a known polygon, we fall back to the existing logic (checking if they are within 50 meters of their last manually uploaded/scanned floor plan).
+- **View Plan Modal**: Update the modal to display the auto-pushed `masterPlanUrl` if they are auto-connected, otherwise show their manually scanned `scannedPlanUrl`.
+
+### 3. Verification
+- We will test the implementation by overriding the Guest location to match the test polygon coordinates we created during the Admin phase.
+- We will ensure the dashboard seamlessly switches from manual mode to auto-connected mode.

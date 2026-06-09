@@ -46,6 +46,22 @@ export default function AuthScreen() {
     return pwd;
   };
 
+  const handleAuthError = (err: any, fallbackMessage: string) => {
+    console.error("[DEV LOG] Auth Error:", err); // Keep raw errors for developers!
+    
+    let msg = err.errors?.[0]?.longMessage || err.errors?.[0]?.message || err.message || fallbackMessage;
+    const lowerMsg = String(msg).toLowerCase();
+    
+    // Sanitize technical errors
+    if (lowerMsg.includes("captcha") || lowerMsg.includes("turnstile")) {
+      msg = "Security verification failed. Please check your network connection or try refreshing.";
+    } else if (lowerMsg.includes("network") || lowerMsg.includes("fetch")) {
+      msg = "A network error occurred. Please check your internet connection.";
+    }
+    
+    setError(msg);
+  };
+
   const handlePasskeySignIn = async () => {
     setLoading(true);
     setError("");
@@ -56,7 +72,7 @@ export default function AuthScreen() {
       }
     } catch (err: any) {
       console.log(err);
-      setError(err.errors?.[0]?.longMessage || err.message || "Passkey sign-in failed.");
+      handleAuthError(err, "Passkey sign-in failed.");
     } finally {
       setLoading(false);
     }
@@ -102,7 +118,7 @@ export default function AuthScreen() {
         setPendingVerification(true);
       }
     } catch (err: any) {
-      setError(err.errors?.[0]?.longMessage || err.errors?.[0]?.message || "Something went wrong.");
+      handleAuthError(err, "Something went wrong.");
     } finally {
       setLoading(false);
     }
@@ -150,7 +166,7 @@ export default function AuthScreen() {
       }
     } catch (err: any) {
       console.error(err);
-      setError(err.errors?.[0]?.message || err.message || "Invalid code.");
+      handleAuthError(err, "Invalid code.");
     } finally {
       setLoading(false);
     }

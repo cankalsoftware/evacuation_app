@@ -44,6 +44,11 @@ export default function GuestDashboard() {
   const [draftFloor, setDraftFloor] = useState("");
 
   const dashboardData = useQuery(api.portal.getDashboardData, { clerkId: user?.id });
+  const autoBuilding = useQuery(
+    api.portal.getAutoPushedBuilding, 
+    currentLocation ? { lat: currentLocation.coords.latitude, lon: currentLocation.coords.longitude } : "skip"
+  );
+  
   const updateProfile = useMutation(api.portal.updateProfile);
   const generateUploadUrl = useMutation(api.portal.generateUploadUrl);
   const uploadScannedPlan = useMutation(api.portal.uploadScannedPlan);
@@ -216,17 +221,34 @@ export default function GuestDashboard() {
   const panicButtonSize = Math.min(width * 0.8, height * 0.45, 450); 
 
   useEffect(() => {
+    let sub: Location.LocationSubscription | null = null;
     (async () => {
       let { status } = await Location.getForegroundPermissionsAsync();
       if (status !== 'granted') return;
+      
+      // Get initial fast position
       let loc = await Location.getCurrentPositionAsync({});
       setCurrentLocation(loc);
+
+      // Continously watch for DevTools overrides or movement
+      sub = await Location.watchPositionAsync(
+        { accuracy: Location.Accuracy.High, timeInterval: 3000, distanceInterval: 1 },
+        (newLoc) => setCurrentLocation(newLoc)
+      );
     })();
+
+    return () => {
+      if (sub) {
+        sub.remove();
+      }
+    };
   }, []);
 
-  // Validate the previous scan against current location
+  // Validate the previous scan against current location, or use autoBuilding
   useEffect(() => {
-    if (dashboardData && currentLocation) {
+    if (autoBuilding) {
+      setIsScanned(true);
+    } else if (dashboardData && currentLocation) {
       if (dashboardData.scannedPlanLat && dashboardData.scannedPlanLon) {
         const dist = getDistance(
           currentLocation.coords.latitude, 
@@ -241,9 +263,15 @@ export default function GuestDashboard() {
         } else {
           setIsScanned(false);
         }
+      } else {
+        setIsScanned(false);
       }
     }
-  }, [dashboardData, currentLocation]);
+  }, [autoBuilding, dashboardData, currentLocation]);
+
+  const activePlanUrl = autoBuilding?.masterPlanUrl || dashboardData?.scannedPlanUrl;
+  const activeRoom = autoBuilding ? "General Building Area" : (dashboardData?.roomNumber || "Unknown");
+  const activeFloor = autoBuilding ? "Auto-detected" : (dashboardData?.floorLevel || "Unknown");
 
   if (dashboardData === undefined) {
     return (
@@ -304,8 +332,8 @@ export default function GuestDashboard() {
           style={{ width: panicButtonSize, height: panicButtonSize, borderRadius: panicButtonSize / 2 }}
           className="bg-red-600 items-center justify-center shadow-[0_0_80px_rgba(220,38,38,0.6)] border-8 border-red-500"
           onPress={() => {
-            if (!dashboardData?.scannedPlanUrl) {
-              showToast("Please scan a plan before evacuating.", "error");
+            if (!activePlanUrl) {
+              showToast("Please scan a plan or enter a building before evacuating.", "error");
               return;
             }
             setIsEvacuating(true);
@@ -315,6 +343,8 @@ export default function GuestDashboard() {
           <Text style={{ fontSize: panicButtonSize * 0.15 }} className="text-white font-black uppercase tracking-widest">Panic</Text>
         </TouchableOpacity>
       </View>
+
+
 
       {/* FOOTER (20%) */}
       <View style={{ flex: 1 }} className="px-6 pb-12 justify-end w-full items-center">
@@ -330,8 +360,8 @@ export default function GuestDashboard() {
           disabled={isUploading || isAnalyzing}
         >
           {isUploading || isAnalyzing ? <ActivityIndicator color="white" size="large" className="mr-4" /> : <Text className="text-4xl mr-4">{isScanned ? "🗺️" : "📸"}</Text>}
-          <Text className="text-white font-extrabold text-2xl">
-            {isUploading ? "Uploading..." : isAnalyzing ? "AI Analyzing..." : isScanned ? "View Verified Plan" : "Scan Evacuation Plan"}
+          <Text className="text-white font-extrabold text-2xl text-center flex-1">
+            {isUploading ? "Uploading..." : isAnalyzing ? "AI Analyzing..." : autoBuilding ? `Auto-Connected:\n${autoBuilding.name}` : isScanned ? "View Verified Plan" : "Scan Evacuation Plan"}
           </Text>
         </TouchableOpacity>
       </View>
@@ -353,15 +383,15 @@ export default function GuestDashboard() {
             </TouchableOpacity>
           </View>
 
-          {dashboardData?.scannedPlanUrl ? (
+          {activePlanUrl ? (
             <View className="flex-1 justify-center items-center bg-neutral-800 rounded-2xl overflow-hidden mb-6 border border-neutral-700">
               <Image 
-                source={{ uri: dashboardData.scannedPlanUrl }} 
+                source={{ uri: activePlanUrl }} 
                 style={{ width: '100%', height: '100%', resizeMode: 'contain' }} 
               />
               <View className="absolute bottom-4 left-4 right-4 bg-black/60 p-4 rounded-xl">
-                <Text className="text-white font-bold text-lg">Room: {dashboardData.roomNumber || "Unknown"}</Text>
-                <Text className="text-neutral-300">Floor: {dashboardData.floorLevel || "Unknown"}</Text>
+                <Text className="text-white font-bold text-lg">Room: {activeRoom}</Text>
+                <Text className="text-neutral-300">Floor: {activeFloor}</Text>
               </View>
             </View>
           ) : (
@@ -377,7 +407,9 @@ export default function GuestDashboard() {
             }}
             className="bg-amber-500 py-4 rounded-xl items-center shadow-lg border-2 border-amber-400"
           >
-            <Text className="text-white font-extrabold text-lg uppercase tracking-wider">Scan New Plan</Text>
+            <Text className="text-white font-extrabold text-lg uppercase tracking-wider">
+               {autoBuilding ? "Manually Scan Plan Instead" : "Scan New Plan"}
+            </Text>
           </TouchableOpacity>
         </View>
       </Modal>
@@ -428,7 +460,7 @@ export default function GuestDashboard() {
       {/* Evacuation Mode Modal (Full Screen) */}
       <Modal visible={isEvacuating} animationType="fade" presentationStyle="fullScreen">
         <EvacuationMode 
-          dashboardData={dashboardData} 
+          dashboardData={{...dashboardData, scannedPlanUrl: activePlanUrl}} 
           onClose={() => setIsEvacuating(false)} 
         />
       </Modal>

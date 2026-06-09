@@ -8,9 +8,6 @@ export const syncUser = mutation({
     role: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    // Determine the verified role from Clerk, defaulting to "guest"
-    const verifiedRole = args.role === "admin" ? "admin" : "guest";
-
     // Check if user already exists
     const existingUser = await ctx.db
       .query("users")
@@ -18,20 +15,25 @@ export const syncUser = mutation({
       .first();
 
     if (existingUser) {
+      // If args.role is explicitly "admin", upgrade them. Otherwise, keep their existing role.
+      // This prevents a user from being downgraded to "guest" on subsequent logins.
+      const newRole = args.role === "admin" ? "admin" : existingUser.role;
+
       // Update email or role if they changed
       if (
         (args.email && existingUser.email !== args.email) ||
-        (existingUser.role !== verifiedRole)
+        (existingUser.role !== newRole)
       ) {
         await ctx.db.patch(existingUser._id, { 
           ...(args.email ? { email: args.email } : {}),
-          role: verifiedRole,
+          role: newRole,
         });
       }
       return existingUser._id;
     }
 
-    // Create new user
+    // Create new user (default to guest if not explicitly admin)
+    const verifiedRole = args.role === "admin" ? "admin" : "guest";
     const newUserId = await ctx.db.insert("users", {
       clerkId: args.clerkId,
       email: args.email,
