@@ -20,6 +20,7 @@ export default defineSchema({
     scannedAt: v.number(),
     roomNumber: v.optional(v.string()),
     floorLevel: v.optional(v.string()),
+    exitNode: v.optional(v.object({ x: v.number(), y: v.number() })), // Added for Phase 9 guest scans
   }).index("by_clerkId", ["clerkId"]),
 
   locationConsent: defineTable({
@@ -38,8 +39,14 @@ export default defineSchema({
     googlePlaceId: v.optional(v.string()),
     adminId: v.string(),
     polygon: v.optional(v.array(
-      v.object({ lat: v.number(), lon: v.number() })
+      v.object({ lat: v.number(), lon: v.number(), label: v.optional(v.string()) })
     )), // Complex polygon boundary of the building
+    imageCalibrationPoints: v.optional(v.array(
+      v.object({ x: v.number(), y: v.number() })
+    )), // Added for Phase 9 image to GPS mapping
+    safeNodes: v.optional(v.array(
+      v.object({ lat: v.number(), lon: v.number(), isExit: v.boolean() })
+    )), // Added for Phase 9 Admin routing
     masterPlanId: v.optional(v.id("_storage")),
   }).index("by_coordinates", ["latitude", "longitude"])
     .index("by_admin", ["adminId"]),

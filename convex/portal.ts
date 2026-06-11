@@ -66,6 +66,7 @@ export const uploadScannedPlan = mutation({
     lon: v.number(),
     roomNumber: v.optional(v.string()),
     floorLevel: v.optional(v.string()),
+    exitNode: v.optional(v.object({ x: v.number(), y: v.number() })),
   },
   handler: async (ctx, args) => {
     const existingPlan = await ctx.db
@@ -81,6 +82,7 @@ export const uploadScannedPlan = mutation({
         scannedAt: Date.now(),
         ...(args.roomNumber !== undefined && { roomNumber: args.roomNumber }),
         ...(args.floorLevel !== undefined && { floorLevel: args.floorLevel }),
+        ...(args.exitNode !== undefined && { exitNode: args.exitNode }),
       });
     } else {
       await ctx.db.insert("plans", {
@@ -91,6 +93,7 @@ export const uploadScannedPlan = mutation({
         scannedAt: Date.now(),
         roomNumber: args.roomNumber,
         floorLevel: args.floorLevel,
+        exitNode: args.exitNode,
       });
     }
   },
@@ -125,7 +128,7 @@ export const saveBuilding = mutation({
     address: v.string(),
     latitude: v.optional(v.number()),
     longitude: v.optional(v.number()),
-    polygon: v.optional(v.array(v.object({ lat: v.number(), lon: v.number() }))),
+    polygon: v.optional(v.array(v.object({ lat: v.number(), lon: v.number(), label: v.optional(v.string()) }))),
     masterPlanId: v.optional(v.id("_storage")),
   },
   handler: async (ctx, args) => {
@@ -174,7 +177,7 @@ export const updateBuildingPolygon = mutation({
   args: {
     clerkId: v.string(),
     buildingId: v.id("buildings"),
-    polygon: v.array(v.object({ lat: v.number(), lon: v.number() })),
+    polygon: v.array(v.object({ lat: v.number(), lon: v.number(), label: v.optional(v.string()) })),
   },
   handler: async (ctx, args) => {
     const user = await ctx.db
@@ -215,6 +218,61 @@ export const updateBuildingInfo = mutation({
   }
 });
 
+export const updateBuildingCalibration = mutation({
+  args: {
+    clerkId: v.string(),
+    buildingId: v.id("buildings"),
+    calibrationPoints: v.array(v.object({ x: v.number(), y: v.number() })),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerkId", (q) => q.eq("clerkId", args.clerkId))
+      .first();
+
+    if (!user || user.role !== "admin") throw new Error("Unauthorized");
+    if (args.calibrationPoints.length < 4) throw new Error("Must provide at least 4 calibration points.");
+    
+    await ctx.db.patch(args.buildingId, { 
+      imageCalibrationPoints: args.calibrationPoints
+    });
+  }
+});
+
+export const updateBuildingSafeNodes = mutation({
+  args: {
+    clerkId: v.string(),
+    buildingId: v.id("buildings"),
+    safeNodes: v.array(v.object({ lat: v.number(), lon: v.number(), isExit: v.boolean() })),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerkId", (q) => q.eq("clerkId", args.clerkId))
+      .first();
+
+    if (!user || user.role !== "admin") throw new Error("Unauthorized");
+    
+    const building = await ctx.db.get(args.buildingId);
+    if (!building || !building.polygon) throw new Error("Building or polygon not found");
+
+    for (const node of args.safeNodes) {
+      if (node.isExit) {
+        if (!isPointInPolygonWithMargin({ lat: node.lat, lon: node.lon }, building.polygon, 0.10)) {
+          throw new Error("One or more Exits fall too far outside the building polygon (exceeds 10% margin).");
+        }
+      } else {
+        if (!isPointInPolygon({ lat: node.lat, lon: node.lon }, building.polygon)) {
+          throw new Error("One or more Turn Points fall strictly outside the building polygon.");
+        }
+      }
+    }
+    await ctx.db.patch(args.buildingId, { 
+      safeNodes: args.safeNodes
+    });
+  }
+});
+
 export const deleteBuilding = mutation({
   args: {
     clerkId: v.string(),
@@ -234,7 +292,7 @@ export const deleteBuilding = mutation({
 });
 
 // Ray-Casting algorithm to check if a point is inside a polygon
-function isPointInPolygon(point: { lat: number, lon: number }, polygon: { lat: number, lon: number }[]) {
+export function isPointInPolygon(point: { lat: number, lon: number }, polygon: { lat: number, lon: number }[]) {
   let isInside = false;
   let j = polygon.length - 1;
   for (let i = 0; i < polygon.length; i++) {
@@ -249,6 +307,27 @@ function isPointInPolygon(point: { lat: number, lon: number }, polygon: { lat: n
   return isInside;
 }
 
+export function isPointInPolygonWithMargin(point: { lat: number, lon: number }, polygon: { lat: number, lon: number }[], marginFactor: number) {
+  if (isPointInPolygon(point, polygon)) return true;
+  
+  let minLat = Infinity, maxLat = -Infinity;
+  let minLon = Infinity, maxLon = -Infinity;
+  for (const p of polygon) {
+    if (p.lat < minLat) minLat = p.lat;
+    if (p.lat > maxLat) maxLat = p.lat;
+    if (p.lon < minLon) minLon = p.lon;
+    if (p.lon > maxLon) maxLon = p.lon;
+  }
+  
+  const latMargin = (maxLat - minLat) * marginFactor;
+  const lonMargin = (maxLon - minLon) * marginFactor;
+  
+  return (
+    point.lat >= minLat - latMargin && point.lat <= maxLat + latMargin &&
+    point.lon >= minLon - lonMargin && point.lon <= maxLon + lonMargin
+  );
+}
+
 export const getAutoPushedBuilding = query({
   args: { lat: v.number(), lon: v.number() },
   handler: async (ctx, args) => {
@@ -257,13 +336,20 @@ export const getAutoPushedBuilding = query({
     
     // 2. Run ray-casting to find if the user is inside any building's polygon
     for (const b of buildings) {
-       if (b.polygon && b.polygon.length >= 4 && b.masterPlanId) {
-          if (isPointInPolygon({ lat: args.lat, lon: args.lon }, b.polygon)) {
+       const isReady = b.polygon && b.polygon.length >= 4 && 
+                       b.masterPlanId && 
+                       b.imageCalibrationPoints && b.imageCalibrationPoints.length === 4 &&
+                       b.safeNodes && b.safeNodes.some((n: any) => n.isExit);
+                       
+       if (isReady) {
+          if (isPointInPolygon({ lat: args.lat, lon: args.lon }, b.polygon!)) {
              return {
                buildingId: b._id,
                name: b.name,
-               masterPlanUrl: await ctx.storage.getUrl(b.masterPlanId),
+               masterPlanUrl: await ctx.storage.getUrl(b.masterPlanId!),
                polygon: b.polygon,
+               safeNodes: b.safeNodes,
+               imageCalibrationPoints: b.imageCalibrationPoints,
              };
           }
        }

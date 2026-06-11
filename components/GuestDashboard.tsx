@@ -42,6 +42,10 @@ export default function GuestDashboard() {
   const [draftPlan, setDraftPlan] = useState<{storageId: any, lat: number, lon: number} | null>(null);
   const [draftRoom, setDraftRoom] = useState("");
   const [draftFloor, setDraftFloor] = useState("");
+  const [draftImageUri, setDraftImageUri] = useState<string | null>(null);
+  const [draftExitNode, setDraftExitNode] = useState<{x: number, y: number} | null>(null);
+  const [draftImgLayout, setDraftImgLayout] = useState<{w: number, h: number}>({w: 1, h: 1});
+  const [draftImageAspectRatio, setDraftImageAspectRatio] = useState<number | null>(null);
 
   const dashboardData = useQuery(api.portal.getDashboardData, { clerkId: user?.id });
   const autoBuilding = useQuery(
@@ -111,6 +115,7 @@ export default function GuestDashboard() {
       setDraftPlan({ storageId, lat: imageLat, lon: imageLon });
       setDraftRoom(aiData?.roomNumber || "");
       setDraftFloor(aiData?.floorLevel || "");
+      setDraftImageUri(asset.uri);
       
       setIsAnalyzing(false);
       setShowConfirmModal(true); // Open modal instead of saving directly
@@ -133,8 +138,11 @@ export default function GuestDashboard() {
         lon: draftPlan.lon,
         roomNumber: draftRoom,
         floorLevel: draftFloor,
+        exitNode: draftExitNode || undefined,
       });
       setShowConfirmModal(false);
+      setDraftImageUri(null);
+      setDraftExitNode(null);
       setIsScanned(true);
       showToast("Evacuation plan verified and uploaded!");
     } catch (e) {
@@ -417,38 +425,78 @@ export default function GuestDashboard() {
 
       {/* Confirmation Modal */}
       <Modal visible={showConfirmModal} animationType="fade" transparent>
-        <View className="flex-1 bg-black/80 justify-center items-center px-6">
-          <View className="bg-neutral-900 border border-neutral-700 p-6 rounded-3xl w-full max-w-sm">
-            <Text className="text-xl font-bold text-white mb-2">Confirm Location</Text>
-            <Text className="text-neutral-400 mb-6">Our AI detected the following details from your map. Please confirm or edit them.</Text>
+        <View className="flex-1 bg-black/90 justify-center items-center px-4 py-12">
+          <View className="bg-neutral-900 border border-neutral-700 p-6 rounded-3xl w-full flex-1 max-w-lg">
+            <Text className="text-xl font-bold text-white mb-2">Confirm Details</Text>
             
-            <Text className="text-neutral-400 text-xs mb-1 uppercase font-bold">Room Number</Text>
-            <TextInput
-              className="bg-neutral-800 border border-neutral-700 rounded-xl p-4 text-white text-lg mb-4"
-              value={draftRoom}
-              onChangeText={setDraftRoom}
-              placeholder="e.g. 204"
-              placeholderTextColor="#525252"
-            />
+            <View className="bg-yellow-900/30 p-3 rounded-xl border border-yellow-700/50 mb-4 flex-row items-start">
+              <Text className="text-yellow-500 mr-2 mt-0.5">⚠️</Text>
+              <Text className="text-yellow-500 text-xs flex-1">
+                <Text className="font-bold">Disclaimer: </Text>
+                Manual scans provide basic compass direction. For accurate turn-by-turn guidance, ask your building manager to register on FireVision. Use at your own risk.
+              </Text>
+            </View>
 
-            <Text className="text-neutral-400 text-xs mb-1 uppercase font-bold">Floor Level</Text>
-            <TextInput
-              className="bg-neutral-800 border border-neutral-700 rounded-xl p-4 text-white text-lg mb-8"
-              value={draftFloor}
-              onChangeText={setDraftFloor}
-              placeholder="e.g. 2"
-              placeholderTextColor="#525252"
-            />
+            <Text className="text-neutral-400 text-xs mb-1 uppercase font-bold">1. Tap Map to Pin Exit Location</Text>
+            <View className="bg-neutral-800 rounded-xl overflow-hidden mb-4 border border-neutral-700 flex-1 relative w-full" style={{ height: 300 }}>
+              {draftImageUri && (
+                <TouchableOpacity 
+                  activeOpacity={1}
+                  className="flex-1"
+                  onLayout={(e) => setDraftImgLayout({w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height})}
+                  onPress={(e) => {
+                    const x = Platform.OS === 'web' && (e.nativeEvent as any).offsetX !== undefined ? (e.nativeEvent as any).offsetX : e.nativeEvent.locationX;
+                    const y = Platform.OS === 'web' && (e.nativeEvent as any).offsetY !== undefined ? (e.nativeEvent as any).offsetY : e.nativeEvent.locationY;
+                    const w = draftImgLayout.w || 1;
+                    const h = draftImgLayout.h || 1;
+                    setDraftExitNode({
+                      x: x / w,
+                      y: y / h
+                    });
+                  }}
+                >
+                  <Image source={{ uri: draftImageUri }} className="w-full h-full" resizeMode="contain" />
+                  {draftExitNode && (
+                    <View className="absolute bg-green-500 w-8 h-8 rounded-full items-center justify-center border-2 border-white" style={{ left: draftExitNode.x * draftImgLayout.w - 16, top: draftExitNode.y * draftImgLayout.h - 16 }}>
+                      <Text className="text-white font-bold text-xs">E</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <Text className="text-neutral-400 text-xs mb-1 uppercase font-bold">2. Room & Floor</Text>
+            <View className="flex-row space-x-2 mb-6">
+              <TextInput
+                className="flex-1 bg-neutral-800 border border-neutral-700 rounded-xl p-4 text-white text-lg"
+                value={draftRoom}
+                onChangeText={setDraftRoom}
+                placeholder="Room (e.g. 204)"
+                placeholderTextColor="#525252"
+              />
+              <TextInput
+                className="flex-1 bg-neutral-800 border border-neutral-700 rounded-xl p-4 text-white text-lg"
+                value={draftFloor}
+                onChangeText={setDraftFloor}
+                placeholder="Floor (e.g. 2)"
+                placeholderTextColor="#525252"
+              />
+            </View>
 
             <View className="flex-row space-x-4">
               <TouchableOpacity 
-                className="flex-1 bg-neutral-800 py-4 rounded-xl items-center border border-neutral-700"
-                onPress={() => setShowConfirmModal(false)}
+                className="flex-1 bg-neutral-800 py-4 rounded-xl items-center border border-neutral-700 mr-2"
+                onPress={() => {
+                   setShowConfirmModal(false);
+                   setDraftImageUri(null);
+                   setDraftExitNode(null);
+                }}
               >
                 <Text className="text-white font-bold">Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity 
-                className="flex-1 bg-green-600 py-4 rounded-xl items-center border border-green-500"
+                className={`flex-1 py-4 rounded-xl items-center border ${draftExitNode ? 'bg-green-600 border-green-500' : 'bg-neutral-800 border-neutral-700 opacity-50'}`}
+                disabled={!draftExitNode}
                 onPress={handleConfirmPlan}
               >
                 <Text className="text-white font-bold text-lg">Confirm</Text>
@@ -461,7 +509,9 @@ export default function GuestDashboard() {
       {/* Evacuation Mode Modal (Full Screen) */}
       <Modal visible={isEvacuating} animationType="fade" presentationStyle="fullScreen">
         <EvacuationMode 
-          dashboardData={{...dashboardData, scannedPlanUrl: activePlanUrl}} 
+          dashboardData={dashboardData}
+          autoBuilding={autoBuilding}
+          currentLocation={currentLocation}
           onClose={() => setIsEvacuating(false)} 
         />
       </Modal>
