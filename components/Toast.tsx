@@ -51,10 +51,14 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     zIndex: 9999,
     elevation: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
+    ...(Platform.OS === 'web' 
+      ? { filter: 'drop-shadow(0px 4px 5px rgba(0,0,0,0.3))' } as any 
+      : {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.3,
+          shadowRadius: 5,
+        })
   },
   success: {
     backgroundColor: '#10b981', // Emerald 500

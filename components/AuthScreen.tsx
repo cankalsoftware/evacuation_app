@@ -177,10 +177,14 @@ export default function AuthScreen() {
       <View className="w-full max-w-sm bg-neutral-800 p-8 rounded-3xl shadow-xl border border-neutral-700">
 
         <View className="items-center mb-6 w-full">
-          <Image
-            source={require('../FireVision.png')}
-            style={{ width: '100%', height: 100, resizeMode: 'contain', marginBottom: 16 }}
-          />
+            <Image
+              source={require('../FireVision.png')}
+              style={{ width: '100%', height: 100, marginBottom: 16 }}
+              resizeMode="contain"
+            />
+            <Text className="text-white text-2xl font-black uppercase tracking-widest text-center">
+              Evacuation App
+            </Text>
         </View>
 
         {!pendingVerification && !isForgotPasswordMode && (

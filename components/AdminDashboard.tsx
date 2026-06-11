@@ -530,7 +530,7 @@ export default function AdminDashboard() {
               <View className="w-full relative">
                 <Image source={{ uri: bImageUri }} className="w-full h-40 rounded-lg mb-2 bg-neutral-900" resizeMode="cover" />
                 {Platform.OS === 'web' && (
-                  <View className="absolute inset-0 items-center justify-center bg-black/60 rounded-lg pointer-events-none">
+                  <View className="absolute inset-0 items-center justify-center bg-black/60 rounded-lg" style={{ pointerEvents: 'none' }}>
                     <Text className="text-4xl mb-2">✅</Text>
                     <Text className="text-white font-bold text-center">Image Selected</Text>
                     <Text className="text-white/70 text-xs text-center px-4 mt-1">(Web preview may appear blank, but the file is attached)</Text>

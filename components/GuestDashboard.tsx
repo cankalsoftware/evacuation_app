@@ -387,7 +387,8 @@ export default function GuestDashboard() {
             <View className="flex-1 justify-center items-center bg-neutral-800 rounded-2xl overflow-hidden mb-6 border border-neutral-700">
               <Image 
                 source={{ uri: activePlanUrl }} 
-                style={{ width: '100%', height: '100%', resizeMode: 'contain' }} 
+                style={{ width: '100%', height: '100%' }} 
+                resizeMode="contain"
               />
               <View className="absolute bottom-4 left-4 right-4 bg-black/60 p-4 rounded-xl">
                 <Text className="text-white font-bold text-lg">Room: {activeRoom}</Text>

@@ -127,7 +127,8 @@ export default function EvacuationMode({ dashboardData, onClose }: { dashboardDa
         {dashboardData?.scannedPlanUrl ? (
           <Image 
             source={{ uri: dashboardData.scannedPlanUrl }} 
-            style={{ width: '100%', height: '100%', resizeMode: 'contain', opacity: 0.8 }} 
+            style={{ width: '100%', height: '100%', opacity: 0.8 }} 
+            resizeMode="contain"
           />
         ) : (
           <View className="flex-1 justify-center items-center">
@@ -148,17 +149,17 @@ export default function EvacuationMode({ dashboardData, onClose }: { dashboardDa
               name="arrow-up-thick" 
               size={240} 
               color={iconColor} 
-              style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.8, shadowRadius: 12 }}
+              style={Platform.OS === 'web' ? { filter: 'drop-shadow(0px 8px 12px rgba(0,0,0,0.8))' } as any : { shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.8, shadowRadius: 12 }}
             />
           </Animated.View>
         </View>
 
         {/* Status Footer */}
         <View className="items-center w-full mt-4">
-          <Text className={`text-4xl font-black uppercase ${statusTitleColor}`} style={{ textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: {width: 1, height: 1}, textShadowRadius: 4 }}>
+          <Text className={`text-4xl font-black uppercase ${statusTitleColor}`} style={Platform.OS === 'web' ? { textShadow: '1px 1px 4px rgba(0,0,0,0.8)' } as any : { textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: {width: 1, height: 1}, textShadowRadius: 4 }}>
             {statusTitle}
           </Text>
-          <Text className={`text-center mt-2 text-2xl font-bold ${statusSubColor}`} style={{ textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: {width: 1, height: 1}, textShadowRadius: 2 }}>
+          <Text className={`text-center mt-2 text-2xl font-bold ${statusSubColor}`} style={Platform.OS === 'web' ? { textShadow: '1px 1px 2px rgba(0,0,0,0.8)' } as any : { textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: {width: 1, height: 1}, textShadowRadius: 2 }}>
             {statusSub}
           </Text>
           {Platform.OS === 'web' && (

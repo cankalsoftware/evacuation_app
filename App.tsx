@@ -1,6 +1,6 @@
 import './global.css';
 import { StatusBar } from 'expo-status-bar';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, Image, Text, useWindowDimensions } from 'react-native';
 import React, { useEffect, useState } from 'react';
 import { ClerkProvider, useAuth, useUser } from "@clerk/clerk-expo";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
@@ -92,6 +92,38 @@ function RootNavigator() {
 }
 
 export default function App() {
+  const [showSplash, setShowSplash] = useState(true);
+  const { width } = useWindowDimensions();
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowSplash(false);
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (showSplash) {
+    const logoSize = Math.min(width * 0.9, 600); // 90% of screen width, max 600px
+    const dynamicFontSize = Math.max(24, Math.min(width * 0.08, 48)); // Scale font size based on width
+
+    return (
+      <View className="flex-1 bg-neutral-900 items-center justify-center px-4">
+        <Image 
+          source={require('./FireVision.png')} 
+          style={{ width: logoSize, height: logoSize }} 
+          resizeMode="contain" 
+        />
+        <Text 
+          className="text-white font-black uppercase tracking-widest text-center mt-6"
+          style={{ fontSize: dynamicFontSize }}
+        >
+          Evacuation App
+        </Text>
+        <StatusBar style="light" />
+      </View>
+    );
+  }
+
   return (
     <ClerkProvider 
       publishableKey={process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!}
