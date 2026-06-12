@@ -194,9 +194,10 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
         await updateStatus({
           clerkId: user.id,
           incidentId: activeIncident._id,
-          status: evacStatus,
-          lat: drLocation?.lat,
-          lon: drLocation?.lon
+          setPanic: evacStatus === "PANIC",
+          setSafe: evacStatus === "SAFE",
+          lat: drLocation?.lat ?? currentLocation?.coords.latitude ?? 0,
+          lon: drLocation?.lon ?? currentLocation?.coords.longitude ?? 0
         });
       } catch (e) {
         console.log("Failed to ping status", e);
@@ -243,9 +244,10 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
         await updateStatus({
           clerkId: user.id,
           incidentId: activeIncident._id,
-          status: "PANIC",
-          lat: drLocation?.lat,
-          lon: drLocation?.lon
+          setPanic: true,
+          setSafe: false,
+          lat: drLocation?.lat ?? currentLocation?.coords.latitude ?? 0,
+          lon: drLocation?.lon ?? currentLocation?.coords.longitude ?? 0
         });
       }
     }
@@ -260,9 +262,10 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
       await updateStatus({
         clerkId: user.id,
         incidentId: activeIncident._id,
-        status: "SAFE",
-        lat: drLocation?.lat,
-        lon: drLocation?.lon
+        setPanic: false,
+        setSafe: true,
+        lat: drLocation?.lat ?? currentLocation?.coords.latitude ?? 0,
+        lon: drLocation?.lon ?? currentLocation?.coords.longitude ?? 0
       });
     }
   };
