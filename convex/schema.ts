@@ -60,6 +60,16 @@ export default defineSchema({
     exitPathData: v.string(),  // Stringified JSON coordinate array mapping nodes to the exit
   }).index("by_building_room", ["buildingId", "roomNumber"]),
 
+  sites: defineTable({
+    name: v.string(),
+    adminId: v.string(),
+    description: v.optional(v.string()),
+    contactPhone: v.optional(v.string()),
+    adminContactName: v.optional(v.string()),
+    emergencyServicesPhone: v.optional(v.string()),
+    masterPlanId: v.optional(v.id("_storage")),
+  }).index("by_name", ["name"]).index("by_admin", ["adminId"]),
+
   incidents: defineTable({
     buildingId: v.id("buildings"),
     isActive: v.boolean(),

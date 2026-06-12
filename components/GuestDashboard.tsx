@@ -55,7 +55,7 @@ export default function GuestDashboard() {
   
   const activeIncident = useQuery(
     api.portal.getActiveIncident,
-    autoBuilding?._id ? { buildingId: autoBuilding._id } : "skip"
+    autoBuilding?.buildingId ? { buildingId: autoBuilding.buildingId } : "skip"
   );
 
   useEffect(() => {

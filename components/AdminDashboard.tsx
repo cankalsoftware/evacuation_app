@@ -98,6 +98,14 @@ export default function AdminDashboard() {
   const [editBAddress, setEditBAddress] = React.useState("");
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
 
+  const [manageSiteName, setManageSiteName] = React.useState<string | null>(null);
+  const [siteDesc, setSiteDesc] = React.useState("");
+  const [siteAdminName, setSiteAdminName] = React.useState("");
+  const [sitePhone, setSitePhone] = React.useState("");
+  const [siteEmergencyPhone, setSiteEmergencyPhone] = React.useState("");
+  const [siteImageUri, setSiteImageUri] = React.useState<string | null>(null);
+  const updateSiteInfo = useMutation(api.portal.updateSiteInfo);
+
   const [bName, setBName] = React.useState("");
   const [bSite, setBSite] = React.useState("");
   const [bAddress, setBAddress] = React.useState("");
@@ -444,7 +452,13 @@ export default function AdminDashboard() {
                 <View className="flex-row justify-between items-center mb-3">
                   <View className="flex-1 pr-2">
                     <Text className="text-white font-bold text-lg mb-1">{building.name}</Text>
-                    <Text className="text-neutral-400 text-sm mb-2">{building.address}</Text>
+                    {(!building.address || building.address === "No Address Provided") ? (
+                      <View className="bg-amber-900/30 p-2 rounded-md mb-2 border border-amber-500/30 self-start">
+                        <Text className="text-amber-500 text-xs font-bold">⚠️ Missing Address</Text>
+                      </View>
+                    ) : (
+                      <Text className="text-neutral-400 text-sm mb-2">{building.address}</Text>
+                    )}
                     <View className="flex-row items-start">
                       {isComplete ? (
                         <View className="bg-green-900/30 px-2 py-1 rounded-md border border-green-500/30 self-start">
@@ -506,12 +520,38 @@ export default function AdminDashboard() {
                 const activeCount = siteBuildings.filter(b => activeIncidents.includes(b._id)).length;
                 const activeInSite = activeCount > 0;
                 const allInSiteActive = activeCount === siteBuildings.length;
+                const siteDetail = dashboardData?.sites?.find((s: any) => s.name === siteName);
                 
                 return (
                   <View key={siteName} className="mb-10 bg-neutral-800/40 border border-neutral-700/60 rounded-[32px] overflow-hidden shadow-lg -mx-2">
                     <View className="flex-row justify-between items-center bg-neutral-800/60 p-5 border-b border-neutral-700/50">
-                      <Text className="text-2xl font-black text-white tracking-wide">{siteName}</Text>
+                      <View className="flex-row items-center">
+                        <Text className="text-2xl font-black text-white tracking-wide mr-3">{siteName}</Text>
+                        <TouchableOpacity 
+                          className="bg-neutral-700/50 p-2 rounded-full"
+                          onPress={() => {
+                            setManageSiteName(siteName);
+                            setSiteDesc(siteDetail?.description || "");
+                            setSiteAdminName(siteDetail?.adminContactName || "");
+                            setSitePhone(siteDetail?.contactPhone || "");
+                            setSiteEmergencyPhone(siteDetail?.emergencyServicesPhone || "");
+                          }}
+                        >
+                          <Text className="text-lg">⚙️</Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
+                    
+                    {(!siteDetail || !siteDetail.description || !siteDetail.contactPhone) && (
+                      <View className="bg-amber-900/40 p-4 border-b border-neutral-700/50 flex-row items-center">
+                        <Text className="text-amber-500 text-xl mr-3">⚠️</Text>
+                        <View className="flex-1">
+                          <Text className="text-amber-500 font-bold mb-1">Missing Site Details</Text>
+                          <Text className="text-amber-400/80 text-xs">Tap the ⚙️ icon to configure the fire service info for this site.</Text>
+                        </View>
+                      </View>
+                    )}
+
                     <View className="p-4 pt-6">
                       {siteBuildings.map(b => renderBuilding(b))}
                     </View>
@@ -1461,6 +1501,87 @@ export default function AdminDashboard() {
             </ScrollView>
           )}
         </View>
+      </Modal>
+
+      {/* Manage Site Modal */}
+      <Modal visible={manageSiteName !== null} animationType="slide" presentationStyle="pageSheet">
+        {manageSiteName && (
+          <ScrollView className="flex-1 bg-neutral-900 pt-12 px-6">
+            <View className="flex-row justify-between items-center mb-6">
+              <Text className="text-2xl font-extrabold text-white">Manage Site Details</Text>
+              <TouchableOpacity onPress={() => setManageSiteName(null)} className="bg-neutral-800 p-2 rounded-full border border-neutral-700">
+                <Text className="text-white font-bold">✕</Text>
+              </TouchableOpacity>
+            </View>
+            <View className="bg-neutral-800 p-6 rounded-2xl border border-neutral-700 mb-6">
+              <Text className="text-white font-bold mb-2">Site Name</Text>
+              <TextInput
+                className="bg-neutral-700 border border-neutral-600 rounded-xl p-4 text-white mb-4 opacity-50"
+                value={manageSiteName}
+                editable={false}
+              />
+              <Text className="text-white font-bold mb-2">Fire Service Description (Hazards & Assembly)</Text>
+              <TextInput
+                className="bg-neutral-900 border border-neutral-700 rounded-xl p-4 text-white mb-4"
+                value={siteDesc}
+                onChangeText={setSiteDesc}
+                placeholder="Details of the site, hazards, assembly points..."
+                placeholderTextColor="#525252"
+                multiline
+                numberOfLines={4}
+                style={{ height: 100, textAlignVertical: 'top' }}
+              />
+              <Text className="text-white font-bold mb-2">Site Admin Name (Responsible Person)</Text>
+              <TextInput
+                className="bg-neutral-900 border border-neutral-700 rounded-xl p-4 text-white mb-4"
+                value={siteAdminName}
+                onChangeText={setSiteAdminName}
+                placeholder="e.g., John Doe"
+                placeholderTextColor="#525252"
+              />
+              <Text className="text-white font-bold mb-2">Site Admin Contact Phone</Text>
+              <TextInput
+                className="bg-neutral-900 border border-neutral-700 rounded-xl p-4 text-white mb-4"
+                value={sitePhone}
+                onChangeText={setSitePhone}
+                placeholder="e.g., +44 123 456789"
+                placeholderTextColor="#525252"
+                keyboardType="phone-pad"
+              />
+              <Text className="text-white font-bold mb-2">Local Emergency Services / Fire Brigade Phone</Text>
+              <TextInput
+                className="bg-neutral-900 border border-neutral-700 rounded-xl p-4 text-white mb-6"
+                value={siteEmergencyPhone}
+                onChangeText={setSiteEmergencyPhone}
+                placeholder="e.g., 999 or Local Dispatch Number"
+                placeholderTextColor="#525252"
+                keyboardType="phone-pad"
+              />
+              <TouchableOpacity 
+                className={`py-4 rounded-xl items-center ${isUploading ? 'bg-neutral-700' : 'bg-blue-600'}`}
+                disabled={isUploading}
+                onPress={async () => {
+                  try {
+                    await updateSiteInfo({
+                      clerkId: user?.id || "",
+                      siteName: manageSiteName,
+                      description: siteDesc,
+                      adminContactName: siteAdminName,
+                      contactPhone: sitePhone,
+                      emergencyServicesPhone: siteEmergencyPhone,
+                    });
+                    setManageSiteName(null);
+                    showToast("Site details saved successfully!");
+                  } catch(e) {
+                    showToast("Error updating site", "error");
+                  }
+                }}
+              >
+                <Text className="text-white font-bold text-lg">Save Site Details</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        )}
       </Modal>
 
     </View>

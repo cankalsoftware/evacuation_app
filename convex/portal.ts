@@ -26,11 +26,22 @@ export const getDashboardData = query({
         };
       }));
 
+      const sitesRaw = await ctx.db
+        .query("sites")
+        .withIndex("by_admin", (q) => q.eq("adminId", args.clerkId!))
+        .collect();
+        
+      const sites = await Promise.all(sitesRaw.map(async (s) => ({
+        ...s,
+        masterPlanUrl: s.masterPlanId ? await ctx.storage.getUrl(s.masterPlanId) : null
+      })));
+
       return {
         role: "admin",
         name: user.name,
         phone: user.phone,
         buildings,
+        sites,
       };
     }
 
@@ -75,6 +86,9 @@ export const uploadScannedPlan = mutation({
       .first();
 
     if (existingPlan) {
+      if (existingPlan.storageId && existingPlan.storageId !== args.storageId) {
+        await ctx.storage.delete(existingPlan.storageId);
+      }
       await ctx.db.patch(existingPlan._id, {
         storageId: args.storageId,
         latitude: args.lat,
@@ -157,6 +171,47 @@ export const saveBuilding = mutation({
   }
 });
 
+export const updateSiteInfo = mutation({
+  args: {
+    clerkId: v.string(),
+    siteName: v.string(),
+    description: v.optional(v.string()),
+    contactPhone: v.optional(v.string()), // Site Admin Contact Phone
+    adminContactName: v.optional(v.string()), // Site Admin Name
+    emergencyServicesPhone: v.optional(v.string()), // Fire Brigade/Emergency Dispatch
+    masterPlanId: v.optional(v.id("_storage")),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.query("users").withIndex("by_clerkId", q => q.eq("clerkId", args.clerkId)).first();
+    if (!user || user.role !== "admin") throw new Error("Unauthorized");
+
+    const existing = await ctx.db.query("sites").withIndex("by_name", q => q.eq("name", args.siteName)).filter(q => q.eq(q.field("adminId"), args.clerkId)).first();
+    if (existing) {
+      if (args.masterPlanId && existing.masterPlanId && existing.masterPlanId !== args.masterPlanId) {
+        await ctx.storage.delete(existing.masterPlanId);
+      }
+
+      await ctx.db.patch(existing._id, {
+        ...(args.description !== undefined ? { description: args.description } : {}),
+        ...(args.contactPhone !== undefined ? { contactPhone: args.contactPhone } : {}),
+        ...(args.adminContactName !== undefined ? { adminContactName: args.adminContactName } : {}),
+        ...(args.emergencyServicesPhone !== undefined ? { emergencyServicesPhone: args.emergencyServicesPhone } : {}),
+        ...(args.masterPlanId !== undefined ? { masterPlanId: args.masterPlanId } : {}),
+      });
+    } else {
+      await ctx.db.insert("sites", {
+        name: args.siteName,
+        adminId: args.clerkId,
+        description: args.description,
+        contactPhone: args.contactPhone,
+        adminContactName: args.adminContactName,
+        emergencyServicesPhone: args.emergencyServicesPhone,
+        masterPlanId: args.masterPlanId,
+      });
+    }
+  }
+});
+
 export const updateBuildingImage = mutation({
   args: {
     clerkId: v.string(),
@@ -171,6 +226,11 @@ export const updateBuildingImage = mutation({
 
     if (!user || user.role !== "admin") throw new Error("Unauthorized");
     
+    const building = await ctx.db.get(args.buildingId);
+    if (building && building.masterPlanId && building.masterPlanId !== args.storageId) {
+      await ctx.storage.delete(building.masterPlanId);
+    }
+
     await ctx.db.patch(args.buildingId, { masterPlanId: args.storageId });
   }
 });
