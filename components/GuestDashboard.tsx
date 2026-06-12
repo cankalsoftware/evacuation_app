@@ -72,6 +72,7 @@ export default function GuestDashboard() {
   const updateProfile = useMutation(api.portal.updateProfile);
   const generateUploadUrl = useMutation(api.portal.generateUploadUrl);
   const uploadScannedPlan = useMutation(api.portal.uploadScannedPlan);
+  const deleteStorageImage = useMutation(api.portal.deleteStorageImage);
   const extractMapDetails = useAction(api.vision.extractMapDetails);
 
   const processImage = async (result: ImagePicker.ImagePickerResult, loc: Location.LocationObject, isCamera: boolean) => {
@@ -503,9 +504,13 @@ export default function GuestDashboard() {
               <TouchableOpacity 
                 className="flex-1 bg-neutral-800 py-4 rounded-xl items-center border border-neutral-700 mr-2"
                 onPress={() => {
+                   if (draftPlan?.storageId) {
+                     deleteStorageImage({ storageId: draftPlan.storageId }).catch(console.error);
+                   }
                    setShowConfirmModal(false);
                    setDraftImageUri(null);
                    setDraftExitNode(null);
+                   setDraftPlan(null);
                 }}
               >
                 <Text className="text-white font-bold">Cancel</Text>
@@ -528,6 +533,7 @@ export default function GuestDashboard() {
           dashboardData={dashboardData}
           autoBuilding={autoBuilding}
           currentLocation={currentLocation}
+          activeIncident={activeIncident}
           onClose={() => setIsEvacuating(false)} 
         />
       </Modal>

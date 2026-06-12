@@ -46,7 +46,8 @@
           "photosPermission": "Allow FireVision to access your photos to upload evacuation plans.",
           "cameraPermission": "Allow FireVision to access your camera to scan evacuation plans."
         }
-      ]
+      ],
+      "expo-sharing"
     ]
   }
 }

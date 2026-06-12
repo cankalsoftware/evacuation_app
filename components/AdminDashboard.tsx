@@ -5,6 +5,10 @@ import { useAuth, useUser } from "@clerk/clerk-expo";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
 import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system";
+import * as Sharing from "expo-sharing";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import LiveRollCall from "./LiveRollCall";
 
 let MapView: any = null;
 let Marker: any = null;
@@ -76,12 +80,17 @@ export default function AdminDashboard() {
   const triggerSiteIncident = useMutation(api.portal.triggerSiteIncident);
   const resolveIncident = useMutation(api.portal.resolveIncident);
   const resolveSiteIncident = useMutation(api.portal.resolveSiteIncident);
+  const scheduleDrill = useMutation(api.portal.scheduleDrill);
+  const cancelDrill = useMutation(api.portal.cancelDrill);
   const activeIncidents = useQuery(api.portal.getActiveIncidents, { clerkId: user?.id }) || [];
+  const recentIncidents = useQuery(api.portal.getRecentIncidents, { clerkId: user?.id }) || [];
+  const allIncidentsHistory = useQuery(api.portal.getAllIncidentsHistory, { clerkId: user?.id });
 
   const [isRegistering, setIsRegistering] = React.useState(false);
   const [selectedBuilding, setSelectedBuilding] = React.useState<any>(null);
   
   const [isMapEditorOpen, setIsMapEditorOpen] = React.useState(false);
+  const [isLocatingUser, setIsLocatingUser] = React.useState(false);
   const [mapEditorStep, setMapEditorStep] = React.useState<1 | 2>(1); // 1 = Calibration, 2 = Safe Routes
   const [routeNodeType, setRouteNodeType] = React.useState<"turn" | "exit">("exit");
   
@@ -117,6 +126,52 @@ export default function AdminDashboard() {
   const [setupPhone, setSetupPhone] = React.useState("");
   const [isSavingSetup, setIsSavingSetup] = React.useState(false);
   const updateAdminProfile = useMutation(api.users.updateAdminProfile);
+
+  const exportLogs = async () => {
+    if (!allIncidentsHistory || allIncidentsHistory.length === 0) {
+      showToast("No history to export.");
+      return;
+    }
+    
+    try {
+      const headers = ['Type', 'Site Name', 'Building Name', 'Start Time', 'Duration (Seconds)'];
+      const rows = [headers.join(',')];
+      
+      for (const inc of allIncidentsHistory) {
+        const type = inc.isDrill ? "Drill" : "Real Evacuation";
+        const site = `"${inc.siteName || ''}"`;
+        const building = `"${inc.buildingName || ''}"`;
+        const start = `"${new Date(inc.triggeredAt).toLocaleString()}"`;
+        const durationSecs = Math.floor(((inc.resolvedAt || Date.now()) - inc.triggeredAt) / 1000);
+        
+        rows.push([type, site, building, start, durationSecs].join(','));
+      }
+      
+      const csvString = rows.join('\n');
+      
+      if (Platform.OS === 'web') {
+        const blob = new Blob([csvString], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `evacuation_logs_${Date.now()}.csv`;
+        link.click();
+        URL.revokeObjectURL(url);
+      } else {
+        const fileUri = `${FileSystem.documentDirectory}evacuation_logs_${Date.now()}.csv`;
+        await FileSystem.writeAsStringAsync(fileUri, csvString, { encoding: FileSystem.EncodingType.UTF8 });
+        
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(fileUri, { mimeType: 'text/csv', dialogTitle: 'Export Evacuation Logs' });
+        } else {
+          showToast("Sharing is not available on this device", "error");
+        }
+      }
+    } catch (e) {
+      console.log("Export failed", e);
+      showToast("Failed to export logs", "error");
+    }
+  };
 
   const confirmAction = (title: string, message: string, onConfirm: () => void, isDestructive = false) => {
     if (Platform.OS === 'web') {
@@ -445,18 +500,22 @@ export default function AdminDashboard() {
                                building.masterPlanId && 
                                building.imageCalibrationPoints && building.imageCalibrationPoints.length >= 3 &&
                                building.safeNodes && building.safeNodes.some((n: any) => n.isExit);
-            const isAlarming = activeIncidents.includes(building._id);
+            const activeIncident = activeIncidents.find((i: any) => i.buildingId === building._id);
+            const isAlarming = !!activeIncident;
 
             return (
-              <View key={building._id} className={`bg-neutral-800 border ${isAlarming ? 'border-red-500 shadow-[0_0_15px_rgba(220,38,38,0.5)]' : 'border-neutral-700'} p-4 rounded-2xl mb-4`}>
+              <View key={building._id} className={`bg-neutral-800 border ${isAlarming ? (activeIncident.isDrill ? 'border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.5)]' : 'border-red-500 shadow-[0_0_15px_rgba(220,38,38,0.5)]') : 'border-neutral-700'} p-4 rounded-2xl mb-4`}>
                 <View className="flex-row justify-between items-center mb-3">
                   <View className="flex-1 pr-2">
-                    <Text className="text-white font-bold text-lg mb-1">{building.name}</Text>
-                    {(!building.address || building.address === "No Address Provided") ? (
-                      <View className="bg-amber-900/30 p-2 rounded-md mb-2 border border-amber-500/30 self-start">
-                        <Text className="text-amber-500 text-xs font-bold">⚠️ Missing Address</Text>
-                      </View>
-                    ) : (
+                    <View className="flex-row items-center mb-1">
+                      <Text className="text-white font-bold text-lg mr-2 shrink" numberOfLines={1}>{building.name}</Text>
+                      {(!building.address || building.address === "No Address Provided") && (
+                        <View className="bg-amber-900/30 px-2 py-1 rounded-md border border-amber-500/30 shrink-0">
+                          <Text className="text-amber-500 text-[10px] font-bold">⚠️ Missing Address</Text>
+                        </View>
+                      )}
+                    </View>
+                    {building.address && building.address !== "No Address Provided" && (
                       <Text className="text-neutral-400 text-sm mb-2">{building.address}</Text>
                     )}
                     <View className="flex-row items-start">
@@ -471,41 +530,67 @@ export default function AdminDashboard() {
                       )}
                     </View>
                   </View>
-                  <TouchableOpacity 
-                    className="bg-blue-600 px-4 py-2 rounded-lg ml-4"
-                    onPress={() => {
-                      const defaultLabels = ["Top Left", "Bottom Left", "Bottom Right", "Top Right"];
-                      const populatedPolygon = (building.polygon || []).map((p: any, i: number) => ({
-                        ...p,
-                        label: p.label || (i < 4 ? defaultLabels[i] : `P${i+1}`)
-                      }));
-                      setSelectedBuilding({ ...building, polygon: populatedPolygon });
-                      setEditingPins(populatedPolygon);
-                      setEditBName(building.name);
-                      setEditBSite(building.siteName || "");
-                      setEditBAddress(building.address === "No Address Provided" ? "" : building.address);
-                    }}
-                  >
-                    <Text className="text-white font-bold">Manage</Text>
-                  </TouchableOpacity>
+                  <View className="flex-row items-center ml-4">
+                    {!isAlarming && isComplete && (
+                      <TouchableOpacity 
+                        className="bg-amber-600 px-4 py-2 rounded-lg border border-amber-500 mr-2"
+                        onPress={() => confirmAction("Start Test Drill", `Are you sure you want to manually start a TEST DRILL for ${building.name}?`, () => triggerIncident({ clerkId: user?.id || "", buildingId: building._id, isDrill: true }), true)}
+                      >
+                        <Text className="text-white font-bold text-xs">🔔 Drill</Text>
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity 
+                      className="bg-blue-600 px-4 py-2 rounded-lg"
+                      onPress={() => {
+                        const defaultLabels = ["Top Left", "Bottom Left", "Bottom Right", "Top Right"];
+                        const populatedPolygon = (building.polygon || []).map((p: any, i: number) => ({
+                          ...p,
+                          label: p.label || (i < 4 ? defaultLabels[i] : `P${i+1}`)
+                        }));
+                        setSelectedBuilding({ ...building, polygon: populatedPolygon });
+                        setEditingPins(populatedPolygon);
+                        setIsLocatingUser(false);
+                        setEditBName(building.name);
+                        setEditBSite(building.siteName || "");
+                        setEditBAddress(building.address === "No Address Provided" ? "" : building.address);
+                      }}
+                    >
+                      <Text className="text-white font-bold text-xs">Manage</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
 
                 {isComplete && (
                   <View className="border-t border-neutral-700 pt-3 mt-1">
                     {isAlarming ? (
-                      <TouchableOpacity 
-                        className="bg-green-600 w-full py-3 rounded-lg flex-row items-center justify-center"
-                        onPress={() => confirmAction("Resolve Evacuation", `Are you sure you want to end the evacuation for ${building.name}?`, () => resolveIncident({ clerkId: user?.id || "", buildingId: building._id }))}
-                      >
-                        <Text className="text-white font-bold text-center">✅ Resolve Evacuation</Text>
-                      </TouchableOpacity>
+                      <View>
+                        <TouchableOpacity 
+                          className={`w-full py-3 rounded-lg flex-row items-center justify-center ${activeIncident.isDrill ? 'bg-amber-600' : 'bg-green-600'}`}
+                          onPress={() => confirmAction(activeIncident.isDrill ? "Resolve Drill" : "Resolve Evacuation", `Are you sure you want to end the ${activeIncident.isDrill ? 'drill' : 'evacuation'} for ${building.name}?`, () => resolveIncident({ clerkId: user?.id || "", buildingId: building._id }))}
+                        >
+                          <Text className="text-white font-bold text-center">✅ Resolve {activeIncident.isDrill ? 'Drill' : 'Evacuation'}</Text>
+                        </TouchableOpacity>
+                        
+                        <LiveRollCall 
+                          clerkId={user?.id || ""} 
+                          incidentId={activeIncident.incidentId} 
+                          onLocateUser={(lat, lon, name) => {
+                            setSelectedBuilding(building);
+                            setEditingPins([{ lat, lon, label: name }]);
+                            setIsLocatingUser(true);
+                            setIsMapEditorOpen(true);
+                          }}  
+                        />
+                      </View>
                     ) : (
-                      <TouchableOpacity 
-                        className="bg-red-600 w-full py-3 rounded-lg flex-row items-center justify-center border border-red-500"
-                        onPress={() => confirmAction("Trigger Evacuation", `Are you sure you want to trigger the evacuation for ${building.name}? This will alert all guests.`, () => triggerIncident({ clerkId: user?.id || "", buildingId: building._id }), true)}
-                      >
-                        <Text className="text-white font-bold text-center">🚨 Evacuate Building</Text>
-                      </TouchableOpacity>
+                      <View className="pt-2">
+                        <TouchableOpacity 
+                          className="bg-red-600 w-full py-4 rounded-lg flex-row items-center justify-center border border-red-500 shadow-lg"
+                          onPress={() => confirmAction("Trigger Evacuation", `Are you sure you want to trigger the REAL evacuation for ${building.name}? This will alert all guests.`, () => triggerIncident({ clerkId: user?.id || "", buildingId: building._id, isDrill: false }), true)}
+                        >
+                          <Text className="text-white font-bold text-center text-lg tracking-widest">🚨 EVACUATE BUILDING</Text>
+                        </TouchableOpacity>
+                      </View>
                     )}
                   </View>
                 )}
@@ -517,7 +602,7 @@ export default function AdminDashboard() {
             <View>
               {Object.keys(sites).map(siteName => {
                 const siteBuildings = sites[siteName];
-                const activeCount = siteBuildings.filter(b => activeIncidents.includes(b._id)).length;
+                const activeCount = siteBuildings.filter(b => activeIncidents.find((i:any) => i.buildingId === b._id)).length;
                 const activeInSite = activeCount > 0;
                 const allInSiteActive = activeCount === siteBuildings.length;
                 const siteDetail = dashboardData?.sites?.find((s: any) => s.name === siteName);
@@ -525,8 +610,8 @@ export default function AdminDashboard() {
                 return (
                   <View key={siteName} className="mb-10 bg-neutral-800/40 border border-neutral-700/60 rounded-[32px] overflow-hidden shadow-lg -mx-2">
                     <View className="flex-row justify-between items-center bg-neutral-800/60 p-5 border-b border-neutral-700/50">
-                      <View className="flex-row items-center">
-                        <Text className="text-2xl font-black text-white tracking-wide mr-3">{siteName}</Text>
+                      <View className="flex-row items-center flex-1">
+                        <Text className="text-2xl font-black text-white tracking-wide mr-3 shrink">{siteName}</Text>
                         <TouchableOpacity 
                           className="bg-neutral-700/50 p-2 rounded-full"
                           onPress={() => {
@@ -540,6 +625,15 @@ export default function AdminDashboard() {
                           <Text className="text-lg">⚙️</Text>
                         </TouchableOpacity>
                       </View>
+                      
+                      {!allInSiteActive && siteBuildings.length > 0 && (
+                        <TouchableOpacity 
+                          className="bg-amber-600/80 px-4 py-2 rounded-lg border border-amber-500 ml-2"
+                          onPress={() => confirmAction("Test Drill Site", `Are you sure you want to trigger a mass TEST DRILL for ALL buildings in ${siteName}?`, () => triggerSiteIncident({ clerkId: user?.id || "", siteName, isDrill: true }), true)}
+                        >
+                          <Text className="text-white font-bold text-sm">🔔 Drill Site</Text>
+                        </TouchableOpacity>
+                      )}
                     </View>
                     
                     {(!siteDetail || !siteDetail.description || !siteDetail.contactPhone) && (
@@ -568,18 +662,20 @@ export default function AdminDashboard() {
                           </TouchableOpacity>
                         ) : activeInSite ? (
                           <TouchableOpacity 
-                            className="bg-amber-500 w-full py-4 rounded-xl shadow-sm items-center justify-center" 
-                            onPress={() => confirmAction("Evacuate Rest of Site", `Some buildings are already evacuating. Trigger alarms for the remaining buildings in ${siteName}?`, () => triggerSiteIncident({ clerkId: user?.id || "", siteName }), true)}
+                            className="bg-amber-500 w-full py-4 rounded-xl shadow-sm items-center justify-center mb-2" 
+                            onPress={() => confirmAction("Evacuate Rest of Site", `Some buildings are already evacuating. Trigger alarms for the remaining buildings in ${siteName}?`, () => triggerSiteIncident({ clerkId: user?.id || "", siteName, isDrill: false }), true)}
                           >
                             <Text className="text-white text-base font-bold text-center">⚠️ Partial Evac in Progress{'\n'}Evacuate Rest of Site</Text>
                           </TouchableOpacity>
                         ) : (
-                          <TouchableOpacity 
-                            className="bg-red-600 w-full py-4 rounded-xl shadow-sm items-center justify-center" 
-                            onPress={() => confirmAction("Evacuate Site", `Are you sure you want to trigger a mass evacuation for ALL buildings in ${siteName}?`, () => triggerSiteIncident({ clerkId: user?.id || "", siteName }), true)}
-                          >
-                            <Text className="text-white text-base font-bold text-center">🚨 Evacuate Entire Site</Text>
-                          </TouchableOpacity>
+                          <View>
+                            <TouchableOpacity 
+                              className="w-full bg-red-600 border-2 border-red-500 py-4 rounded-xl flex-row justify-center items-center shadow-[0_0_15px_rgba(220,38,38,0.4)]"
+                              onPress={() => confirmAction("Evacuate Site", `Are you sure you want to trigger a mass evacuation for ALL buildings in ${siteName}?`, () => triggerSiteIncident({ clerkId: user?.id || "", siteName, isDrill: false }), true)}
+                            >
+                              <Text className="text-white text-lg font-black tracking-widest text-center">🚨 EVACUATE ENTIRE SITE 🚨</Text>
+                            </TouchableOpacity>
+                          </View>
                         )}
                       </View>
                     )}
@@ -596,6 +692,40 @@ export default function AdminDashboard() {
             </View>
           );
         })()}
+        
+        {/* Recent Incidents */}
+        {recentIncidents.length > 0 && (
+          <View className="mb-10 bg-neutral-900 border border-neutral-800 rounded-[32px] p-5 shadow-lg">
+            <View className="flex-row justify-between items-center mb-4">
+              <Text className="text-xl font-bold text-white">Recent History</Text>
+              <TouchableOpacity onPress={exportLogs} className="bg-neutral-800 px-4 py-2 rounded-lg border border-neutral-700 flex-row items-center">
+                <MaterialCommunityIcons name="download" size={16} color="white" style={{ marginRight: 4 }} />
+                <Text className="text-white text-xs font-bold">Export Logs</Text>
+              </TouchableOpacity>
+            </View>
+            {recentIncidents.map((inc: any) => {
+              const durationMs = (inc.resolvedAt || Date.now()) - inc.triggeredAt;
+              const durationMins = Math.floor(durationMs / 60000);
+              const durationSecs = Math.floor((durationMs % 60000) / 1000);
+              
+              return (
+                <View key={inc._id} className="bg-neutral-800 p-4 rounded-xl mb-3 flex-row justify-between items-center">
+                  <View>
+                    <Text className={`font-bold ${inc.isDrill ? 'text-amber-400' : 'text-red-400'}`}>
+                      {inc.isDrill ? '🔔 Drill' : '🚨 Real Evacuation'}
+                    </Text>
+                    <Text className="text-white text-sm mt-1">{inc.buildingName}</Text>
+                    <Text className="text-neutral-400 text-xs mt-1">{new Date(inc.triggeredAt).toLocaleString()}</Text>
+                  </View>
+                  <View className="bg-neutral-900 px-3 py-2 rounded-lg items-center">
+                    <Text className="text-neutral-400 text-[10px] uppercase font-bold tracking-wider">Duration</Text>
+                    <Text className="text-white font-black text-lg">{durationMins}m {durationSecs}s</Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        )}
         
         <View className="h-10" />
       </ScrollView>
@@ -1164,14 +1294,44 @@ export default function AdminDashboard() {
       <Modal visible={isMapEditorOpen} animationType="slide">
         <View className="flex-1 bg-neutral-900 pt-16 px-4">
           <View className="flex-row justify-between items-center mb-4">
-            <Text className="text-xl font-bold text-white">Manage Map Layout</Text>
-            <TouchableOpacity onPress={() => setIsMapEditorOpen(false)} className="bg-neutral-800 p-2 rounded-full border border-neutral-700">
+            <Text className="text-xl font-bold text-white">{isLocatingUser ? "Locate Trapped User" : "Manage Map Layout"}</Text>
+            <TouchableOpacity onPress={() => { setIsMapEditorOpen(false); setIsLocatingUser(false); }} className="bg-neutral-800 p-2 rounded-full border border-neutral-700">
               <Text className="text-white font-bold">✕</Text>
             </TouchableOpacity>
           </View>
           
-          {/* Tabs */}
-          <View className="flex-row mb-6 bg-neutral-800 rounded-xl p-1">
+          {isLocatingUser ? (
+            <View className="flex-1">
+              <Text className="text-red-400 mb-4 font-bold text-center">Tracking: {editingPins?.[0]?.label}</Text>
+              <View className="bg-neutral-800 rounded-xl overflow-hidden mb-6 w-full" style={{ height: '70%' }}>
+                {selectedBuilding?.masterPlanUrl && (
+                  <View className="flex-1">
+                    <Image source={{ uri: selectedBuilding.masterPlanUrl }} className="w-full h-full" resizeMode="contain" />
+                    {/* Render the user's location via inverse map calculation here if we had full matrix math */}
+                    {/* For now, just drop a large pin in the center as representation until we have inverse mapping function */}
+                    <View className="absolute inset-0 items-center justify-center pointer-events-none">
+                      <View className="w-16 h-16 rounded-full bg-red-600/30 items-center justify-center animate-ping">
+                        <Text className="text-5xl">🆘</Text>
+                      </View>
+                    </View>
+                  </View>
+                )}
+              </View>
+              <TouchableOpacity 
+                className="bg-red-600 py-4 rounded-xl items-center border border-red-500 shadow-[0_0_15px_rgba(220,38,38,0.5)]"
+                onPress={async () => {
+                   import('react-native').then(rn => {
+                     if (rn.Share) rn.Share.share({ message: `EMERGENCY! User ${editingPins?.[0]?.label} is trapped at coordinates: ${editingPins?.[0]?.lat}, ${editingPins?.[0]?.lon} in ${selectedBuilding?.name}. Dispatch help immediately!`});
+                   });
+                }}
+              >
+                <Text className="text-white font-bold text-xl tracking-widest">🚨 SHARE TO FIRE BRIGADE</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <>
+              {/* Tabs */}
+              <View className="flex-row mb-6 bg-neutral-800 rounded-xl p-1">
             <TouchableOpacity 
               className={`flex-1 py-3 rounded-lg items-center ${mapEditorStep === 1 ? 'bg-neutral-700 shadow' : ''}`}
               onPress={() => setMapEditorStep(1)}
@@ -1499,6 +1659,8 @@ export default function AdminDashboard() {
                 </TouchableOpacity>
               </View>
             </ScrollView>
+          )}
+          </>
           )}
         </View>
       </Modal>

@@ -6,6 +6,8 @@ import { ClerkProvider, useAuth, useUser } from "@clerk/clerk-expo";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
 import { ConvexReactClient, useQuery, useMutation } from "convex/react";
 import * as SecureStore from "expo-secure-store";
+import * as Notifications from "expo-notifications";
+import { Platform } from "react-native";
 import { api } from "./convex/_generated/api";
 
 import AuthScreen from "./components/AuthScreen";
@@ -33,6 +35,14 @@ const tokenCache = {
     }
   },
 };
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
 
 function RootNavigator() {
   const { isLoaded, isSignedIn, userId } = useAuth();
@@ -99,6 +109,18 @@ export default function App() {
     const timer = setTimeout(() => {
       setShowSplash(false);
     }, 2500);
+
+    if (Platform.OS === 'android') {
+      Notifications.setNotificationChannelAsync('emergency', {
+        name: 'Emergency Alerts',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#FF231F7C',
+        sound: 'default', // Ideally a custom loud siren sound
+        bypassDnd: true, // Crucial for Android DND override
+      });
+    }
+
     return () => clearTimeout(timer);
   }, []);
 

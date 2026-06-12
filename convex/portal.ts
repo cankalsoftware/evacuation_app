@@ -350,7 +350,25 @@ export const deleteBuilding = mutation({
 
     if (!user || user.role !== "admin") throw new Error("Unauthorized");
     
-    // We optionally might want to delete the masterPlanId image from storage, but keeping it simple for now
+    const building = await ctx.db.get(args.buildingId);
+    if (building?.masterPlanId) {
+      await ctx.storage.delete(building.masterPlanId);
+    }
+    
+    // Cleanup incident and rollCall data
+    const incidents = await ctx.db.query("incidents").withIndex("by_building", q => q.eq("buildingId", args.buildingId)).collect();
+    for (const incident of incidents) {
+      const rollCalls = await ctx.db.query("rollCall").withIndex("by_incident_user", q => q.eq("incidentId", incident._id)).collect();
+      for (const rc of rollCalls) {
+        await ctx.db.delete(rc._id);
+      }
+      await ctx.db.delete(incident._id);
+    }
+
+    if (building?.drillJobId) {
+      await ctx.scheduler.cancel(building.drillJobId);
+    }
+
     await ctx.db.delete(args.buildingId);
   }
 });
@@ -425,10 +443,11 @@ export const getAutoPushedBuilding = query({
 // --- PHASE 12: INCIDENT ENGINE ---
 
 export const triggerIncident = mutation({
-  args: { clerkId: v.string(), buildingId: v.id("buildings") },
+  args: { clerkId: v.string(), buildingId: v.id("buildings"), isDrill: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
     const user = await ctx.db.query("users").withIndex("by_clerkId", q => q.eq("clerkId", args.clerkId)).first();
-    if (!user || user.role !== "admin") throw new Error("Unauthorized");
+    // Allow if admin or if called via scheduler (no clerkId)
+    if (args.clerkId && (!user || user.role !== "admin")) throw new Error("Unauthorized");
 
     // Check if incident already exists and is active
     const existing = await ctx.db.query("incidents").withIndex("by_building", q => q.eq("buildingId", args.buildingId)).filter(q => q.eq(q.field("isActive"), true)).first();
@@ -437,18 +456,27 @@ export const triggerIncident = mutation({
     await ctx.db.insert("incidents", {
       buildingId: args.buildingId,
       isActive: true,
+      isDrill: args.isDrill ?? false,
       triggeredAt: Date.now(),
     });
   }
 });
 
+export const deleteStorageImage = mutation({
+  args: { storageId: v.id("_storage") },
+  handler: async (ctx, args) => {
+    // Only allow if requested
+    await ctx.storage.delete(args.storageId);
+  }
+});
+
 export const triggerSiteIncident = mutation({
-  args: { clerkId: v.string(), siteName: v.string() },
+  args: { clerkId: v.string(), siteName: v.string(), isDrill: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
     const user = await ctx.db.query("users").withIndex("by_clerkId", q => q.eq("clerkId", args.clerkId)).first();
-    if (!user || user.role !== "admin") throw new Error("Unauthorized");
+    if (args.clerkId && (!user || user.role !== "admin")) throw new Error("Unauthorized");
 
-    const buildings = await ctx.db.query("buildings").withIndex("by_admin", q => q.eq("adminId", args.clerkId)).filter(q => q.eq(q.field("siteName"), args.siteName)).collect();
+    const buildings = await ctx.db.query("buildings").filter(q => q.eq(q.field("siteName"), args.siteName)).collect();
 
     for (const b of buildings) {
       const existing = await ctx.db.query("incidents").withIndex("by_building", q => q.eq("buildingId", b._id)).filter(q => q.eq(q.field("isActive"), true)).first();
@@ -456,6 +484,7 @@ export const triggerSiteIncident = mutation({
         await ctx.db.insert("incidents", {
           buildingId: b._id,
           isActive: true,
+          isDrill: args.isDrill ?? false,
           triggeredAt: Date.now(),
         });
       }
@@ -471,7 +500,7 @@ export const resolveIncident = mutation({
 
     const active = await ctx.db.query("incidents").withIndex("by_building", q => q.eq("buildingId", args.buildingId)).filter(q => q.eq(q.field("isActive"), true)).collect();
     for (const a of active) {
-      await ctx.db.patch(a._id, { isActive: false, resolvedAt: Date.now() });
+      await ctx.db.patch(a._id, { isActive: false, resolvedAt: Date.now(), endTime: Date.now() });
     }
   }
 });
@@ -487,7 +516,7 @@ export const resolveSiteIncident = mutation({
     for (const b of buildings) {
       const active = await ctx.db.query("incidents").withIndex("by_building", q => q.eq("buildingId", b._id)).filter(q => q.eq(q.field("isActive"), true)).collect();
       for (const a of active) {
-        await ctx.db.patch(a._id, { isActive: false, resolvedAt: Date.now() });
+        await ctx.db.patch(a._id, { isActive: false, resolvedAt: Date.now(), endTime: Date.now() });
       }
     }
   }
@@ -506,9 +535,68 @@ export const getActiveIncidents = query({
 
     for (const b of buildings) {
       const incident = await ctx.db.query("incidents").withIndex("by_building", q => q.eq("buildingId", b._id)).filter(q => q.eq(q.field("isActive"), true)).first();
-      if (incident) activeIncidents.push(b._id);
+      if (incident) {
+        activeIncidents.push({
+          buildingId: b._id,
+          incidentId: incident._id,
+          isDrill: incident.isDrill,
+          triggeredAt: incident.triggeredAt
+        });
+      }
     }
     return activeIncidents;
+  }
+});
+
+export const getRecentIncidents = query({
+  args: { clerkId: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const clerkId = args.clerkId;
+    if (!clerkId) return [];
+    const user = await ctx.db.query("users").withIndex("by_clerkId", q => q.eq("clerkId", clerkId)).first();
+    if (!user || user.role !== "admin") return [];
+
+    const buildings = await ctx.db.query("buildings").withIndex("by_admin", q => q.eq("adminId", clerkId)).collect();
+    const buildingIds = buildings.map(b => b._id);
+    
+    // In Convex, no "IN" query natively yet. So we fetch all incidents for these buildings and sort.
+    let recentIncidents = [];
+    for (const bId of buildingIds) {
+      const incs = await ctx.db.query("incidents").withIndex("by_building", q => q.eq("buildingId", bId)).filter(q => q.eq(q.field("isActive"), false)).order("desc").take(5);
+      for (const inc of incs) {
+        const building = buildings.find(b => b._id === inc.buildingId);
+        recentIncidents.push({ ...inc, buildingName: building?.name, siteName: building?.siteName });
+      }
+    }
+    
+    // Sort by triggeredAt descending
+    recentIncidents.sort((a, b) => b.triggeredAt - a.triggeredAt);
+    return recentIncidents.slice(0, 5); // top 5 overall
+  }
+});
+
+export const getAllIncidentsHistory = query({
+  args: { clerkId: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const clerkId = args.clerkId;
+    if (!clerkId) return [];
+    const user = await ctx.db.query("users").withIndex("by_clerkId", q => q.eq("clerkId", clerkId)).first();
+    if (!user || user.role !== "admin") return [];
+
+    const buildings = await ctx.db.query("buildings").withIndex("by_admin", q => q.eq("adminId", clerkId)).collect();
+    const buildingIds = buildings.map(b => b._id);
+    
+    let allIncidents = [];
+    for (const bId of buildingIds) {
+      const incs = await ctx.db.query("incidents").withIndex("by_building", q => q.eq("buildingId", bId)).filter(q => q.eq(q.field("isActive"), false)).collect();
+      for (const inc of incs) {
+        const building = buildings.find(b => b._id === inc.buildingId);
+        allIncidents.push({ ...inc, buildingName: building?.name, siteName: building?.siteName });
+      }
+    }
+    
+    allIncidents.sort((a, b) => b.triggeredAt - a.triggeredAt);
+    return allIncidents;
   }
 });
 
@@ -518,5 +606,168 @@ export const getActiveIncident = query({
     const buildingId = args.buildingId;
     if (!buildingId) return null;
     return await ctx.db.query("incidents").withIndex("by_building", q => q.eq("buildingId", buildingId)).filter(q => q.eq(q.field("isActive"), true)).first();
+  }
+});
+
+// --- PHASE 13: ROLL CALL & SOS ---
+
+export const updateEvacuationStatus = mutation({
+  args: {
+    clerkId: v.string(),
+    incidentId: v.id("incidents"),
+    lat: v.number(),
+    lon: v.number(),
+    setPanic: v.optional(v.boolean()),
+    setSafe: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.query("users").withIndex("by_clerkId", q => q.eq("clerkId", args.clerkId)).first();
+    if (!user) throw new Error("Unauthorized");
+
+    const incident = await ctx.db.get(args.incidentId);
+    if (!incident || !incident.isActive) return;
+
+    const building = await ctx.db.get(incident.buildingId);
+    if (!building || !building.polygon) return;
+
+    let status = "SAFE";
+    if (args.setPanic) {
+      status = "PANIC";
+    } else if (args.setSafe) {
+      status = "SAFE";
+    } else {
+      const inside = isPointInPolygon({ lat: args.lat, lon: args.lon }, building.polygon);
+      status = inside ? "IN_BUILDING" : "SAFE";
+    }
+
+    const existing = await ctx.db.query("rollCall").withIndex("by_incident_user", q => q.eq("incidentId", args.incidentId).eq("userId", user._id)).first();
+
+    if (existing) {
+      // Don't downgrade PANIC automatically
+      if (existing.status === "PANIC" && !args.setSafe) {
+        status = "PANIC";
+      }
+      await ctx.db.patch(existing._id, {
+        status,
+        lastLat: args.lat,
+        lastLon: args.lon,
+        updatedAt: Date.now()
+      });
+    } else {
+      await ctx.db.insert("rollCall", {
+        incidentId: args.incidentId,
+        userId: user._id,
+        status,
+        lastLat: args.lat,
+        lastLon: args.lon,
+        updatedAt: Date.now()
+      });
+    }
+  }
+});
+
+export const getRollCall = query({
+  args: { clerkId: v.string(), incidentId: v.optional(v.id("incidents")) },
+  handler: async (ctx, args) => {
+    if (!args.incidentId) return [];
+    const user = await ctx.db.query("users").withIndex("by_clerkId", q => q.eq("clerkId", args.clerkId)).first();
+    if (!user || user.role !== "admin") return [];
+
+    const roll = await ctx.db.query("rollCall").withIndex("by_incident", q => q.eq("incidentId", args.incidentId!)).collect();
+    
+    // Join with users
+    const results = await Promise.all(roll.map(async (r) => {
+      const u = await ctx.db.get(r.userId);
+      return { ...r, userName: u?.name || u?.email || "Unknown Guest" };
+    }));
+
+    // Sort: PANIC -> IN_BUILDING -> SAFE
+    results.sort((a, b) => {
+      const order: Record<string, number> = { "PANIC": 0, "IN_BUILDING": 1, "SAFE": 2 };
+      return order[a.status] - order[b.status];
+    });
+
+    return results;
+  }
+});
+
+import { internalMutation } from "./_generated/server";
+import { internal } from "./_generated/api";
+
+export const internalTriggerDrill = internalMutation({
+  args: { buildingId: v.optional(v.id("buildings")), siteName: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    if (args.buildingId) {
+      const existing = await ctx.db.query("incidents").withIndex("by_building", q => q.eq("buildingId", args.buildingId!)).filter(q => q.eq(q.field("isActive"), true)).first();
+      if (!existing) {
+        await ctx.db.insert("incidents", {
+          buildingId: args.buildingId,
+          isActive: true,
+          isDrill: true,
+          triggeredAt: Date.now(),
+        });
+      }
+      await ctx.db.patch(args.buildingId, { nextDrillAt: undefined, drillJobId: undefined });
+    } else if (args.siteName) {
+      const buildings = await ctx.db.query("buildings").filter(q => q.eq(q.field("siteName"), args.siteName)).collect();
+      for (const b of buildings) {
+        const existing = await ctx.db.query("incidents").withIndex("by_building", q => q.eq("buildingId", b._id)).filter(q => q.eq(q.field("isActive"), true)).first();
+        if (!existing) {
+          await ctx.db.insert("incidents", {
+            buildingId: b._id,
+            isActive: true,
+            isDrill: true,
+            triggeredAt: Date.now(),
+          });
+        }
+      }
+      const sites = await ctx.db.query("sites").withIndex("by_name", q => q.eq("name", args.siteName!)).collect();
+      for (const s of sites) {
+         await ctx.db.patch(s._id, { nextDrillAt: undefined, drillJobId: undefined });
+      }
+    }
+  }
+});
+
+export const scheduleDrill = mutation({
+  args: { clerkId: v.string(), timestamp: v.number(), buildingId: v.optional(v.id("buildings")), siteName: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.query("users").withIndex("by_clerkId", q => q.eq("clerkId", args.clerkId)).first();
+    if (!user || user.role !== "admin") throw new Error("Unauthorized");
+
+    // Cancel old job if it exists
+    if (args.buildingId) {
+      const b = await ctx.db.get(args.buildingId);
+      if (b?.drillJobId) await ctx.scheduler.cancel(b.drillJobId);
+      const jobId = await ctx.scheduler.runAt(args.timestamp, internal.portal.internalTriggerDrill, { buildingId: args.buildingId });
+      await ctx.db.patch(args.buildingId, { nextDrillAt: args.timestamp, drillJobId: jobId });
+    } else if (args.siteName) {
+      const sites = await ctx.db.query("sites").withIndex("by_name", q => q.eq("name", args.siteName!)).filter(q => q.eq(q.field("adminId"), args.clerkId)).collect();
+      for (const s of sites) {
+        if (s.drillJobId) await ctx.scheduler.cancel(s.drillJobId);
+        const jobId = await ctx.scheduler.runAt(args.timestamp, internal.portal.internalTriggerDrill, { siteName: args.siteName });
+        await ctx.db.patch(s._id, { nextDrillAt: args.timestamp, drillJobId: jobId });
+      }
+    }
+  }
+});
+
+export const cancelDrill = mutation({
+  args: { clerkId: v.string(), buildingId: v.optional(v.id("buildings")), siteName: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.query("users").withIndex("by_clerkId", q => q.eq("clerkId", args.clerkId)).first();
+    if (!user || user.role !== "admin") throw new Error("Unauthorized");
+
+    if (args.buildingId) {
+      const b = await ctx.db.get(args.buildingId);
+      if (b?.drillJobId) await ctx.scheduler.cancel(b.drillJobId);
+      await ctx.db.patch(args.buildingId, { nextDrillAt: undefined, drillJobId: undefined });
+    } else if (args.siteName) {
+      const sites = await ctx.db.query("sites").withIndex("by_name", q => q.eq("name", args.siteName!)).filter(q => q.eq(q.field("adminId"), args.clerkId)).collect();
+      for (const s of sites) {
+        if (s.drillJobId) await ctx.scheduler.cancel(s.drillJobId);
+        await ctx.db.patch(s._id, { nextDrillAt: undefined, drillJobId: undefined });
+      }
+    }
   }
 });

@@ -76,3 +76,22 @@ export const updateAdminProfile = mutation({
     });
   },
 });
+
+export const savePushToken = mutation({
+  args: {
+    clerkId: v.string(),
+    token: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const existingUser = await ctx.db
+      .query("users")
+      .withIndex("by_clerkId", (q) => q.eq("clerkId", args.clerkId))
+      .first();
+
+    if (!existingUser) throw new Error("User not found");
+
+    await ctx.db.patch(existingUser._id, {
+      expoPushToken: args.token,
+    });
+  },
+});

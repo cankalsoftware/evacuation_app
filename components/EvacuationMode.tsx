@@ -4,6 +4,10 @@ import * as Location from "expo-location";
 import * as Speech from "expo-speech";
 import { Pedometer } from 'expo-sensors';
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useUser } from "@clerk/clerk-expo";
+import { useMutation } from "convex/react";
+import { api } from "../convex/_generated/api";
+import { Audio } from 'expo-av';
 
 // Basic Haversine distance
 function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
@@ -42,12 +46,17 @@ function updateLocationWithStep(lat: number, lon: number, heading: number, stepD
   };
 }
 
-export default function EvacuationMode({ dashboardData, autoBuilding, currentLocation, onClose }: any) {
+export default function EvacuationMode({ dashboardData, autoBuilding, currentLocation, activeIncident, onClose }: any) {
   const { width, height } = useWindowDimensions();
+  const { user } = useUser();
+  const updateStatus = useMutation(api.portal.updateEvacuationStatus);
   const [heading, setHeading] = useState<number>(0);
   const [targetHeading, setTargetHeading] = useState<number>(0);
   const [steps, setSteps] = useState(0);
   const [drLocation, setDrLocation] = useState<{lat: number, lon: number} | null>(currentLocation ? { lat: currentLocation.coords.latitude, lon: currentLocation.coords.longitude } : null);
+  
+  const [evacStatus, setEvacStatus] = useState<"IN_BUILDING" | "PANIC" | "SAFE">("IN_BUILDING");
+  const [sirenSound, setSirenSound] = useState<Audio.Sound | null>(null);
   
   const visitedNodeIdsRef = useRef<Set<number>>(new Set());
   const hasReachedExitRef = useRef<boolean>(false);
@@ -161,7 +170,12 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
     };
 
     startCompassAndPedometer();
-    Speech.speak("Evacuation initiated. Follow the green arrow on your screen.");
+    
+    if (activeIncident?.isDrill) {
+      Speech.speak("This is a test drill. Please follow the evacuation route calmly.");
+    } else {
+      Speech.speak("Evacuation initiated. Follow the green arrow on your screen.");
+    }
 
     return () => {
       isMounted = false;
@@ -170,6 +184,88 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
       Speech.stop();
     };
   }, []);
+
+  // Auto-Ping Location and Status
+  useEffect(() => {
+    if (!user?.id || !activeIncident?._id) return;
+    
+    const pingStatus = async () => {
+      try {
+        await updateStatus({
+          clerkId: user.id,
+          incidentId: activeIncident._id,
+          status: evacStatus,
+          lat: drLocation?.lat,
+          lon: drLocation?.lon
+        });
+      } catch (e) {
+        console.log("Failed to ping status", e);
+      }
+    };
+
+    pingStatus(); // initial ping
+    const interval = setInterval(pingStatus, 5000); // ping every 5 seconds
+    
+    return () => clearInterval(interval);
+  }, [user?.id, activeIncident?._id, evacStatus, drLocation]);
+
+  // Audio Cleanup
+  useEffect(() => {
+    return () => {
+      if (sirenSound) {
+        sirenSound.unloadAsync();
+      }
+    };
+  }, [sirenSound]);
+
+  const togglePanic = async () => {
+    if (evacStatus === "PANIC") {
+      setEvacStatus("IN_BUILDING");
+      if (sirenSound) {
+        await sirenSound.stopAsync();
+      }
+    } else {
+      setEvacStatus("PANIC");
+      try {
+        // Play siren loop
+        const { sound } = await Audio.Sound.createAsync(
+          require('../assets/siren.wav'),
+          { isLooping: true, volume: 1.0 }
+        );
+        setSirenSound(sound);
+        await sound.playAsync();
+      } catch (e) {
+        console.log("Could not play siren", e);
+      }
+      
+      // Update immediately
+      if (user?.id && activeIncident?._id) {
+        await updateStatus({
+          clerkId: user.id,
+          incidentId: activeIncident._id,
+          status: "PANIC",
+          lat: drLocation?.lat,
+          lon: drLocation?.lon
+        });
+      }
+    }
+  };
+
+  const markAsSafe = async () => {
+    setEvacStatus("SAFE");
+    if (sirenSound) {
+      await sirenSound.stopAsync();
+    }
+    if (user?.id && activeIncident?._id) {
+      await updateStatus({
+        clerkId: user.id,
+        incidentId: activeIncident._id,
+        status: "SAFE",
+        lat: drLocation?.lat,
+        lon: drLocation?.lon
+      });
+    }
+  };
 
   // Voice Guidance Loop based on Target Heading
   useEffect(() => {
@@ -231,12 +327,32 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
   const arrowAngle = targetHeading - heading;
   const arrowRotation = `${arrowAngle}deg`; 
   
+  const isDrill = activeIncident?.isDrill;
+  
+  if (evacStatus === "SAFE") {
+    return (
+      <View className="flex-1 bg-green-900 justify-center items-center px-6">
+        <Text className="text-8xl mb-4">✅</Text>
+        <Text className="text-4xl font-black text-white mb-2 text-center">YOU ARE SAFE</Text>
+        <Text className="text-green-300 text-center mb-8 text-lg">Your status has been updated. Please wait for further instructions from the authorities.</Text>
+        <TouchableOpacity 
+          onPress={onClose}
+          className="bg-neutral-800 px-8 py-4 rounded-full border border-neutral-700"
+        >
+          <Text className="text-white font-bold text-xl">Close</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+  
   return (
-    <View className="flex-1 bg-black">
+    <View className={`flex-1 ${evacStatus === 'PANIC' ? 'bg-red-900 animate-pulse' : 'bg-black'}`}>
       {/* Header */}
-      <View className="pt-16 pb-4 px-6 flex-row justify-between items-center bg-neutral-900 border-b border-neutral-800">
+      <View className={`pt-16 pb-4 px-6 flex-row justify-between items-center border-b ${isDrill ? 'bg-amber-900 border-amber-800' : 'bg-neutral-900 border-neutral-800'}`}>
         <View>
-          <Text className="text-3xl font-extrabold text-red-500 uppercase tracking-widest">Evacuate</Text>
+          <Text className={`text-3xl font-extrabold uppercase tracking-widest ${isDrill ? 'text-amber-400' : 'text-red-500'}`}>
+            {isDrill ? 'TEST DRILL' : 'EVACUATE'}
+          </Text>
           <Text className="text-white">Room: {dashboardData?.roomNumber || "Unknown"}</Text>
         </View>
         <TouchableOpacity 
@@ -291,6 +407,23 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
               <Text className="text-neutral-400 font-bold text-sm">Sensors disabled on web simulator</Text>
             </View>
           )}
+        </View>
+        
+        {/* Buttons Overlay */}
+        <View className="absolute bottom-10 left-6 right-6 flex-row justify-between">
+          <TouchableOpacity 
+            className={`w-20 h-20 rounded-full items-center justify-center border-4 shadow-lg ${evacStatus === 'PANIC' ? 'bg-white border-red-500' : 'bg-red-600 border-red-800'}`}
+            onPress={togglePanic}
+          >
+            <Text className={`font-black text-xs ${evacStatus === 'PANIC' ? 'text-red-600' : 'text-white'}`}>{evacStatus === 'PANIC' ? 'CANCEL' : 'SOS'}</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            className="w-20 h-20 rounded-full items-center justify-center bg-green-600 border-4 border-green-800 shadow-lg"
+            onPress={markAsSafe}
+          >
+            <Text className="font-black text-xs text-white text-center">I AM SAFE</Text>
+          </TouchableOpacity>
         </View>
 
       </View>

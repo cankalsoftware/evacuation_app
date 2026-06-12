@@ -10,6 +10,7 @@ export default defineSchema({
     
     role: v.union(v.literal("guest"), v.literal("admin")),
     createdAt: v.number(),
+    expoPushToken: v.optional(v.string()), // Added for Phase 13 native push notifications
   }).index("by_clerkId", ["clerkId"]),
 
   plans: defineTable({
@@ -49,6 +50,8 @@ export default defineSchema({
       v.object({ lat: v.number(), lon: v.number(), isExit: v.boolean() })
     )), // Added for Phase 9 Admin routing
     masterPlanId: v.optional(v.id("_storage")),
+    nextDrillAt: v.optional(v.number()), // Phase 13
+    drillJobId: v.optional(v.id("_scheduled_functions")), // Phase 13
   }).index("by_coordinates", ["latitude", "longitude"])
     .index("by_admin", ["adminId"]),
 
@@ -68,12 +71,27 @@ export default defineSchema({
     adminContactName: v.optional(v.string()),
     emergencyServicesPhone: v.optional(v.string()),
     masterPlanId: v.optional(v.id("_storage")),
+    nextDrillAt: v.optional(v.number()), // Phase 13
+    drillJobId: v.optional(v.id("_scheduled_functions")), // Phase 13
   }).index("by_name", ["name"]).index("by_admin", ["adminId"]),
 
   incidents: defineTable({
     buildingId: v.id("buildings"),
     isActive: v.boolean(),
+    isDrill: v.optional(v.boolean()), // Phase 13: differentiates between a drill and a real emergency
     triggeredAt: v.number(),
     resolvedAt: v.optional(v.number()),
+    endTime: v.optional(v.number()), // Phase 13: exact timestamp when everyone was SAFE
   }).index("by_building", ["buildingId"]),
+
+  // Phase 13: Live Roll Call & Tracking
+  rollCall: defineTable({
+    incidentId: v.id("incidents"),
+    userId: v.id("users"),
+    status: v.string(), // "IN_BUILDING", "SAFE", "PANIC"
+    lastLat: v.optional(v.number()),
+    lastLon: v.optional(v.number()),
+    updatedAt: v.number(),
+  }).index("by_incident", ["incidentId"])
+    .index("by_incident_user", ["incidentId", "userId"]),
 });
