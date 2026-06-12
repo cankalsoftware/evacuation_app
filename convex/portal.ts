@@ -139,8 +139,8 @@ export const saveBuilding = mutation({
 
     if (!user || user.role !== "admin") throw new Error("Unauthorized");
     
-    if (args.polygon && args.polygon.length < 4) {
-      throw new Error("A building polygon must have at least 4 points.");
+    if (args.polygon && args.polygon.length < 3) {
+      throw new Error("A building polygon must have at least 3 points.");
     }
 
     return await ctx.db.insert("buildings", {
@@ -231,7 +231,7 @@ export const updateBuildingCalibration = mutation({
       .first();
 
     if (!user || user.role !== "admin") throw new Error("Unauthorized");
-    if (args.calibrationPoints.length < 4) throw new Error("Must provide at least 4 calibration points.");
+    if (args.calibrationPoints.length < 3) throw new Error("Must provide at least 3 calibration points.");
     
     await ctx.db.patch(args.buildingId, { 
       imageCalibrationPoints: args.calibrationPoints
@@ -336,9 +336,9 @@ export const getAutoPushedBuilding = query({
     
     // 2. Run ray-casting to find if the user is inside any building's polygon
     for (const b of buildings) {
-       const isReady = b.polygon && b.polygon.length >= 4 && 
+       const isReady = b.polygon && b.polygon.length >= 3 && 
                        b.masterPlanId && 
-                       b.imageCalibrationPoints && b.imageCalibrationPoints.length === 4 &&
+                       b.imageCalibrationPoints && b.imageCalibrationPoints.length >= 3 &&
                        b.safeNodes && b.safeNodes.some((n: any) => n.isExit);
                        
        if (isReady) {

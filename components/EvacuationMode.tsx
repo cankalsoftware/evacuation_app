@@ -81,7 +81,7 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
     }
 
     // 2. Find Nearest Unvisited Turn Point
-    const unvisitedTurns = turns.filter(t => !visitedNodeIdsRef.current.has(t._id));
+    const unvisitedTurns = turns.filter((t: any) => !visitedNodeIdsRef.current.has(t._id));
     let nearestTurn: any = null;
     let minTurnDist = Infinity;
     for (const t of unvisitedTurns) {
@@ -197,7 +197,7 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
   const isSafeDirection = absDiff <= HEADING_TOLERANCE;
 
   let statusTitle = "Safe Route";
-  let statusSub = targetNode ? "Keep moving in this direction towards the next node." : "Keep moving in this direction towards the exit.";
+  let statusSub = "Keep moving in this direction to proceed along the safe route.";
   let statusTitleColor = "text-green-400";
   let statusSubColor = "text-green-300";
   let bgColor = "bg-green-900/10";

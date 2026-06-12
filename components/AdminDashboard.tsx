@@ -397,9 +397,9 @@ export default function AdminDashboard() {
         <Text className="text-xl font-bold text-white mb-4">Managed Buildings</Text>
         {dashboardData.buildings && dashboardData.buildings.length > 0 ? (
           dashboardData.buildings.map((building: any) => {
-             const isComplete = building.polygon && building.polygon.length >= 4 && 
+             const isComplete = building.polygon && building.polygon.length >= 3 && 
                                 building.masterPlanId && 
-                                building.imageCalibrationPoints && building.imageCalibrationPoints.length === 4 &&
+                                building.imageCalibrationPoints && building.imageCalibrationPoints.length >= 3 &&
                                 building.safeNodes && building.safeNodes.some((n: any) => n.isExit);
              return (
                <View key={building._id} className="bg-neutral-800 border border-neutral-700 p-4 rounded-2xl mb-4 flex-row justify-between items-center">
@@ -624,9 +624,9 @@ export default function AdminDashboard() {
             </View>
             
             {(() => {
-              const isActive = selectedBuilding.polygon && selectedBuilding.polygon.length >= 4 && 
+              const isActive = selectedBuilding.polygon && selectedBuilding.polygon.length >= 3 && 
                                selectedBuilding.masterPlanId && 
-                               selectedBuilding.imageCalibrationPoints && selectedBuilding.imageCalibrationPoints.length === 4 &&
+                               selectedBuilding.imageCalibrationPoints && selectedBuilding.imageCalibrationPoints.length >= 3 &&
                                selectedBuilding.safeNodes && selectedBuilding.safeNodes.some((n: any) => n.isExit);
               if (!isActive) {
                 return (
@@ -833,7 +833,7 @@ export default function AdminDashboard() {
                     keyboardType="numeric"
                     onChangeText={(val) => {
                       const newPins = [...(editingPins || [])];
-                      newPins[i].lat = val;
+                      newPins[i].lat = val as any;
                       setEditingPins(newPins);
                     }}
                   />
@@ -847,7 +847,7 @@ export default function AdminDashboard() {
                     keyboardType="numeric"
                     onChangeText={(val) => {
                       const newPins = [...(editingPins || [])];
-                      newPins[i].lon = val;
+                      newPins[i].lon = val as any;
                       setEditingPins(newPins);
                     }}
                   />
