@@ -6,6 +6,17 @@ import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "../convex/_generated/api";
 import * as Location from "expo-location";
 import * as ImagePicker from "expo-image-picker";
+import * as Notifications from "expo-notifications";
+import * as Device from "expo-device";
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 import ProfileSettingsScreen from "./ProfileSettingsScreen";
 import EvacuationMode from "./EvacuationMode";
 
@@ -46,6 +57,42 @@ export default function GuestDashboard() {
   const [draftExitNode, setDraftExitNode] = useState<{x: number, y: number} | null>(null);
   const [draftImgLayout, setDraftImgLayout] = useState<{w: number, h: number}>({w: 1, h: 1});
   const [draftImageAspectRatio, setDraftImageAspectRatio] = useState<number | null>(null);
+
+  const savePushToken = useMutation(api.portal.savePushToken);
+  const recentAnnouncements = useQuery(api.portal.getRecentAnnouncements) || [];
+
+  useEffect(() => {
+    async function registerForPushNotificationsAsync() {
+      let token;
+      if (Platform.OS === 'android') {
+        await Notifications.setNotificationChannelAsync('default', {
+          name: 'default',
+          importance: Notifications.AndroidImportance.MAX,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#FF231F7C',
+        });
+      }
+      if (Device.isDevice) {
+        const { status: existingStatus } = await Notifications.getPermissionsAsync();
+        let finalStatus = existingStatus;
+        if (existingStatus !== 'granted') {
+          const { status } = await Notifications.requestPermissionsAsync();
+          finalStatus = status;
+        }
+        if (finalStatus !== 'granted') {
+          return;
+        }
+        token = (await Notifications.getExpoPushTokenAsync()).data;
+      }
+      return token;
+    }
+
+    if (user?.id) {
+      registerForPushNotificationsAsync().then(token => {
+        if (token) savePushToken({ clerkId: user.id, token });
+      });
+    }
+  }, [user?.id]);
 
   const dashboardData = useQuery(api.portal.getDashboardData, { clerkId: user?.id });
   const autoBuilding = useQuery(
@@ -369,10 +416,21 @@ export default function GuestDashboard() {
         </TouchableOpacity>
       </View>
 
-
-
       {/* FOOTER (20%) */}
       <View style={{ flex: 1 }} className="px-6 pb-12 justify-end w-full items-center">
+        
+        {/* NOTICES BANNER */}
+        {recentAnnouncements && recentAnnouncements.length > 0 && (
+          <View className="bg-amber-900/30 border border-amber-500/50 rounded-2xl p-4 mb-4 w-full max-w-2xl">
+            <View className="flex-row items-center mb-1">
+              <Text className="text-amber-500 mr-2">📢</Text>
+              <Text className="text-amber-500 font-bold tracking-widest uppercase text-xs">Active Notice</Text>
+            </View>
+            <Text className="text-white font-bold text-lg mb-1">{recentAnnouncements[0].title}</Text>
+            <Text className="text-neutral-300 text-sm">{recentAnnouncements[0].message}</Text>
+          </View>
+        )}
+
         <TouchableOpacity 
           className={`w-full max-w-2xl ${isScanned ? 'bg-green-600 border-green-500' : isUploading || isAnalyzing ? 'bg-blue-600 border-blue-500' : 'bg-amber-500 border-amber-400'} border-4 rounded-3xl p-6 items-center flex-row justify-center shadow-lg`}
           onPress={() => {

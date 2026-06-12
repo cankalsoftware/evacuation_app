@@ -604,6 +604,7 @@ export default function AdminDashboard() {
                 const activeInSite = activeCount > 0;
                 const allInSiteActive = activeCount === siteBuildings.length;
                 const siteDetail = dashboardData?.sites?.find((s: any) => s.name === siteName);
+                const isSiteComplete = siteBuildings.every(b => b.polygon && b.polygon.length >= 3 && b.masterPlanId && b.imageCalibrationPoints && b.imageCalibrationPoints.length >= 3 && b.safeNodes && b.safeNodes.some((n: any) => n.isExit));
                 
                 return (
                   <View key={siteName} className="mb-10 bg-neutral-800/40 border border-neutral-700/60 rounded-[32px] overflow-hidden shadow-lg -mx-2">
@@ -624,7 +625,7 @@ export default function AdminDashboard() {
                         </TouchableOpacity>
                       </View>
                       
-                      {!allInSiteActive && siteBuildings.length > 0 && (
+                      {!allInSiteActive && isSiteComplete && siteBuildings.length > 0 && (
                         <TouchableOpacity 
                           className="bg-amber-600/80 px-4 py-2 rounded-lg border border-amber-500 ml-2"
                           onPress={() => confirmAction("Test Drill Site", `Are you sure you want to trigger a mass TEST DRILL for ALL buildings in ${siteName}?`, () => triggerSiteIncident({ clerkId: user?.id || "", siteName, isDrill: true }), "warning")}
@@ -658,6 +659,10 @@ export default function AdminDashboard() {
                           >
                             <Text className="text-white text-base font-bold text-center">✅ Resolve Entire Site</Text>
                           </TouchableOpacity>
+                        ) : !isSiteComplete ? (
+                          <View className="bg-red-900/30 px-4 py-4 rounded-xl border border-red-500/30 items-center">
+                            <Text className="text-red-400 font-bold text-center">⚠️ Cannot Evacuate Site{'\n'}One or more buildings are missing setup</Text>
+                          </View>
                         ) : activeInSite ? (
                           <TouchableOpacity 
                             className="bg-amber-500 w-full py-4 rounded-xl shadow-sm items-center justify-center mb-2" 

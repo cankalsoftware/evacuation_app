@@ -52,6 +52,7 @@ export default defineSchema({
     masterPlanId: v.optional(v.id("_storage")),
     nextDrillAt: v.optional(v.number()), // Phase 13
     drillJobId: v.optional(v.id("_scheduled_functions")), // Phase 13
+    lastDrillNotificationAt: v.optional(v.number()), // Phase 14
   }).index("by_coordinates", ["latitude", "longitude"])
     .index("by_admin", ["adminId"]),
 
@@ -73,6 +74,7 @@ export default defineSchema({
     masterPlanId: v.optional(v.id("_storage")),
     nextDrillAt: v.optional(v.number()), // Phase 13
     drillJobId: v.optional(v.id("_scheduled_functions")), // Phase 13
+    lastDrillNotificationAt: v.optional(v.number()), // Phase 14
   }).index("by_name", ["name"]).index("by_admin", ["adminId"]),
 
   incidents: defineTable({
@@ -94,4 +96,13 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_incident", ["incidentId"])
     .index("by_incident_user", ["incidentId", "userId"]),
+
+  // Phase 14: Push Notifications & Broadcasts
+  announcements: defineTable({
+    title: v.string(),
+    message: v.string(),
+    targetSite: v.optional(v.string()), // Null = all sites/global
+    targetBuildingId: v.optional(v.id("buildings")),
+    createdAt: v.number(),
+  }).index("by_site", ["targetSite"]).index("by_building", ["targetBuildingId"]),
 });
