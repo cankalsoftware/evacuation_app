@@ -125,6 +125,7 @@ export const saveBuilding = mutation({
   args: {
     clerkId: v.string(),
     name: v.string(),
+    siteName: v.optional(v.string()),
     address: v.string(),
     latitude: v.optional(v.number()),
     longitude: v.optional(v.number()),
@@ -146,6 +147,7 @@ export const saveBuilding = mutation({
     return await ctx.db.insert("buildings", {
       adminId: args.clerkId,
       name: args.name,
+      ...(args.siteName !== undefined && { siteName: args.siteName }),
       address: args.address,
       ...(args.latitude !== undefined && { latitude: args.latitude }),
       ...(args.longitude !== undefined && { longitude: args.longitude }),
@@ -201,6 +203,7 @@ export const updateBuildingInfo = mutation({
     clerkId: v.string(),
     buildingId: v.id("buildings"),
     name: v.string(),
+    siteName: v.optional(v.string()),
     address: v.string(),
   },
   handler: async (ctx, args) => {
@@ -213,6 +216,7 @@ export const updateBuildingInfo = mutation({
     
     await ctx.db.patch(args.buildingId, { 
       name: args.name,
+      ...(args.siteName !== undefined ? { siteName: args.siteName } : {}),
       address: args.address
     });
   }
@@ -355,5 +359,104 @@ export const getAutoPushedBuilding = query({
        }
     }
     return null; // Not inside any known building
+  }
+});
+
+// --- PHASE 12: INCIDENT ENGINE ---
+
+export const triggerIncident = mutation({
+  args: { clerkId: v.string(), buildingId: v.id("buildings") },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.query("users").withIndex("by_clerkId", q => q.eq("clerkId", args.clerkId)).first();
+    if (!user || user.role !== "admin") throw new Error("Unauthorized");
+
+    // Check if incident already exists and is active
+    const existing = await ctx.db.query("incidents").withIndex("by_building", q => q.eq("buildingId", args.buildingId)).filter(q => q.eq(q.field("isActive"), true)).first();
+    if (existing) return;
+
+    await ctx.db.insert("incidents", {
+      buildingId: args.buildingId,
+      isActive: true,
+      triggeredAt: Date.now(),
+    });
+  }
+});
+
+export const triggerSiteIncident = mutation({
+  args: { clerkId: v.string(), siteName: v.string() },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.query("users").withIndex("by_clerkId", q => q.eq("clerkId", args.clerkId)).first();
+    if (!user || user.role !== "admin") throw new Error("Unauthorized");
+
+    const buildings = await ctx.db.query("buildings").withIndex("by_admin", q => q.eq("adminId", args.clerkId)).filter(q => q.eq(q.field("siteName"), args.siteName)).collect();
+
+    for (const b of buildings) {
+      const existing = await ctx.db.query("incidents").withIndex("by_building", q => q.eq("buildingId", b._id)).filter(q => q.eq(q.field("isActive"), true)).first();
+      if (!existing) {
+        await ctx.db.insert("incidents", {
+          buildingId: b._id,
+          isActive: true,
+          triggeredAt: Date.now(),
+        });
+      }
+    }
+  }
+});
+
+export const resolveIncident = mutation({
+  args: { clerkId: v.string(), buildingId: v.id("buildings") },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.query("users").withIndex("by_clerkId", q => q.eq("clerkId", args.clerkId)).first();
+    if (!user || user.role !== "admin") throw new Error("Unauthorized");
+
+    const active = await ctx.db.query("incidents").withIndex("by_building", q => q.eq("buildingId", args.buildingId)).filter(q => q.eq(q.field("isActive"), true)).collect();
+    for (const a of active) {
+      await ctx.db.patch(a._id, { isActive: false, resolvedAt: Date.now() });
+    }
+  }
+});
+
+export const resolveSiteIncident = mutation({
+  args: { clerkId: v.string(), siteName: v.string() },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.query("users").withIndex("by_clerkId", q => q.eq("clerkId", args.clerkId)).first();
+    if (!user || user.role !== "admin") throw new Error("Unauthorized");
+
+    const buildings = await ctx.db.query("buildings").withIndex("by_admin", q => q.eq("adminId", args.clerkId)).filter(q => q.eq(q.field("siteName"), args.siteName)).collect();
+
+    for (const b of buildings) {
+      const active = await ctx.db.query("incidents").withIndex("by_building", q => q.eq("buildingId", b._id)).filter(q => q.eq(q.field("isActive"), true)).collect();
+      for (const a of active) {
+        await ctx.db.patch(a._id, { isActive: false, resolvedAt: Date.now() });
+      }
+    }
+  }
+});
+
+export const getActiveIncidents = query({
+  args: { clerkId: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const clerkId = args.clerkId;
+    if (!clerkId) return [];
+    const user = await ctx.db.query("users").withIndex("by_clerkId", q => q.eq("clerkId", clerkId)).first();
+    if (!user || user.role !== "admin") return [];
+
+    const buildings = await ctx.db.query("buildings").withIndex("by_admin", q => q.eq("adminId", clerkId)).collect();
+    const activeIncidents = [];
+
+    for (const b of buildings) {
+      const incident = await ctx.db.query("incidents").withIndex("by_building", q => q.eq("buildingId", b._id)).filter(q => q.eq(q.field("isActive"), true)).first();
+      if (incident) activeIncidents.push(b._id);
+    }
+    return activeIncidents;
+  }
+});
+
+export const getActiveIncident = query({
+  args: { buildingId: v.optional(v.id("buildings")) },
+  handler: async (ctx, args) => {
+    const buildingId = args.buildingId;
+    if (!buildingId) return null;
+    return await ctx.db.query("incidents").withIndex("by_building", q => q.eq("buildingId", buildingId)).filter(q => q.eq(q.field("isActive"), true)).first();
   }
 });

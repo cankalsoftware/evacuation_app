@@ -72,6 +72,11 @@ export default function AdminDashboard() {
   const updateBuildingCalibration = useMutation(api.portal.updateBuildingCalibration);
   const updateBuildingSafeNodes = useMutation(api.portal.updateBuildingSafeNodes);
   const deleteBuilding = useMutation(api.portal.deleteBuilding);
+  const triggerIncident = useMutation(api.portal.triggerIncident);
+  const triggerSiteIncident = useMutation(api.portal.triggerSiteIncident);
+  const resolveIncident = useMutation(api.portal.resolveIncident);
+  const resolveSiteIncident = useMutation(api.portal.resolveSiteIncident);
+  const activeIncidents = useQuery(api.portal.getActiveIncidents, { clerkId: user?.id }) || [];
 
   const [isRegistering, setIsRegistering] = React.useState(false);
   const [selectedBuilding, setSelectedBuilding] = React.useState<any>(null);
@@ -89,10 +94,12 @@ export default function AdminDashboard() {
   const [isUploading, setIsUploading] = React.useState(false);
   const [editingPins, setEditingPins] = React.useState<{lat: number, lon: number, label?: string}[] | null>(null);
   const [editBName, setEditBName] = React.useState("");
+  const [editBSite, setEditBSite] = React.useState("");
   const [editBAddress, setEditBAddress] = React.useState("");
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
 
   const [bName, setBName] = React.useState("");
+  const [bSite, setBSite] = React.useState("");
   const [bAddress, setBAddress] = React.useState("");
   const [bPins, setBPins] = React.useState<{lat: number, lon: number, label?: string}[]>([]);
   const [bImageUri, setBImageUri] = React.useState<string | null>(null);
@@ -102,6 +109,19 @@ export default function AdminDashboard() {
   const [setupPhone, setSetupPhone] = React.useState("");
   const [isSavingSetup, setIsSavingSetup] = React.useState(false);
   const updateAdminProfile = useMutation(api.users.updateAdminProfile);
+
+  const confirmAction = (title: string, message: string, onConfirm: () => void, isDestructive = false) => {
+    if (Platform.OS === 'web') {
+      if (window.confirm(`${title}\n\n${message}`)) {
+        onConfirm();
+      }
+    } else {
+      Alert.alert(title, message, [
+        { text: "Cancel", style: "cancel" },
+        { text: "Confirm", style: isDestructive ? "destructive" : "default", onPress: onConfirm }
+      ]);
+    }
+  };
 
   // Keep selectedBuilding in sync with database updates (like image uploads)
   React.useEffect(() => {
@@ -154,8 +174,8 @@ export default function AdminDashboard() {
   };
 
   const handleSaveBuilding = async () => {
-    if (bPins.length > 0 && bPins.length < 4) {
-      showToast("Please drop at least 4 pins to create a polygon footprint, or leave it empty to configure later.");
+    if (bPins.length > 0 && bPins.length < 3) {
+      showToast("Please drop at least 3 pins to create a polygon footprint, or leave it empty to configure later.");
       return;
     }
     if (!bName || !user?.id) return;
@@ -181,8 +201,9 @@ export default function AdminDashboard() {
       await saveBuilding({
         clerkId: user.id,
         name: bName,
+        ...(bSite ? { siteName: bSite } : {}),
         address: bAddress || "No Address Provided",
-        ...(bPins.length >= 4 && { 
+        ...(bPins.length >= 3 && { 
           latitude: bPins[0].lat, 
           longitude: bPins[0].lon, 
           polygon: bPins 
@@ -192,6 +213,7 @@ export default function AdminDashboard() {
       
       setIsRegistering(false);
       setBName("");
+      setBSite("");
       setBAddress("");
       setBPins([]);
       setBImageUri(null);
@@ -378,10 +400,6 @@ export default function AdminDashboard() {
         
         {/* Quick Actions */}
         <View className="flex-row space-x-4 mb-8">
-          <TouchableOpacity className="flex-1 bg-red-600/20 border border-red-500/50 p-4 rounded-2xl items-center">
-            <Text className="text-2xl mb-1">📢</Text>
-            <Text className="text-red-400 font-bold text-center text-xs">Evacuate All</Text>
-          </TouchableOpacity>
           <TouchableOpacity 
             className="flex-1 bg-neutral-800 border border-neutral-700 p-4 rounded-2xl items-center"
             onPress={() => setIsRegistering(true)}
@@ -391,18 +409,39 @@ export default function AdminDashboard() {
           </TouchableOpacity>
         </View>
 
+        {(() => {
+          if (!dashboardData.buildings || dashboardData.buildings.length === 0) {
+            return (
+              <View className="bg-neutral-800 border border-neutral-700 p-6 rounded-2xl items-center mb-8">
+                <Text className="text-neutral-400 text-center">You have not registered any buildings yet.</Text>
+                <TouchableOpacity className="mt-4 bg-white/10 px-4 py-2 rounded-lg" onPress={() => setIsRegistering(true)}>
+                  <Text className="text-white font-bold">Register Building</Text>
+                </TouchableOpacity>
+              </View>
+            );
+          }
 
+          const sites: { [key: string]: any[] } = {};
+          const independent: any[] = [];
+          dashboardData.buildings.forEach((b: any) => {
+            if (b.siteName && b.siteName.trim().length > 0) {
+              if (!sites[b.siteName]) sites[b.siteName] = [];
+              sites[b.siteName].push(b);
+            } else {
+              independent.push(b);
+            }
+          });
 
-        {/* Managed Buildings */}
-        <Text className="text-xl font-bold text-white mb-4">Managed Buildings</Text>
-        {dashboardData.buildings && dashboardData.buildings.length > 0 ? (
-          dashboardData.buildings.map((building: any) => {
-             const isComplete = building.polygon && building.polygon.length >= 3 && 
-                                building.masterPlanId && 
-                                building.imageCalibrationPoints && building.imageCalibrationPoints.length >= 3 &&
-                                building.safeNodes && building.safeNodes.some((n: any) => n.isExit);
-             return (
-               <View key={building._id} className="bg-neutral-800 border border-neutral-700 p-4 rounded-2xl mb-4 flex-row justify-between items-center">
+          const renderBuilding = (building: any) => {
+            const isComplete = building.polygon && building.polygon.length >= 3 && 
+                               building.masterPlanId && 
+                               building.imageCalibrationPoints && building.imageCalibrationPoints.length >= 3 &&
+                               building.safeNodes && building.safeNodes.some((n: any) => n.isExit);
+            const isAlarming = activeIncidents.includes(building._id);
+
+            return (
+              <View key={building._id} className={`bg-neutral-800 border ${isAlarming ? 'border-red-500 shadow-[0_0_15px_rgba(220,38,38,0.5)]' : 'border-neutral-700'} p-4 rounded-2xl mb-4`}>
+                <View className="flex-row justify-between items-center mb-3">
                   <View className="flex-1 pr-2">
                     <Text className="text-white font-bold text-lg mb-1">{building.name}</Text>
                     <Text className="text-neutral-400 text-sm mb-2">{building.address}</Text>
@@ -429,25 +468,94 @@ export default function AdminDashboard() {
                       setSelectedBuilding({ ...building, polygon: populatedPolygon });
                       setEditingPins(populatedPolygon);
                       setEditBName(building.name);
+                      setEditBSite(building.siteName || "");
                       setEditBAddress(building.address === "No Address Provided" ? "" : building.address);
                     }}
                   >
                     <Text className="text-white font-bold">Manage</Text>
-                </TouchableOpacity>
-             </View>
-             );
-          })
-        ) : (
-          <View className="bg-neutral-800 border border-neutral-700 p-6 rounded-2xl items-center mb-8">
-             <Text className="text-neutral-400 text-center">You have not registered any buildings yet.</Text>
-             <TouchableOpacity 
-               className="mt-4 bg-white/10 px-4 py-2 rounded-lg"
-               onPress={() => setIsRegistering(true)}
-             >
-               <Text className="text-white font-bold">Register Building</Text>
-             </TouchableOpacity>
-          </View>
-        )}
+                  </TouchableOpacity>
+                </View>
+
+                {isComplete && (
+                  <View className="border-t border-neutral-700 pt-3 mt-1">
+                    {isAlarming ? (
+                      <TouchableOpacity 
+                        className="bg-green-600 w-full py-3 rounded-lg flex-row items-center justify-center"
+                        onPress={() => confirmAction("Resolve Evacuation", `Are you sure you want to end the evacuation for ${building.name}?`, () => resolveIncident({ clerkId: user?.id || "", buildingId: building._id }))}
+                      >
+                        <Text className="text-white font-bold text-center">✅ Resolve Evacuation</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity 
+                        className="bg-red-600 w-full py-3 rounded-lg flex-row items-center justify-center border border-red-500"
+                        onPress={() => confirmAction("Trigger Evacuation", `Are you sure you want to trigger the evacuation for ${building.name}? This will alert all guests.`, () => triggerIncident({ clerkId: user?.id || "", buildingId: building._id }), true)}
+                      >
+                        <Text className="text-white font-bold text-center">🚨 Evacuate Building</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                )}
+              </View>
+            );
+          };
+
+          return (
+            <View>
+              {Object.keys(sites).map(siteName => {
+                const siteBuildings = sites[siteName];
+                const activeCount = siteBuildings.filter(b => activeIncidents.includes(b._id)).length;
+                const activeInSite = activeCount > 0;
+                const allInSiteActive = activeCount === siteBuildings.length;
+                
+                return (
+                  <View key={siteName} className="mb-10 bg-neutral-800/40 border border-neutral-700/60 rounded-[32px] overflow-hidden shadow-lg -mx-2">
+                    <View className="flex-row justify-between items-center bg-neutral-800/60 p-5 border-b border-neutral-700/50">
+                      <Text className="text-2xl font-black text-white tracking-wide">{siteName}</Text>
+                    </View>
+                    <View className="p-4 pt-6">
+                      {siteBuildings.map(b => renderBuilding(b))}
+                    </View>
+                    
+                    {/* Separated Evacuate Footer */}
+                    {siteBuildings.length > 0 && (
+                      <View className="bg-neutral-800/80 p-5 border-t border-neutral-700/50">
+                        {allInSiteActive ? (
+                          <TouchableOpacity 
+                            className="bg-green-600 w-full py-4 rounded-xl shadow-sm items-center justify-center" 
+                            onPress={() => confirmAction("Resolve Site", `Are you sure you want to end the evacuation for all buildings in ${siteName}?`, () => resolveSiteIncident({ clerkId: user?.id || "", siteName }))}
+                          >
+                            <Text className="text-white text-base font-bold text-center">✅ Resolve Entire Site</Text>
+                          </TouchableOpacity>
+                        ) : activeInSite ? (
+                          <TouchableOpacity 
+                            className="bg-amber-500 w-full py-4 rounded-xl shadow-sm items-center justify-center" 
+                            onPress={() => confirmAction("Evacuate Rest of Site", `Some buildings are already evacuating. Trigger alarms for the remaining buildings in ${siteName}?`, () => triggerSiteIncident({ clerkId: user?.id || "", siteName }), true)}
+                          >
+                            <Text className="text-white text-base font-bold text-center">⚠️ Partial Evac in Progress{'\n'}Evacuate Rest of Site</Text>
+                          </TouchableOpacity>
+                        ) : (
+                          <TouchableOpacity 
+                            className="bg-red-600 w-full py-4 rounded-xl shadow-sm items-center justify-center" 
+                            onPress={() => confirmAction("Evacuate Site", `Are you sure you want to trigger a mass evacuation for ALL buildings in ${siteName}?`, () => triggerSiteIncident({ clerkId: user?.id || "", siteName }), true)}
+                          >
+                            <Text className="text-white text-base font-bold text-center">🚨 Evacuate Entire Site</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
+
+              {independent.length > 0 && (
+                <View className="mb-10 bg-neutral-900 border border-neutral-800 rounded-[32px] p-5 shadow-lg -mx-2">
+                  <Text className="text-xl font-bold text-white mb-5 border-b border-neutral-800 pb-3 px-1">Independent Buildings</Text>
+                  {independent.map(b => renderBuilding(b))}
+                </View>
+              )}
+            </View>
+          );
+        })()}
         
         <View className="h-10" />
       </ScrollView>
@@ -468,6 +576,13 @@ export default function AdminDashboard() {
             placeholderTextColor="#525252"
             value={bName}
             onChangeText={setBName}
+          />
+          <TextInput
+            className="bg-neutral-800 border border-neutral-700 rounded-xl p-4 text-white mb-4"
+            placeholder="Site Name (Optional) - e.g. North Campus"
+            placeholderTextColor="#525252"
+            value={bSite}
+            onChangeText={setBSite}
           />
           <TextInput
             className="bg-neutral-800 border border-neutral-700 rounded-xl p-4 text-white mb-4"
@@ -660,6 +775,14 @@ export default function AdminDashboard() {
                   placeholder="Building Name"
                   placeholderTextColor="#525252"
                 />
+                <Text className="text-white font-bold mb-2">Site Name (Optional)</Text>
+                <TextInput
+                  className="bg-neutral-900 border border-neutral-700 rounded-xl p-4 text-white mb-4"
+                  value={editBSite}
+                  onChangeText={setEditBSite}
+                  placeholder="Site Name"
+                  placeholderTextColor="#525252"
+                />
                 <Text className="text-white font-bold mb-2">Address (Optional)</Text>
                 <TextInput
                   className="bg-neutral-900 border border-neutral-700 rounded-xl p-4 text-white mb-4"
@@ -669,8 +792,8 @@ export default function AdminDashboard() {
                   placeholderTextColor="#525252"
                 />
                 <TouchableOpacity 
-                  className={`py-3 rounded-xl items-center ${editBName !== selectedBuilding.name || editBAddress !== selectedBuilding.address ? 'bg-blue-600' : 'bg-neutral-700'}`}
-                  disabled={editBName === selectedBuilding.name && (editBAddress === selectedBuilding.address || (editBAddress === "" && selectedBuilding.address === "No Address Provided"))}
+                  className={`py-3 rounded-xl items-center ${editBName !== selectedBuilding.name || editBSite !== (selectedBuilding.siteName || "") || editBAddress !== selectedBuilding.address ? 'bg-blue-600' : 'bg-neutral-700'}`}
+                  disabled={editBName === selectedBuilding.name && editBSite === (selectedBuilding.siteName || "") && (editBAddress === selectedBuilding.address || (editBAddress === "" && selectedBuilding.address === "No Address Provided"))}
                   onPress={async () => {
                     try {
                       const finalAddress = editBAddress || "No Address Provided";
@@ -678,9 +801,10 @@ export default function AdminDashboard() {
                         clerkId: user?.id || "",
                         buildingId: selectedBuilding._id,
                         name: editBName,
+                        ...(editBSite ? { siteName: editBSite } : { siteName: "" }),
                         address: finalAddress,
                       });
-                      setSelectedBuilding({...selectedBuilding, name: editBName, address: finalAddress});
+                      setSelectedBuilding({...selectedBuilding, name: editBName, siteName: editBSite, address: finalAddress});
                       showToast("Building details updated!");
                     } catch(e) {
                       showToast("Error updating building", "error");

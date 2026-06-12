@@ -53,6 +53,22 @@ export default function GuestDashboard() {
     currentLocation ? { lat: currentLocation.coords.latitude, lon: currentLocation.coords.longitude } : "skip"
   );
   
+  const activeIncident = useQuery(
+    api.portal.getActiveIncident,
+    autoBuilding?._id ? { buildingId: autoBuilding._id } : "skip"
+  );
+
+  useEffect(() => {
+    if (activeIncident && activeIncident.isActive) {
+      setIsEvacuating(true);
+    } else if (activeIncident && !activeIncident.isActive && isEvacuating) {
+      // Optional: if the admin resolves it while guest is evacuating, we could auto-dismiss or show a toast.
+      // For safety, we let them dismiss it manually or we can dismiss it. 
+      // setIsEvacuating(false);
+      showToast("The evacuation has been resolved by the administrator.", "success");
+    }
+  }, [activeIncident]);
+  
   const updateProfile = useMutation(api.portal.updateProfile);
   const generateUploadUrl = useMutation(api.portal.generateUploadUrl);
   const uploadScannedPlan = useMutation(api.portal.uploadScannedPlan);

@@ -33,6 +33,7 @@ export default defineSchema({
 
   buildings: defineTable({
     name: v.string(),
+    siteName: v.optional(v.string()),
     address: v.string(),
     latitude: v.optional(v.number()),
     longitude: v.optional(v.number()),
@@ -58,4 +59,11 @@ export default defineSchema({
     floorPlanUrl: v.string(), // Storage URL for the processed vector/raster floor plan
     exitPathData: v.string(),  // Stringified JSON coordinate array mapping nodes to the exit
   }).index("by_building_room", ["buildingId", "roomNumber"]),
+
+  incidents: defineTable({
+    buildingId: v.id("buildings"),
+    isActive: v.boolean(),
+    triggeredAt: v.number(),
+    resolvedAt: v.optional(v.number()),
+  }).index("by_building", ["buildingId"]),
 });
