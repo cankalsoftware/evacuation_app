@@ -172,7 +172,7 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
 
     if (exits.length === 0) return null;
 
-    // 1. Find Nearest Exit
+    // 1. Identify absolute Nearest Exit
     let nearestExit = exits[0];
     let minExitDist = Infinity;
     for (const e of exits) {
@@ -183,8 +183,14 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
       }
     }
 
-    // 2. Find Nearest Unvisited Turn Point
-    const unvisitedTurns = turns.filter((t: any) => !visitedNodeIdsRef.current.has(t._id));
+    // 2. Filter valid unvisited Turn Points (must be closer to the exit than the user is)
+    const unvisitedTurns = turns.filter((t: any) => {
+      if (visitedNodeIdsRef.current.has(t._id)) return false;
+      const distToExit = getDistance(t.lat, t.lon, nearestExit.lat, nearestExit.lon);
+      return distToExit < minExitDist; // Mathematically guarantees progress towards exit
+    });
+
+    // 3. Find the valid Turn Point closest to the user's current location
     let nearestTurn: any = null;
     let minTurnDist = Infinity;
     for (const t of unvisitedTurns) {
@@ -195,13 +201,8 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
       }
     }
 
-    // 3. Route to nearest valid node (favors turn point if it's closer than the exit)
-    let bestNode = nearestExit;
-    if (nearestTurn && minTurnDist <= minExitDist) {
-      bestNode = nearestTurn;
-    }
-
-    return bestNode;
+    // 4. Direct arrow to the Turn Point, or Exit if no valid Turn Points exist
+    return nearestTurn ? nearestTurn : nearestExit;
   };
 
   useEffect(() => {
@@ -242,7 +243,7 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
              if (target && !hasReachedExitRef.current) {
                const distToTarget = getDistance(nextLoc.lat, nextLoc.lon, target.lat, target.lon);
                
-               if (distToTarget < 3) { // within 3 meters threshold
+               if (distToTarget <= 5) { // within 5 meters threshold
                  if (target.isExit) {
                    hasReachedExitRef.current = true;
                    Speech.speak("You have reached the exit!");
