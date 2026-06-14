@@ -1284,7 +1284,7 @@ export default function AdminDashboard() {
             </View>
             
             {(() => {
-              const isActive = selectedBuilding.polygon && selectedBuilding.polygon.length >= 3 && 
+              const isActive = selectedBuilding?.polygon && selectedBuilding.polygon.length >= 3 && 
                                selectedBuilding.masterPlanId && 
                                selectedBuilding.imageCalibrationPoints && selectedBuilding.imageCalibrationPoints.length >= 3 &&
                                selectedBuilding.gridPaths && selectedBuilding.gridPaths.some((n: any) => n.isExit);
@@ -1705,29 +1705,147 @@ export default function AdminDashboard() {
         <View className="flex-1 bg-neutral-900 pt-16 px-4">
           <View className="flex-row justify-between items-center mb-4">
             <Text className="text-xl font-bold text-white">{isLocatingUser ? "Locate Trapped User" : "Manage Map Layout"}</Text>
-            <TouchableOpacity onPress={() => { setIsMapEditorOpen(false); setIsLocatingUser(false); }} className="bg-neutral-800 p-2 rounded-full border border-neutral-700">
+            <TouchableOpacity onPress={() => { 
+              setIsMapEditorOpen(false); 
+              if (isLocatingUser) {
+                setSelectedBuilding(null);
+              }
+              setIsLocatingUser(false); 
+            }} className="bg-neutral-800 p-2 rounded-full border border-neutral-700">
               <Text className="text-white font-bold">✕</Text>
             </TouchableOpacity>
           </View>
           
-          {isLocatingUser ? (
-            <View className="flex-1">
-              <Text className="text-red-400 mb-4 font-bold text-center">Tracking: {editingPins?.[0]?.label}</Text>
-              <View className="bg-neutral-800 rounded-xl overflow-hidden mb-6 w-full" style={{ height: '70%' }}>
-                {selectedBuilding?.masterPlanUrl && (
-                  <View className="flex-1">
-                    <Image source={{ uri: selectedBuilding.masterPlanUrl }} className="w-full h-full" resizeMode="contain" />
-                    {/* Render the user's location via inverse map calculation here if we had full matrix math */}
-                    {/* For now, just drop a large pin in the center as representation until we have inverse mapping function */}
-                    <View className="absolute inset-0 items-center justify-center pointer-events-none">
-                      <View className="w-16 h-16 rounded-full bg-red-600/30 items-center justify-center animate-ping">
-                        <Text className="text-5xl">🆘</Text>
+          {isLocatingUser ? (() => {
+            const target = editingPins?.[0];
+            let isInside = false;
+            if (selectedBuilding?.polygon && target) {
+              const poly = selectedBuilding.polygon;
+              for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+                const xi = poly[i].lon, yi = poly[i].lat;
+                const xj = poly[j].lon, yj = poly[j].lat;
+                const intersect = ((yi > target.lat) !== (yj > target.lat)) && (target.lon < (xj - xi) * (target.lat - yi) / (yj - yi) + xi);
+                if (intersect) isInside = !isInside;
+              }
+            }
+
+            return (
+              <View className="flex-1">
+                <Text className="text-red-400 mb-4 font-bold text-center">Tracking: {target?.label}</Text>
+                
+                {!isInside ? (
+                  <View className="bg-neutral-800 rounded-xl mb-6 w-full items-center justify-center border border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.4)]" style={{ height: '70%' }}>
+                    <Text className="text-red-500 font-black text-2xl mb-2 text-center">OUT OF BOUNDS</Text>
+                    <Text className="text-white font-bold text-center text-lg px-8">User is no longer inside the building!</Text>
+                    <Text className="text-red-300 text-center mt-4 px-8">They may have exited safely without pressing the 'I am Safe' button.</Text>
+                  </View>
+                ) : (
+                  <View 
+                    className="bg-neutral-800 rounded-xl overflow-hidden mb-6 w-full" 
+                    style={{ height: '70%' }}
+                    onLayout={(e) => setImgLayout({w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height)})}
+                  >
+                  {selectedBuilding?.masterPlanUrl && (() => {
+                    const mapTransform = getMapTransform();
+                    return (
+                    <View className="flex-1 justify-center items-center relative">
+                      <View 
+                        style={{
+                          width: mapTransform.maskW,
+                          height: mapTransform.maskH,
+                          overflow: 'hidden',
+                          position: 'relative',
+                        }}
+                      >
+                        <View 
+                          style={{
+                            position: 'absolute',
+                            left: 0,
+                            top: 0,
+                            width: imgLayout.w,
+                            height: imgLayout.h,
+                            transform: [
+                              { translateX: mapTransform.translateX },
+                              { translateY: mapTransform.translateY },
+                              { scale: mapTransform.scale }
+                            ]
+                          }}
+                        >
+                          <Image 
+                            source={{ uri: selectedBuilding.masterPlanUrl }} 
+                            className="w-full h-full opacity-70" 
+                            resizeMode="contain" 
+                            onLoad={(e) => setImageAspectRatio(e.nativeEvent.source.width / Math.max(1, e.nativeEvent.source.height))}
+                          />
+                          {(() => {
+                            const target = editingPins?.[0];
+                        if (!selectedBuilding || !selectedBuilding.polygon || !selectedBuilding.imageCalibrationPoints || selectedBuilding.polygon.length < 3 || selectedBuilding.imageCalibrationPoints.length < 3 || !target) {
+                          return (
+                            <View className="absolute inset-0 items-center justify-center pointer-events-none">
+                              <View className="w-16 h-16 rounded-full bg-red-600/30 items-center justify-center animate-ping">
+                                <Text className="text-5xl">🆘</Text>
+                              </View>
+                            </View>
+                          );
+                        }
+
+                        const poly = selectedBuilding.polygon;
+                        const rawImgPts = selectedBuilding.imageCalibrationPoints;
+                        const isLegacyPixels = rawImgPts[0].x > 2;
+                        const imgPts = rawImgPts.map((p: any) => ({
+                          x: isLegacyPixels ? p.x / Math.max(1, imgLayout.w) : p.x,
+                          y: isLegacyPixels ? p.y / Math.max(1, imgLayout.h) : p.y
+                        }));
+
+                        const l1 = poly[0].lon, a1 = poly[0].lat, x1 = imgPts[0].x, y1 = imgPts[0].y;
+                        const l2 = poly[1].lon, a2 = poly[1].lat, x2 = imgPts[1].x, y2 = imgPts[1].y;
+                        const l3 = poly[2].lon, a3 = poly[2].lat, x3 = imgPts[2].x, y3 = imgPts[2].y;
+
+                        const det = l1*(a2 - a3) - a1*(l2 - l3) + (l2*a3 - l3*a2);
+                        if (Math.abs(det) < 1e-10) {
+                          return (
+                            <View className="absolute inset-0 items-center justify-center pointer-events-none">
+                              <View className="w-16 h-16 rounded-full bg-red-600/30 items-center justify-center animate-ping">
+                                <Text className="text-5xl">🆘</Text>
+                              </View>
+                            </View>
+                          );
+                        }
+
+                        const A = (x1*(a2 - a3) - a1*(x2 - x3) + (x2*a3 - x3*a2)) / det;
+                        const B = (l1*(x2 - x3) - x1*(l2 - l3) + (l2*x3 - l3*x2)) / det;
+                        const C = x1 - A*l1 - B*a1;
+
+                        const D = (y1*(a2 - a3) - a1*(y2 - y3) + (y2*a3 - y3*a2)) / det;
+                        const E = (l1*(y2 - y3) - y1*(l2 - l3) + (l2*y3 - l3*y2)) / det;
+                        const F = y1 - D*l1 - E*a1;
+
+                        const x_pct = A * target.lon + B * target.lat + C;
+                        const y_pct = D * target.lon + E * target.lat + F;
+
+                        const bounds = getRenderedImageBounds();
+                        const px = bounds.offsetX + x_pct * bounds.renderW;
+                        const py = bounds.offsetY + y_pct * bounds.renderH;
+
+                          return (
+                            <View 
+                              className="absolute items-center justify-center pointer-events-none"
+                              style={{ left: px - 20, top: py - 20, width: 40, height: 40 }}
+                            >
+                              <View className="absolute inset-0 rounded-full bg-red-600/30 animate-ping" />
+                              <Text className="text-red-500 font-bold text-3xl z-10" style={{ transform: [{ scale: 1 / mapTransform.scale }] }}>+</Text>
+                              <Text className="text-xl z-20 absolute top-8" style={{ transform: [{ scale: 1 / mapTransform.scale }] }}>🆘</Text>
+                            </View>
+                          );
+                        })()}
+                          </View>
+                        </View>
                       </View>
-                    </View>
+                      );
+                    })()}
                   </View>
                 )}
-              </View>
-              <TouchableOpacity 
+                 <TouchableOpacity 
                 className="bg-red-600 py-4 rounded-xl items-center border border-red-500 shadow-[0_0_15px_rgba(220,38,38,0.5)]"
                 onPress={async () => {
                    import('react-native').then(rn => {
@@ -1738,7 +1856,8 @@ export default function AdminDashboard() {
                 <Text className="text-white font-bold text-xl tracking-widest">🚨 SHARE TO FIRE BRIGADE</Text>
               </TouchableOpacity>
             </View>
-          ) : (
+            );
+          })() : (
             <>
               {/* Tabs */}
               <View className="flex-row mb-6 bg-neutral-800 rounded-xl p-1">
