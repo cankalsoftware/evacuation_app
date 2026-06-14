@@ -128,6 +128,19 @@ export default function AdminDashboard() {
   const [setupPhone, setSetupPhone] = React.useState("");
   const [isSavingSetup, setIsSavingSetup] = React.useState(false);
   const updateAdminProfile = useMutation(api.users.updateAdminProfile);
+  const deleteIncidents = useMutation(api.portal.deleteIncidents);
+
+  const groupedIncidents = React.useMemo(() => {
+    if (!allIncidentsHistory) return {};
+    const groups: { [month: string]: any[] } = {};
+    allIncidentsHistory.forEach((inc: any) => {
+      const date = new Date(inc.triggeredAt);
+      const monthKey = date.toLocaleString('default', { month: 'long', year: 'numeric' });
+      if (!groups[monthKey]) groups[monthKey] = [];
+      groups[monthKey].push(inc);
+    });
+    return groups;
+  }, [allIncidentsHistory]);
 
   const exportLogs = async () => {
     if (!allIncidentsHistory || allIncidentsHistory.length === 0) {
@@ -600,14 +613,27 @@ export default function AdminDashboard() {
             <View>
               {Object.keys(sites).map(siteName => {
                 const siteBuildings = sites[siteName];
-                const activeCount = siteBuildings.filter(b => activeIncidents.find((i:any) => i.buildingId === b._id)).length;
+                const activeIncidentsForSite = siteBuildings.map(b => activeIncidents.find((i:any) => i.buildingId === b._id)).filter(Boolean);
+                const activeCount = activeIncidentsForSite.length;
                 const activeInSite = activeCount > 0;
                 const allInSiteActive = activeCount === siteBuildings.length;
+                const isRealEmergency = activeIncidentsForSite.some((i:any) => !i.isDrill);
                 const siteDetail = dashboardData?.sites?.find((s: any) => s.name === siteName);
                 const isSiteComplete = siteBuildings.every(b => b.polygon && b.polygon.length >= 3 && b.masterPlanId && b.imageCalibrationPoints && b.imageCalibrationPoints.length >= 3 && b.safeNodes && b.safeNodes.some((n: any) => n.isExit));
                 
+                let siteStatusClass = 'border border-neutral-700/60';
+                if (allInSiteActive) {
+                  siteStatusClass = isRealEmergency 
+                    ? 'border-2 border-red-500 shadow-lg shadow-red-500/40 bg-red-950/10' 
+                    : 'border-2 border-amber-500 shadow-lg shadow-amber-500/40 bg-amber-950/10';
+                } else if (activeInSite) {
+                  siteStatusClass = isRealEmergency 
+                    ? 'border-2 border-red-500/50 shadow-md shadow-red-500/20' 
+                    : 'border-2 border-amber-500/50 shadow-md shadow-amber-500/20';
+                }
+
                 return (
-                  <View key={siteName} className="mb-10 bg-neutral-800/40 border border-neutral-700/60 rounded-[32px] overflow-hidden shadow-lg -mx-2">
+                  <View key={siteName} className={`mb-10 bg-neutral-800/40 rounded-[32px] overflow-hidden -mx-2 ${siteStatusClass}`}>
                     <View className="flex-row justify-between items-center bg-neutral-800/60 p-5 border-b border-neutral-700/50">
                       <View className="flex-row items-center flex-1">
                         <Text className="text-2xl font-black text-white tracking-wide mr-3 shrink">{siteName}</Text>
@@ -654,22 +680,30 @@ export default function AdminDashboard() {
                       <View className="bg-neutral-800/80 p-5 border-t border-neutral-700/50">
                         {allInSiteActive ? (
                           <TouchableOpacity 
-                            className="bg-green-600 w-full py-4 rounded-xl shadow-sm items-center justify-center" 
-                            onPress={() => confirmAction("Resolve Site", `Are you sure you want to end the evacuation for all buildings in ${siteName}?`, () => resolveSiteIncident({ clerkId: user?.id || "", siteName }))}
+                            className="bg-green-600 w-full py-4 rounded-xl shadow-sm items-center justify-center border border-green-500" 
+                            onPress={() => confirmAction(isRealEmergency ? "Resolve Site Emergency" : "Resolve Site Drill", isRealEmergency ? `Are you sure you want to end the real evacuation for all buildings in ${siteName}?` : `Are you sure you want to end the test drill for all buildings in ${siteName}?`, () => resolveSiteIncident({ clerkId: user?.id || "", siteName }), "success")}
                           >
-                            <Text className="text-white text-base font-bold text-center">✅ Resolve Entire Site</Text>
+                            <Text className="text-white text-base font-bold text-center">✅ Resolve {isRealEmergency ? 'Entire Site' : 'Site Drill'}</Text>
                           </TouchableOpacity>
                         ) : !isSiteComplete ? (
                           <View className="bg-red-900/30 px-4 py-4 rounded-xl border border-red-500/30 items-center">
                             <Text className="text-red-400 font-bold text-center">⚠️ Cannot Evacuate Site{'\n'}One or more buildings are missing setup</Text>
                           </View>
                         ) : activeInSite ? (
-                          <TouchableOpacity 
-                            className="bg-amber-500 w-full py-4 rounded-xl shadow-sm items-center justify-center mb-2" 
-                            onPress={() => confirmAction("Evacuate Rest of Site", `Some buildings are already evacuating. Trigger alarms for the remaining buildings in ${siteName}?`, () => triggerSiteIncident({ clerkId: user?.id || "", siteName, isDrill: false }), "danger")}
-                          >
-                            <Text className="text-white text-base font-bold text-center">⚠️ Partial Evac in Progress{'\n'}Evacuate Rest of Site</Text>
-                          </TouchableOpacity>
+                          <View className="flex-row space-x-2 mb-2">
+                            <TouchableOpacity 
+                              className={`flex-1 py-3 rounded-xl shadow-sm items-center justify-center border ${isRealEmergency ? 'bg-amber-500 border-amber-600' : 'bg-blue-500 border-blue-600'}`} 
+                              onPress={() => confirmAction(isRealEmergency ? "Evacuate Rest of Site" : "Drill Rest of Site", isRealEmergency ? `Some buildings are already evacuating. Trigger real alarms for the remaining buildings in ${siteName}?` : `Some buildings are already drilling. Trigger test alarms for the remaining buildings in ${siteName}?`, () => triggerSiteIncident({ clerkId: user?.id || "", siteName, isDrill: !isRealEmergency }), isRealEmergency ? "danger" : "warning")}
+                            >
+                              <Text className="text-white text-xs font-bold text-center">{isRealEmergency ? `Evacuate Rest of\nSite` : `Drill Rest of\nSite`}</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity 
+                              className="flex-1 bg-green-600 py-3 rounded-xl shadow-sm items-center justify-center border border-green-500" 
+                              onPress={() => confirmAction(isRealEmergency ? "Resolve Partial Evacuation" : "Resolve Partial Drill", isRealEmergency ? `Are you sure you want to resolve the ongoing real alarms for the evacuating buildings in ${siteName}?` : `Are you sure you want to resolve the ongoing test drills in ${siteName}?`, () => resolveSiteIncident({ clerkId: user?.id || "", siteName }), "success")}
+                            >
+                              <Text className="text-white text-xs font-bold text-center">Resolve Partial{'\n'}{isRealEmergency ? 'Evacuation' : 'Drill'}</Text>
+                            </TouchableOpacity>
+                          </View>
                         ) : (
                           <View>
                             <TouchableOpacity 
@@ -1261,35 +1295,7 @@ export default function AdminDashboard() {
         </View>
       </Modal>
 
-      {/* Universal Confirmation Modal */}
-      <Modal visible={confirmDialog.visible} animationType="fade" transparent>
-        <View className="flex-1 bg-black/80 justify-center items-center px-6">
-          <View className="bg-neutral-900 border border-neutral-700 p-6 rounded-3xl w-full max-w-sm">
-            <Text className={`text-xl font-black mb-2 tracking-wide ${confirmDialog.intent === 'danger' ? 'text-red-500' : confirmDialog.intent === 'warning' ? 'text-amber-500' : 'text-green-400'}`}>
-              {confirmDialog.title}
-            </Text>
-            <Text className="text-neutral-300 text-base mb-8 leading-relaxed">{confirmDialog.message}</Text>
-            
-            <View className="flex-row space-x-4">
-              <TouchableOpacity 
-                className="flex-1 bg-neutral-800 py-4 rounded-xl items-center border border-neutral-700 mr-2"
-                onPress={() => setConfirmDialog({...confirmDialog, visible: false})}
-              >
-                <Text className="text-white font-bold">Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                className={`flex-1 py-4 rounded-xl items-center border ${confirmDialog.intent === 'danger' ? 'bg-red-600 border-red-500 shadow-[0_0_15px_rgba(220,38,38,0.5)]' : confirmDialog.intent === 'warning' ? 'bg-amber-600 border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.5)]' : 'bg-green-600 border-green-500 shadow-[0_0_15px_rgba(22,163,74,0.5)]'}`}
-                onPress={() => {
-                  setConfirmDialog({...confirmDialog, visible: false});
-                  confirmDialog.onConfirm();
-                }}
-              >
-                <Text className="text-white font-bold text-lg">{confirmDialog.intent === 'danger' || confirmDialog.intent === 'warning' ? 'Trigger' : 'Confirm'}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+
 
       {/* Unified Map Editor Modal */}
       <Modal visible={isMapEditorOpen} animationType="slide">
@@ -1775,10 +1781,38 @@ export default function AdminDashboard() {
                 <Text className="text-neutral-500 text-sm mt-1">Drills and evacuations will appear here</Text>
               </View>
             ) : (
-              allIncidentsHistory.map((inc: any) => {
-                const durationMs = (inc.resolvedAt || Date.now()) - inc.triggeredAt;
-                const durationMins = Math.floor(durationMs / 60000);
-                const durationSecs = Math.floor((durationMs % 60000) / 1000);
+              Object.keys(groupedIncidents).map(monthKey => (
+                <View key={monthKey} className="mb-8">
+                  <View className="flex-row justify-between items-center mb-4 px-2">
+                    <Text className="text-white font-bold text-xl">{monthKey}</Text>
+                    <TouchableOpacity 
+                      className="bg-red-900/40 px-3 py-1.5 rounded-lg border border-red-500/50"
+                      onPress={() => {
+                        confirmAction(
+                          "Delete Logs", 
+                          `Are you sure you want to delete all ${groupedIncidents[monthKey].length} logs from ${monthKey}? This cannot be undone.`,
+                          async () => {
+                            try {
+                              await deleteIncidents({ 
+                                clerkId: user?.id || "", 
+                                incidentIds: groupedIncidents[monthKey].map((i: any) => i._id) 
+                              });
+                              showToast(`Deleted logs for ${monthKey}`);
+                            } catch (e) {
+                              showToast("Failed to delete logs", "error");
+                            }
+                          },
+                          "danger"
+                        );
+                      }}
+                    >
+                      <Text className="text-red-400 font-bold text-xs">Delete Month</Text>
+                    </TouchableOpacity>
+                  </View>
+                  {groupedIncidents[monthKey].map((inc: any) => {
+                    const durationMs = (inc.resolvedAt || Date.now()) - inc.triggeredAt;
+                    const durationMins = Math.floor(durationMs / 60000);
+                    const durationSecs = Math.floor((durationMs % 60000) / 1000);
                 
                 return (
                   <View key={inc._id} className="bg-neutral-900 border border-neutral-800 p-5 rounded-2xl mb-4 flex-row justify-between items-center shadow-lg">
@@ -1802,10 +1836,42 @@ export default function AdminDashboard() {
                     </View>
                   </View>
                 );
-              })
+              })}
+                </View>
+              ))
             )}
             <View className="h-10" />
           </ScrollView>
+        </View>
+      </Modal>
+
+      {/* Universal Confirmation Modal (Moved to bottom for proper z-index) */}
+      <Modal visible={confirmDialog.visible} animationType="fade" transparent>
+        <View className="flex-1 bg-black/80 justify-center items-center px-6">
+          <View className="bg-neutral-900 border border-neutral-700 p-6 rounded-3xl w-full max-w-sm">
+            <Text className={`text-xl font-black mb-2 tracking-wide ${confirmDialog.intent === 'danger' ? 'text-red-500' : confirmDialog.intent === 'warning' ? 'text-amber-500' : 'text-green-400'}`}>
+              {confirmDialog.title}
+            </Text>
+            <Text className="text-neutral-300 text-base mb-8 leading-relaxed">{confirmDialog.message}</Text>
+            
+            <View className="flex-row space-x-4">
+              <TouchableOpacity 
+                className="flex-1 bg-neutral-800 py-4 rounded-xl items-center border border-neutral-700 mr-2"
+                onPress={() => setConfirmDialog({...confirmDialog, visible: false})}
+              >
+                <Text className="text-white font-bold">Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                className={`flex-1 py-4 rounded-xl items-center border ${confirmDialog.intent === 'danger' ? 'bg-red-600 border-red-500 shadow-[0_0_15px_rgba(220,38,38,0.5)]' : confirmDialog.intent === 'warning' ? 'bg-amber-600 border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.5)]' : 'bg-green-600 border-green-500 shadow-[0_0_15px_rgba(22,163,74,0.5)]'}`}
+                onPress={() => {
+                  setConfirmDialog({...confirmDialog, visible: false});
+                  confirmDialog.onConfirm();
+                }}
+              >
+                <Text className="text-white font-bold text-lg">{confirmDialog.intent === 'danger' || confirmDialog.intent === 'warning' ? 'Trigger' : 'Confirm'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       </Modal>
 
