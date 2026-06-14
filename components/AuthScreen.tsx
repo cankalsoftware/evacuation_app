@@ -20,30 +20,21 @@ export default function AuthScreen() {
   if (!isSignUpLoaded || !isSignInLoaded) return null;
 
   const validatePassword = (pwd: string) => {
-    const isOnlyNumbers = /^\d+$/.test(pwd);
-    if (isOnlyNumbers) {
-      if (pwd.length < 6) {
-        return "PIN must be at least 6 digits.";
-      }
-      return null;
-    } else {
-      if (pwd.length < 8) {
-        return "Passwords must be at least 8 characters.";
-      }
-      const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(pwd);
-      if (!hasSpecialChar) {
-        return "Passwords must contain at least one special character.";
-      }
-      return null;
+    if (pwd.length < 8) {
+      return "Password must be at least 8 characters.";
     }
-  };
-
-  const getClerkPassword = (pwd: string) => {
-    // Hack to bypass Clerk's 8-character minimum: secretly pad 6 or 7 digit PINs with "A!"
-    if (/^\d{6,7}$/.test(pwd)) {
-      return pwd + "A!";
+    const hasUppercase = /[A-Z]/.test(pwd);
+    const hasLowercase = /[a-z]/.test(pwd);
+    const hasNumber = /[0-9]/.test(pwd);
+    const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(pwd);
+    
+    if (!hasUppercase || !hasLowercase || !hasNumber) {
+      return "Passwords must contain an uppercase letter, a lowercase letter, and a number.";
     }
-    return pwd;
+    if (!hasSpecialChar) {
+      return "Passwords must contain at least one special character.";
+    }
+    return null;
   };
 
   const handleAuthError = (err: any, fallbackMessage: string) => {
@@ -81,8 +72,6 @@ export default function AuthScreen() {
   const handleAuth = async () => {
     setLoading(true);
     setError("");
-    const clerkPassword = getClerkPassword(password);
-
     try {
       if (isForgotPasswordMode) {
         await signIn.create({
@@ -94,7 +83,7 @@ export default function AuthScreen() {
         // LOGIN FLOW (Password)
         const completeSignIn = await signIn.create({
           identifier: emailAddress,
-          password: clerkPassword,
+          password: password,
         });
         if (completeSignIn.status === "complete") {
           await setSignInActive({ session: completeSignIn.createdSessionId });
@@ -112,7 +101,7 @@ export default function AuthScreen() {
 
         await signUp.create({
           emailAddress,
-          password: clerkPassword,
+          password: password,
         });
         await signUp.prepareEmailAddressVerification({ strategy: "email_code" });
         setPendingVerification(true);
@@ -136,12 +125,10 @@ export default function AuthScreen() {
           return;
         }
 
-        const clerkPassword = getClerkPassword(password);
-
         const completeSignIn = await signIn.attemptFirstFactor({
           strategy: "reset_password_email_code",
           code,
-          password: clerkPassword,
+          password: password,
         });
         if (completeSignIn.status === "complete") {
           await setSignInActive({ session: completeSignIn.createdSessionId });
@@ -223,7 +210,7 @@ export default function AuthScreen() {
               <TextInput
                 className="bg-neutral-900 border border-neutral-700 text-white rounded-xl px-4 py-4 mb-4 text-lg"
                 autoCapitalize="none"
-                placeholder="Password or PIN"
+                placeholder="Password"
                 placeholderTextColor="#666"
                 secureTextEntry={true}
                 value={password}
@@ -327,7 +314,7 @@ export default function AuthScreen() {
               <TextInput
                 className="bg-neutral-900 border border-neutral-700 text-white rounded-xl px-4 py-4 mb-6 text-lg"
                 autoCapitalize="none"
-                placeholder="New Password or PIN"
+                placeholder="New Password"
                 placeholderTextColor="#666"
                 secureTextEntry={true}
                 value={password}

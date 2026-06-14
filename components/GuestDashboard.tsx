@@ -59,6 +59,7 @@ export default function GuestDashboard() {
   const [draftImageAspectRatio, setDraftImageAspectRatio] = useState<number | null>(null);
 
   const savePushToken = useMutation(api.portal.savePushToken);
+  const checkInUser = useMutation(api.portal.checkInUser);
   const recentAnnouncements = useQuery(api.portal.getRecentAnnouncements) || [];
 
   useEffect(() => {
@@ -82,7 +83,11 @@ export default function GuestDashboard() {
         if (finalStatus !== 'granted') {
           return;
         }
-        token = (await Notifications.getExpoPushTokenAsync()).data;
+        try {
+          token = (await Notifications.getExpoPushTokenAsync({ projectId: 'your-project-id' })).data;
+        } catch (e) {
+          console.warn("Failed to get push token (expected on Web simulator without VAPID):", e);
+        }
       }
       return token;
     }
@@ -104,6 +109,16 @@ export default function GuestDashboard() {
     api.portal.getActiveIncident,
     autoBuilding?.buildingId ? { buildingId: autoBuilding.buildingId } : "skip"
   );
+
+  // Background Check-In sync
+  useEffect(() => {
+    if (user?.id) {
+      checkInUser({ 
+        clerkId: user.id, 
+        buildingId: autoBuilding?.buildingId || null 
+      }).catch(console.error);
+    }
+  }, [user?.id, autoBuilding?.buildingId]);
 
   useEffect(() => {
     if (activeIncident && activeIncident.isActive) {
@@ -504,6 +519,12 @@ export default function GuestDashboard() {
           <View className="bg-neutral-900 border border-neutral-700 p-6 rounded-3xl w-full flex-1 max-w-lg">
             <Text className="text-xl font-bold text-white mb-2">Confirm Details</Text>
             
+            <View className="bg-neutral-800/60 p-3 rounded-xl mb-4">
+              <Text className="text-neutral-400 text-xs text-center italic">
+                We never track your movement. Location services are purely for your safety to confirm if you are inside a registered building during an emergency.
+              </Text>
+            </View>
+
             <View className="bg-yellow-900/30 p-3 rounded-xl border border-yellow-700/50 mb-4 flex-row items-start">
               <Text className="text-yellow-500 mr-2 mt-0.5">⚠️</Text>
               <Text className="text-yellow-500 text-xs flex-1">

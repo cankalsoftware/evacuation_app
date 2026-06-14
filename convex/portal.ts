@@ -401,8 +401,8 @@ export function isPointInPolygonWithMargin(point: { lat: number, lon: number }, 
     if (p.lon > maxLon) maxLon = p.lon;
   }
   
-  const latMargin = (maxLat - minLat) * marginFactor;
-  const lonMargin = (maxLon - minLon) * marginFactor;
+  const latMargin = Math.max(0.0001, (maxLat - minLat) * marginFactor);
+  const lonMargin = Math.max(0.0001, (maxLon - minLon) * marginFactor);
   
   return (
     point.lat >= minLat - latMargin && point.lat <= maxLat + latMargin &&
@@ -424,7 +424,7 @@ export const getAutoPushedBuilding = query({
                        b.safeNodes && b.safeNodes.some((n: any) => n.isExit);
                        
        if (isReady) {
-          if (isPointInPolygon({ lat: args.lat, lon: args.lon }, b.polygon!)) {
+          if (isPointInPolygonWithMargin({ lat: args.lat, lon: args.lon }, b.polygon!, 0.05)) {
              return {
                buildingId: b._id,
                name: b.name,
@@ -453,12 +453,23 @@ export const triggerIncident = mutation({
     const existing = await ctx.db.query("incidents").withIndex("by_building", q => q.eq("buildingId", args.buildingId)).filter(q => q.eq(q.field("isActive"), true)).first();
     if (existing) return;
 
-    await ctx.db.insert("incidents", {
+    const incidentId = await ctx.db.insert("incidents", {
       buildingId: args.buildingId,
       isActive: true,
       isDrill: args.isDrill ?? false,
       triggeredAt: Date.now(),
     });
+
+    // --- PHASE 15: AUTO-POPULATE ROLL CALL ---
+    const activeUsers = await ctx.db.query("users").filter(q => q.eq(q.field("activeBuildingId"), args.buildingId)).collect();
+    for (const occupant of activeUsers) {
+      await ctx.db.insert("rollCall", {
+        incidentId,
+        userId: occupant._id,
+        status: "IN_BUILDING",
+        updatedAt: Date.now()
+      });
+    }
   }
 });
 
@@ -481,12 +492,23 @@ export const triggerSiteIncident = mutation({
     for (const b of buildings) {
       const existing = await ctx.db.query("incidents").withIndex("by_building", q => q.eq("buildingId", b._id)).filter(q => q.eq(q.field("isActive"), true)).first();
       if (!existing) {
-        await ctx.db.insert("incidents", {
+        const incidentId = await ctx.db.insert("incidents", {
           buildingId: b._id,
           isActive: true,
           isDrill: args.isDrill ?? false,
           triggeredAt: Date.now(),
         });
+
+        // --- PHASE 15: AUTO-POPULATE ROLL CALL ---
+        const activeUsers = await ctx.db.query("users").filter(q => q.eq(q.field("activeBuildingId"), b._id)).collect();
+        for (const occupant of activeUsers) {
+          await ctx.db.insert("rollCall", {
+            incidentId,
+            userId: occupant._id,
+            status: "IN_BUILDING",
+            updatedAt: Date.now()
+          });
+        }
       }
     }
   }
@@ -611,6 +633,24 @@ export const getActiveIncident = query({
 
 // --- PHASE 13: ROLL CALL & SOS ---
 
+export const checkInUser = mutation({
+  args: {
+    clerkId: v.string(),
+    buildingId: v.union(v.id("buildings"), v.null()),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerkId", (q) => q.eq("clerkId", args.clerkId))
+      .first();
+    
+    if (!user) return;
+    
+    await ctx.db.patch(user._id, {
+      activeBuildingId: args.buildingId || undefined,
+    });
+  }
+});
 export const updateEvacuationStatus = mutation({
   args: {
     clerkId: v.string(),
@@ -636,7 +676,7 @@ export const updateEvacuationStatus = mutation({
     } else if (args.setSafe) {
       status = "SAFE";
     } else {
-      const inside = isPointInPolygon({ lat: args.lat, lon: args.lon }, building.polygon);
+      const inside = isPointInPolygonWithMargin({ lat: args.lat, lon: args.lon }, building.polygon, 0.05);
       status = inside ? "IN_BUILDING" : "SAFE";
     }
 

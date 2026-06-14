@@ -192,6 +192,14 @@ export default function AdminDashboard() {
     setConfirmDialog({ visible: true, title, message, onConfirm, intent });
   };
 
+  React.useEffect(() => {
+    if (selectedBuilding?.masterPlanUrl) {
+      Image.getSize(selectedBuilding.masterPlanUrl, (width, height) => {
+        if (width && height) setImageAspectRatio(width / height);
+      }, (err) => console.warn(err));
+    }
+  }, [selectedBuilding?.masterPlanUrl]);
+
   // Keep selectedBuilding in sync with database updates (like image uploads)
   React.useEffect(() => {
     if (selectedBuilding && dashboardData?.buildings) {
@@ -206,21 +214,43 @@ export default function AdminDashboard() {
     }
   }, [dashboardData, selectedBuilding]);
 
-  const mapImageToGPS = (x: number, y: number) => {
+  const getRenderedImageBounds = () => {
+    const layoutW = Math.max(1, imgLayout.w);
+    const layoutH = Math.max(1, imgLayout.h);
+    const aspect = imageAspectRatio || 1;
+    const layoutAspect = layoutW / layoutH;
+    let renderW, renderH, offsetX, offsetY;
+    if (layoutAspect > aspect) {
+      renderH = layoutH;
+      renderW = layoutH * aspect;
+      offsetX = (layoutW - renderW) / 2;
+      offsetY = 0;
+    } else {
+      renderW = layoutW;
+      renderH = layoutW / aspect;
+      offsetX = 0;
+      offsetY = (layoutH - renderH) / 2;
+    }
+    return { renderW, renderH, offsetX, offsetY };
+  };
+
+  const mapImageToGPS = (rawX: number, rawY: number) => {
     if (!selectedBuilding?.polygon || selectedBuilding.polygon.length < 4) return {lat: 0, lon: 0};
     
-    let u = x / imgLayout.w;
-    let v = y / imgLayout.h;
+    const bounds = getRenderedImageBounds();
+    let u = (rawX - bounds.offsetX) / bounds.renderW;
+    let v = (rawY - bounds.offsetY) / bounds.renderH;
 
-    const calib = selectedBuilding.imageCalibrationPoints;
+    const calib = calibPoints.length >= 4 ? calibPoints : selectedBuilding.imageCalibrationPoints;
     if (calib && calib.length >= 4) {
-      const minCX = Math.min(...calib.map((c:any)=>c.x));
-      const maxCX = Math.max(...calib.map((c:any)=>c.x));
-      const minCY = Math.min(...calib.map((c:any)=>c.y));
-      const maxCY = Math.max(...calib.map((c:any)=>c.y));
+      const isLegacyPixels = calib[0].x > 2;
+      const minCX = Math.min(...calib.map((c:any)=> isLegacyPixels ? c.x / Math.max(1, imgLayout.w) : c.x));
+      const maxCX = Math.max(...calib.map((c:any)=> isLegacyPixels ? c.x / Math.max(1, imgLayout.w) : c.x));
+      const minCY = Math.min(...calib.map((c:any)=> isLegacyPixels ? c.y / Math.max(1, imgLayout.h) : c.y));
+      const maxCY = Math.max(...calib.map((c:any)=> isLegacyPixels ? c.y / Math.max(1, imgLayout.h) : c.y));
       
-      u = (x - minCX) / (maxCX - minCX);
-      v = (y - minCY) / (maxCY - minCY);
+      u = (u - minCX) / (maxCX - minCX || 1);
+      v = (v - minCY) / (maxCY - minCY || 1);
     }
 
     const poly = selectedBuilding.polygon;
@@ -232,6 +262,65 @@ export default function AdminDashboard() {
     const lat = maxLat - v * (maxLat - minLat);
     const lon = minLon + u * (maxLon - minLon);
     return { lat, lon };
+  };
+
+  const mapGPSToImage = (lat: number, lon: number) => {
+    if (!selectedBuilding?.polygon || selectedBuilding.polygon.length < 4) return null;
+    const poly = selectedBuilding.polygon;
+    const minLat = Math.min(...poly.map((p:any)=>p.lat));
+    const maxLat = Math.max(...poly.map((p:any)=>p.lat));
+    const minLon = Math.min(...poly.map((p:any)=>p.lon));
+    const maxLon = Math.max(...poly.map((p:any)=>p.lon));
+    
+    let v = (maxLat - lat) / (maxLat - minLat || 1);
+    let u = (lon - minLon) / (maxLon - minLon || 1);
+    
+    const calib = calibPoints.length >= 4 ? calibPoints : selectedBuilding.imageCalibrationPoints;
+    if (calib && calib.length >= 4) {
+      const isLegacyPixels = calib[0].x > 2;
+      const minCX = Math.min(...calib.map((c:any)=> isLegacyPixels ? c.x / Math.max(1, imgLayout.w) : c.x));
+      const maxCX = Math.max(...calib.map((c:any)=> isLegacyPixels ? c.x / Math.max(1, imgLayout.w) : c.x));
+      const minCY = Math.min(...calib.map((c:any)=> isLegacyPixels ? c.y / Math.max(1, imgLayout.h) : c.y));
+      const maxCY = Math.max(...calib.map((c:any)=> isLegacyPixels ? c.y / Math.max(1, imgLayout.h) : c.y));
+      
+      u = minCX + u * (maxCX - minCX);
+      v = minCY + v * (maxCY - minCY);
+    }
+    return { x: u, y: v };
+  };
+
+  const handleNudgeCalib = (idx: number, dx: number, dy: number) => {
+    const p = calibPoints[idx];
+    if (!p) return;
+    const bounds = getRenderedImageBounds();
+    const isLegacyPixels = p.x > 2;
+    
+    const rawX = (isLegacyPixels ? p.x : bounds.offsetX + p.x * bounds.renderW) + (dx * 2);
+    const rawY = (isLegacyPixels ? p.y : bounds.offsetY + p.y * bounds.renderH) + (dy * 2);
+    
+    const newX = (rawX - bounds.offsetX) / bounds.renderW;
+    const newY = (rawY - bounds.offsetY) / bounds.renderH;
+    
+    const newPoints = [...calibPoints];
+    newPoints[idx] = { x: newX, y: newY };
+    setCalibPoints(newPoints);
+  };
+
+  const handleNudgeRoute = (idx: number, dx: number, dy: number) => {
+    const node = routingNodes[idx];
+    if (!node) return;
+    const bounds = getRenderedImageBounds();
+    const pu = mapGPSToImage(node.lat, node.lon);
+    if (!pu) return;
+    const isLegacy = pu.x > 2;
+    
+    const rawX = (isLegacy ? pu.x : bounds.offsetX + pu.x * bounds.renderW) + (dx * 2);
+    const rawY = (isLegacy ? pu.y : bounds.offsetY + pu.y * bounds.renderH) + (dy * 2);
+    
+    const newGps = mapImageToGPS(rawX, rawY);
+    const newNodes = [...routingNodes];
+    newNodes[idx] = { ...newNodes[idx], lat: newGps.lat, lon: newGps.lon };
+    setRoutingNodes(newNodes);
   };
 
   const handleMapPress = (e: any) => {
@@ -1101,10 +1190,11 @@ export default function AdminDashboard() {
             )}
 
             <View className="bg-neutral-800 rounded-2xl p-4 border border-neutral-700 mb-6">
+              <Text className="text-blue-400 text-xs mb-4 font-bold leading-5 bg-blue-900/20 p-2 rounded border border-blue-900/50">ℹ️ Important: Points must be ordered sequentially (either clockwise or counter-clockwise) tracing the outside perimeter of the building.</Text>
               <View className="flex-row items-center mb-3 px-1">
                 <Text className="flex-1 text-neutral-400 text-sm font-bold ml-1">Label</Text>
-                <Text className="flex-1 text-neutral-400 text-sm font-bold ml-1">Latitude ↕️</Text>
-                <Text className="flex-1 text-neutral-400 text-sm font-bold ml-1">Longitude ↔️</Text>
+                <Text className="flex-1 text-neutral-400 text-sm font-bold ml-1">Latitude (N/S ↕️)</Text>
+                <Text className="flex-1 text-neutral-400 text-sm font-bold ml-1">Longitude (E/W ↔️)</Text>
                 <View className="w-10 ml-2" />
               </View>
               {editingPins?.map((p: any, i: number) => (
@@ -1152,10 +1242,42 @@ export default function AdminDashboard() {
                   />
                   </View>
 
+                  <View className="ml-2 flex-col justify-between">
+                    <TouchableOpacity 
+                      className={`p-1 rounded mb-1 items-center justify-center ${i === 0 ? 'bg-neutral-800 opacity-50' : 'bg-neutral-700'}`}
+                      onPress={() => {
+                        if (i === 0) return;
+                        const newPins = [...editingPins];
+                        const temp = newPins[i-1];
+                        newPins[i-1] = newPins[i];
+                        newPins[i] = temp;
+                        setEditingPins(newPins);
+                      }}
+                      disabled={i === 0}
+                    >
+                      <Text className="text-white text-[10px]">▲</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      className={`p-1 rounded items-center justify-center ${i === editingPins.length - 1 ? 'bg-neutral-800 opacity-50' : 'bg-neutral-700'}`}
+                      onPress={() => {
+                        if (i === editingPins.length - 1) return;
+                        const newPins = [...editingPins];
+                        const temp = newPins[i+1];
+                        newPins[i+1] = newPins[i];
+                        newPins[i] = temp;
+                        setEditingPins(newPins);
+                      }}
+                      disabled={i === editingPins.length - 1}
+                    >
+                      <Text className="text-white text-[10px]">▼</Text>
+                    </TouchableOpacity>
+                  </View>
+
                   <TouchableOpacity 
-                    className="ml-2 bg-red-900/50 p-2 rounded-lg"
+                    className="ml-2 bg-red-900/50 p-2 rounded-lg items-center justify-center h-full"
+                    style={{ minHeight: 48 }}
                     onPress={() => {
-                      const newPins = editingPins.filter((_, index) => index !== i);
+                      const newPins = editingPins.filter((_: any, index: number) => index !== i);
                       setEditingPins(newPins);
                     }}
                   >
@@ -1377,10 +1499,13 @@ export default function AdminDashboard() {
                   <TouchableOpacity 
                     activeOpacity={1}
                     className="flex-1"
-                    onLayout={(e) => setImgLayout({w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height})}
+                    onLayout={(e) => setImgLayout({w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height)})}
                     onPress={(e) => {
-                      const x = Platform.OS === 'web' && (e.nativeEvent as any).offsetX !== undefined ? (e.nativeEvent as any).offsetX : e.nativeEvent.locationX;
-                      const y = Platform.OS === 'web' && (e.nativeEvent as any).offsetY !== undefined ? (e.nativeEvent as any).offsetY : e.nativeEvent.locationY;
+                      const rawX = Platform.OS === 'web' && (e.nativeEvent as any).offsetX !== undefined ? (e.nativeEvent as any).offsetX : e.nativeEvent.locationX;
+                      const rawY = Platform.OS === 'web' && (e.nativeEvent as any).offsetY !== undefined ? (e.nativeEvent as any).offsetY : e.nativeEvent.locationY;
+                      const bounds = getRenderedImageBounds();
+                      const x = (rawX - bounds.offsetX) / bounds.renderW;
+                      const y = (rawY - bounds.offsetY) / bounds.renderH;
                       const isNewPlacement = !calibPoints[activeCalibIdx];
                       const newPoints = [...calibPoints];
                       newPoints[activeCalibIdx] = {x, y};
@@ -1390,23 +1515,56 @@ export default function AdminDashboard() {
                       }
                     }}
                   >
-                    <Image source={{ uri: selectedBuilding.masterPlanUrl }} className="w-full h-full" resizeMode="contain" />
+                    <Image 
+                      source={{ uri: selectedBuilding.masterPlanUrl }} 
+                      className="w-full h-full" 
+                      resizeMode="contain" 
+                    />
                     {calibPoints.map((p, i) => {
                       if (!p) return null;
                       const labelStr = selectedBuilding?.polygon?.[i]?.label;
                       const labelShort = labelStr ? labelStr.split(' ').map((w: string)=>w[0]).join('').substring(0,2).toUpperCase() : `P${i+1}`;
+                      const isLegacyPixels = p.x > 2;
+                      const bounds = getRenderedImageBounds();
+                      const px = isLegacyPixels ? p.x : bounds.offsetX + p.x * bounds.renderW;
+                      const py = isLegacyPixels ? p.y : bounds.offsetY + p.y * bounds.renderH;
                       return (
                         <TouchableOpacity 
                           key={i} 
                           activeOpacity={0.8}
-                          className={`absolute w-8 h-8 rounded-full items-center justify-center border-2 border-white ${activeCalibIdx === i ? 'bg-blue-500 z-10 scale-125' : 'bg-green-500'}`} 
-                          style={{ left: p.x - 16, top: p.y - 16 }}
+                          className="absolute items-center" 
+                          style={{ left: px - 20, top: py - 40, width: 40, height: 40, zIndex: activeCalibIdx === i ? 10 : 1 }}
                           onPress={(e) => {
                             e.stopPropagation();
                             setActiveCalibIdx(i);
                           }}
                         >
-                          <Text className="text-white text-xs font-bold">{labelShort}</Text>
+                          {activeCalibIdx === i ? (
+                            <View className="absolute pointer-events-none" style={{ left: 4, top: 24, width: 32, height: 32 }}>
+                              <View className="absolute bg-red-500 shadow-md shadow-black" style={{ left: 15, top: 0, width: 2, height: 12 }} />
+                              <View className="absolute bg-red-500 shadow-md shadow-black" style={{ left: 15, bottom: 0, width: 2, height: 12 }} />
+                              <View className="absolute bg-red-500 shadow-md shadow-black" style={{ top: 15, left: 0, width: 12, height: 2 }} />
+                              <View className="absolute bg-red-500 shadow-md shadow-black" style={{ top: 15, right: 0, width: 12, height: 2 }} />
+                            </View>
+                          ) : (
+                            <>
+                              <MaterialCommunityIcons 
+                                name="map-marker" 
+                                size={40} 
+                                color="#22c55e" 
+                              />
+                              <Text className="text-white text-[10px] font-bold absolute top-2">{labelShort}</Text>
+                            </>
+                          )}
+                          {activeCalibIdx === i && (
+                            <View className="absolute bg-neutral-900/90 rounded-full border border-neutral-600 shadow-xl z-50 flex-row items-center justify-center" style={{ width: 80, height: 80, left: px > imgLayout.w - 100 ? -75 : 35, top: -20 }}>
+                              <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleNudgeCalib(i, 0, -1); }} className="absolute top-1 p-1 bg-neutral-700 rounded-full"><MaterialCommunityIcons name="chevron-up" size={20} color="white" /></TouchableOpacity>
+                              <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleNudgeCalib(i, 0, 1); }} className="absolute bottom-1 p-1 bg-neutral-700 rounded-full"><MaterialCommunityIcons name="chevron-down" size={20} color="white" /></TouchableOpacity>
+                              <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleNudgeCalib(i, -1, 0); }} className="absolute left-1 p-1 bg-neutral-700 rounded-full"><MaterialCommunityIcons name="chevron-left" size={20} color="white" /></TouchableOpacity>
+                              <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleNudgeCalib(i, 1, 0); }} className="absolute right-1 p-1 bg-neutral-700 rounded-full"><MaterialCommunityIcons name="chevron-right" size={20} color="white" /></TouchableOpacity>
+                              <View className="w-2 h-2 bg-neutral-500 rounded-full" />
+                            </View>
+                          )}
                         </TouchableOpacity>
                       )
                     })}
@@ -1468,11 +1626,11 @@ export default function AdminDashboard() {
                   <TouchableOpacity 
                     activeOpacity={1}
                     className="flex-1 relative"
-                    onLayout={(e) => setImgLayout({w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height})}
+                    onLayout={(e) => setImgLayout({w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height)})}
                     onPress={(e) => {
-                      const x = Platform.OS === 'web' && (e.nativeEvent as any).offsetX !== undefined ? (e.nativeEvent as any).offsetX : e.nativeEvent.locationX;
-                      const y = Platform.OS === 'web' && (e.nativeEvent as any).offsetY !== undefined ? (e.nativeEvent as any).offsetY : e.nativeEvent.locationY;
-                      const gps = mapImageToGPS(x, y);
+                      const rawX = Platform.OS === 'web' && (e.nativeEvent as any).offsetX !== undefined ? (e.nativeEvent as any).offsetX : e.nativeEvent.locationX;
+                      const rawY = Platform.OS === 'web' && (e.nativeEvent as any).offsetY !== undefined ? (e.nativeEvent as any).offsetY : e.nativeEvent.locationY;
+                      const gps = mapImageToGPS(rawX, rawY);
                       
                       if (activeRouteIdx !== null) {
                         const newNodes = [...routingNodes];
@@ -1489,16 +1647,25 @@ export default function AdminDashboard() {
                       }
                     }}
                   >
-                    <Image source={{ uri: selectedBuilding.masterPlanUrl }} className="w-full h-full opacity-70" resizeMode="contain" />
+                    <Image 
+                      source={{ uri: selectedBuilding.masterPlanUrl }} 
+                      className="w-full h-full opacity-70" 
+                      resizeMode="contain" 
+                    />
                     
                     {/* Show Calibration Points faded */}
                     {calibPoints.map((p, i) => {
                       if (!p) return null;
                       const labelStr = selectedBuilding?.polygon?.[i]?.label;
                       const labelShort = labelStr ? labelStr.split(' ').map((w: string)=>w[0]).join('').substring(0,2).toUpperCase() : `P${i+1}`;
+                      const isLegacyPixels = p.x > 2;
+                      const bounds = getRenderedImageBounds();
+                      const px = isLegacyPixels ? p.x : bounds.offsetX + p.x * bounds.renderW;
+                      const py = isLegacyPixels ? p.y : bounds.offsetY + p.y * bounds.renderH;
                       return (
-                        <View key={`calib-${i}`} className="absolute w-8 h-8 rounded-full bg-green-500 border-2 border-white items-center justify-center pointer-events-none" style={{ left: p.x - 16, top: p.y - 16, opacity: 0.5 }}>
-                          <Text className="text-white text-xs font-bold">{labelShort}</Text>
+                        <View key={i} className="absolute items-center pointer-events-none" style={{ left: px - 15, top: py - 30, width: 30, height: 30, opacity: 0.5 }}>
+                          <MaterialCommunityIcons name="map-marker" size={30} color="#22c55e" />
+                          <Text className="text-white text-[8px] font-bold absolute top-1">{labelShort}</Text>
                         </View>
                       )
                     })}
@@ -1509,45 +1676,55 @@ export default function AdminDashboard() {
                       return routingNodes.map((node, i) => {
                         if (!node.isExit) turnCount++;
                         const displayNum = node.isExit ? 'E' : turnCount;
-                      // Inverse mapping for visual display (simplified)
-                      const poly = selectedBuilding.polygon;
-                      if (!poly) return null;
-                      const minLat = Math.min(...poly.map((p:any)=>p.lat));
-                      const maxLat = Math.max(...poly.map((p:any)=>p.lat));
-                      const minLon = Math.min(...poly.map((p:any)=>p.lon));
-                      const maxLon = Math.max(...poly.map((p:any)=>p.lon));
-                      
-                      let v = (maxLat - node.lat) / (maxLat - minLat);
-                      let u = (node.lon - minLon) / (maxLon - minLon);
+                        
+                        const pu = mapGPSToImage(node.lat, node.lon);
+                        if (!pu) return null;
+                        
+                        const bounds = getRenderedImageBounds();
+                        const isLegacy = pu.x > 2;
+                        const sx = isLegacy ? pu.x : bounds.offsetX + pu.x * bounds.renderW;
+                        const sy = isLegacy ? pu.y : bounds.offsetY + pu.y * bounds.renderH;
 
-                      let sx = u * imgLayout.w;
-                      let sy = v * imgLayout.h;
-
-                      const calib = calibPoints;
-                      if (calib && calib.length >= 4) {
-                         const minCX = Math.min(...calib.map((c:any)=>c.x));
-                         const maxCX = Math.max(...calib.map((c:any)=>c.x));
-                         const minCY = Math.min(...calib.map((c:any)=>c.y));
-                         const maxCY = Math.max(...calib.map((c:any)=>c.y));
-                         sx = (u * (maxCX - minCX)) + minCX;
-                         sy = (v * (maxCY - minCY)) + minCY;
-                      }
-
-                      return (
-                        <TouchableOpacity 
-                          key={i} 
-                          activeOpacity={0.8}
-                          className={`absolute w-8 h-8 rounded-full items-center justify-center border-2 border-white ${node.isExit ? 'bg-green-500 z-10' : 'bg-blue-500'} ${activeRouteIdx === i ? 'scale-125 border-yellow-400' : ''}`} 
-                          style={{ left: sx - 16, top: sy - 16 }}
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            setActiveRouteIdx(activeRouteIdx === i ? null : i);
-                          }}
-                        >
-                          <Text className="text-white text-xs font-bold">{displayNum}</Text>
-                        </TouchableOpacity>
-                      )
-                    })})()}
+                        return (
+                          <TouchableOpacity 
+                            key={`route-${i}`}
+                            activeOpacity={0.8}
+                            className="absolute items-center" 
+                            style={{ left: sx - 20, top: sy - 40, width: 40, height: 40, zIndex: activeRouteIdx === i ? 999 : (node.isExit ? 10 : 1) }}
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              setActiveRouteIdx(activeRouteIdx === i ? null : i);
+                            }}
+                          >
+                            {activeRouteIdx === i ? (
+                              <View className="absolute pointer-events-none" style={{ left: 4, top: 24, width: 32, height: 32 }}>
+                                <View className="absolute bg-red-500 shadow-md shadow-black" style={{ left: 15, top: 0, width: 2, height: 12 }} />
+                                <View className="absolute bg-red-500 shadow-md shadow-black" style={{ left: 15, bottom: 0, width: 2, height: 12 }} />
+                                <View className="absolute bg-red-500 shadow-md shadow-black" style={{ top: 15, left: 0, width: 12, height: 2 }} />
+                                <View className="absolute bg-red-500 shadow-md shadow-black" style={{ top: 15, right: 0, width: 12, height: 2 }} />
+                              </View>
+                            ) : (
+                              <>
+                                <MaterialCommunityIcons 
+                                  name="map-marker" 
+                                  size={40} 
+                                  color={node.isExit ? "#22c55e" : "#3b82f6"} 
+                                />
+                                <Text className="text-white text-[10px] font-bold absolute top-2">{displayNum}</Text>
+                              </>
+                            )}
+                            {activeRouteIdx === i && (
+                              <View className="absolute bg-neutral-900/90 rounded-full border border-neutral-600 shadow-xl z-50 flex-row items-center justify-center" style={{ width: 80, height: 80, left: sx > imgLayout.w - 100 ? -75 : 35, top: -20 }}>
+                                <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleNudgeRoute(i, 0, -1); }} className="absolute top-1 p-1 bg-neutral-700 rounded-full"><MaterialCommunityIcons name="chevron-up" size={20} color="white" /></TouchableOpacity>
+                                <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleNudgeRoute(i, 0, 1); }} className="absolute bottom-1 p-1 bg-neutral-700 rounded-full"><MaterialCommunityIcons name="chevron-down" size={20} color="white" /></TouchableOpacity>
+                                <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleNudgeRoute(i, -1, 0); }} className="absolute left-1 p-1 bg-neutral-700 rounded-full"><MaterialCommunityIcons name="chevron-left" size={20} color="white" /></TouchableOpacity>
+                                <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleNudgeRoute(i, 1, 0); }} className="absolute right-1 p-1 bg-neutral-700 rounded-full"><MaterialCommunityIcons name="chevron-right" size={20} color="white" /></TouchableOpacity>
+                                <View className="w-2 h-2 bg-neutral-500 rounded-full" />
+                              </View>
+                            )}
+                          </TouchableOpacity>
+                        )
+                      })})()}
                   </TouchableOpacity>
                 )}
               </View>
@@ -1566,53 +1743,109 @@ export default function AdminDashboard() {
                   
                   {/* Exits Group */}
                   {routingNodes.map((n, i) => ({ n, i })).filter(({ n }) => n.isExit).map(({ n, i }) => (
-                    <View key={i} className={`flex-row items-center p-3 rounded-xl mb-2 ${activeRouteIdx === i ? 'bg-neutral-700 border border-neutral-500' : 'bg-neutral-800'}`}>
-                      <Text className="text-white flex-1 font-bold">🚪 Exit</Text>
-                      
-                      <TouchableOpacity 
-                        onPress={() => setActiveRouteIdx(activeRouteIdx === i ? null : i)} 
-                        className={`px-3 py-2 rounded-lg mr-2 ${activeRouteIdx === i ? 'bg-blue-600' : 'bg-neutral-700'}`}
-                      >
-                        <Text className="text-white text-xs">{activeRouteIdx === i ? 'Repositioning...' : 'Reposition'}</Text>
-                      </TouchableOpacity>
-                      
-                      <TouchableOpacity 
-                        onPress={() => {
-                          const newNodes = routingNodes.filter((_, idx) => idx !== i);
-                          setRoutingNodes(newNodes);
-                          if (activeRouteIdx === i) setActiveRouteIdx(null);
-                          else if (activeRouteIdx !== null && activeRouteIdx > i) setActiveRouteIdx(activeRouteIdx - 1);
-                        }} 
-                        className="bg-red-900/50 p-2 rounded-lg"
-                      >
-                        <Text className="text-red-500 font-bold text-xs">✕</Text>
-                      </TouchableOpacity>
+                    <View key={i} className={`p-3 rounded-xl mb-2 ${activeRouteIdx === i ? 'bg-neutral-700 border border-neutral-500' : 'bg-neutral-800'}`}>
+                      <View className="flex-row items-center mb-2">
+                        <Text className="text-white flex-1 font-bold">🚪 Exit</Text>
+                        <TouchableOpacity 
+                          onPress={() => setActiveRouteIdx(activeRouteIdx === i ? null : i)} 
+                          className={`px-3 py-1 rounded-lg mr-2 ${activeRouteIdx === i ? 'bg-blue-600' : 'bg-neutral-700'}`}
+                        >
+                          <Text className="text-white text-xs">{activeRouteIdx === i ? 'Tracking Map...' : 'Reposition'}</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                          onPress={() => {
+                            const newNodes = routingNodes.filter((_, idx) => idx !== i);
+                            setRoutingNodes(newNodes);
+                            if (activeRouteIdx === i) setActiveRouteIdx(null);
+                            else if (activeRouteIdx !== null && activeRouteIdx > i) setActiveRouteIdx(activeRouteIdx - 1);
+                          }} 
+                          className="bg-red-900/50 p-2 rounded-lg"
+                        >
+                          <Text className="text-red-500 font-bold text-xs">✕</Text>
+                        </TouchableOpacity>
+                      </View>
+                      <View className="flex-row space-x-2">
+                        <View className="flex-1 mr-2">
+                          <Text className="text-neutral-400 text-[10px] uppercase font-bold mb-1">Lat (N/S ↕️)</Text>
+                          <TextInput 
+                            className="bg-neutral-900 border border-neutral-700 text-white p-2 rounded-lg text-xs" 
+                            value={n.lat.toString()} 
+                            keyboardType="numeric"
+                            onChangeText={(val) => {
+                              const newNodes = [...routingNodes];
+                              newNodes[i].lat = parseFloat(val) || 0;
+                              setRoutingNodes(newNodes);
+                            }}
+                          />
+                        </View>
+                        <View className="flex-1">
+                          <Text className="text-neutral-400 text-[10px] uppercase font-bold mb-1">Lon (E/W ↔️)</Text>
+                          <TextInput 
+                            className="bg-neutral-900 border border-neutral-700 text-white p-2 rounded-lg text-xs" 
+                            value={n.lon.toString()} 
+                            keyboardType="numeric"
+                            onChangeText={(val) => {
+                              const newNodes = [...routingNodes];
+                              newNodes[i].lon = parseFloat(val) || 0;
+                              setRoutingNodes(newNodes);
+                            }}
+                          />
+                        </View>
+                      </View>
                     </View>
                   ))}
 
                   {/* Turn Points Group */}
                   {routingNodes.map((n, i) => ({ n, i })).filter(({ n }) => !n.isExit).map(({ n, i }, turnIndex) => (
-                    <View key={i} className={`flex-row items-center p-3 rounded-xl mb-2 ${activeRouteIdx === i ? 'bg-neutral-700 border border-neutral-500' : 'bg-neutral-800'}`}>
-                      <Text className="text-white flex-1 font-bold">🔵 Turn Point {turnIndex + 1}</Text>
-                      
-                      <TouchableOpacity 
-                        onPress={() => setActiveRouteIdx(activeRouteIdx === i ? null : i)} 
-                        className={`px-3 py-2 rounded-lg mr-2 ${activeRouteIdx === i ? 'bg-blue-600' : 'bg-neutral-700'}`}
-                      >
-                        <Text className="text-white text-xs">{activeRouteIdx === i ? 'Repositioning...' : 'Reposition'}</Text>
-                      </TouchableOpacity>
-                      
-                      <TouchableOpacity 
-                        onPress={() => {
-                          const newNodes = routingNodes.filter((_, idx) => idx !== i);
-                          setRoutingNodes(newNodes);
-                          if (activeRouteIdx === i) setActiveRouteIdx(null);
-                          else if (activeRouteIdx !== null && activeRouteIdx > i) setActiveRouteIdx(activeRouteIdx - 1);
-                        }} 
-                        className="bg-red-900/50 p-2 rounded-lg"
-                      >
-                        <Text className="text-red-500 font-bold text-xs">✕</Text>
-                      </TouchableOpacity>
+                    <View key={i} className={`p-3 rounded-xl mb-2 ${activeRouteIdx === i ? 'bg-neutral-700 border border-neutral-500' : 'bg-neutral-800'}`}>
+                      <View className="flex-row items-center mb-2">
+                        <Text className="text-white flex-1 font-bold">🔵 Turn Point {turnIndex + 1}</Text>
+                        <TouchableOpacity 
+                          onPress={() => setActiveRouteIdx(activeRouteIdx === i ? null : i)} 
+                          className={`px-3 py-1 rounded-lg mr-2 ${activeRouteIdx === i ? 'bg-blue-600' : 'bg-neutral-700'}`}
+                        >
+                          <Text className="text-white text-xs">{activeRouteIdx === i ? 'Tracking Map...' : 'Reposition'}</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                          onPress={() => {
+                            const newNodes = routingNodes.filter((_, idx) => idx !== i);
+                            setRoutingNodes(newNodes);
+                            if (activeRouteIdx === i) setActiveRouteIdx(null);
+                            else if (activeRouteIdx !== null && activeRouteIdx > i) setActiveRouteIdx(activeRouteIdx - 1);
+                          }} 
+                          className="bg-red-900/50 p-2 rounded-lg"
+                        >
+                          <Text className="text-red-500 font-bold text-xs">✕</Text>
+                        </TouchableOpacity>
+                      </View>
+                      <View className="flex-row space-x-2">
+                        <View className="flex-1 mr-2">
+                          <Text className="text-neutral-400 text-[10px] uppercase font-bold mb-1">Lat (N/S ↕️)</Text>
+                          <TextInput 
+                            className="bg-neutral-900 border border-neutral-700 text-white p-2 rounded-lg text-xs" 
+                            value={n.lat.toString()} 
+                            keyboardType="numeric"
+                            onChangeText={(val) => {
+                              const newNodes = [...routingNodes];
+                              newNodes[i].lat = parseFloat(val) || 0;
+                              setRoutingNodes(newNodes);
+                            }}
+                          />
+                        </View>
+                        <View className="flex-1">
+                          <Text className="text-neutral-400 text-[10px] uppercase font-bold mb-1">Lon (E/W ↔️)</Text>
+                          <TextInput 
+                            className="bg-neutral-900 border border-neutral-700 text-white p-2 rounded-lg text-xs" 
+                            value={n.lon.toString()} 
+                            keyboardType="numeric"
+                            onChangeText={(val) => {
+                              const newNodes = [...routingNodes];
+                              newNodes[i].lon = parseFloat(val) || 0;
+                              setRoutingNodes(newNodes);
+                            }}
+                          />
+                        </View>
+                      </View>
                     </View>
                   ))}
                 </View>

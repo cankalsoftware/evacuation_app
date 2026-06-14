@@ -46,9 +46,13 @@ export default function LocationConsentScreen() {
           finalStatus = newStatus;
         }
         if (finalStatus !== 'granted') {
-          setError("Push notification permission is required to warn you of an emergency drill or fire.");
-          setLoading(false);
-          return;
+          if (Platform.OS === 'web') {
+            console.warn("Push notification permission denied (expected in some Web/Incognito environments). Continuing without push.");
+          } else {
+            setError("Push notification permission is required to warn you of an emergency drill or fire.");
+            setLoading(false);
+            return;
+          }
         }
 
         // Get Expo Push Token

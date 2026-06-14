@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import { View, Text, TouchableOpacity, Image, useWindowDimensions, Animated, Platform } from "react-native";
 import * as Location from "expo-location";
 import * as Speech from "expo-speech";
@@ -54,6 +54,8 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
   const [targetHeading, setTargetHeading] = useState<number>(0);
   const [steps, setSteps] = useState(0);
   const [drLocation, setDrLocation] = useState<{lat: number, lon: number} | null>(currentLocation ? { lat: currentLocation.coords.latitude, lon: currentLocation.coords.longitude } : null);
+  const [imgLayout, setImgLayout] = useState<{w: number, h: number}>({w: 1, h: 1});
+  const [imageAspectRatio, setImageAspectRatio] = useState<number | null>(null);
   
   const [evacStatus, setEvacStatus] = useState<"IN_BUILDING" | "PANIC" | "SAFE">("IN_BUILDING");
   const [sirenSound, setSirenSound] = useState<Audio.Sound | null>(null);
@@ -68,6 +70,70 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
   const HEADING_TOLERANCE = 45;
 
   const activePlanUrl = autoBuilding?.masterPlanUrl || dashboardData?.scannedPlanUrl;
+
+  useEffect(() => {
+    if (activePlanUrl) {
+      Image.getSize(activePlanUrl, (width, height) => {
+        if (width && height) setImageAspectRatio(width / height);
+      }, (error) => {
+        console.warn("Failed to get image size", error);
+      });
+    }
+  }, [activePlanUrl]);
+
+  const interpolateLocation = (lat: number, lon: number) => {
+    if (!autoBuilding?.polygon || autoBuilding.polygon.length < 4) return null;
+    
+    const poly = autoBuilding.polygon;
+    const minLat = Math.min(...poly.map((p:any)=>p.lat));
+    const maxLat = Math.max(...poly.map((p:any)=>p.lat));
+    const minLon = Math.min(...poly.map((p:any)=>p.lon));
+    const maxLon = Math.max(...poly.map((p:any)=>p.lon));
+    
+    let v = (maxLat - lat) / (maxLat - minLat || 1);
+    let u = (lon - minLon) / (maxLon - minLon || 1);
+    
+    const calib = autoBuilding.imageCalibrationPoints;
+    if (calib && calib.length >= 4) {
+      const isLegacyPixels = calib[0].x > 2;
+      const minCX = Math.min(...calib.map((c:any)=> isLegacyPixels ? c.x / Math.max(1, imgLayout.w) : c.x));
+      const maxCX = Math.max(...calib.map((c:any)=> isLegacyPixels ? c.x / Math.max(1, imgLayout.w) : c.x));
+      const minCY = Math.min(...calib.map((c:any)=> isLegacyPixels ? c.y / Math.max(1, imgLayout.h) : c.y));
+      const maxCY = Math.max(...calib.map((c:any)=> isLegacyPixels ? c.y / Math.max(1, imgLayout.h) : c.y));
+      
+      u = minCX + u * (maxCX - minCX);
+      v = minCY + v * (maxCY - minCY);
+    }
+    
+    return { x: u, y: v };
+  };
+
+  const userImgPos = (drLocation && autoBuilding) ? interpolateLocation(drLocation.lat, drLocation.lon) : null;
+  const mapExits = autoBuilding?.safeNodes?.filter((n: any) => n.isExit) || [];
+
+  const isOutsideBuilding = useMemo(() => {
+    if (!drLocation || !autoBuilding?.polygon || autoBuilding.polygon.length < 4) return false;
+    const poly = autoBuilding.polygon;
+      const minLat = Math.min(...poly.map((p:any)=>p.lat));
+      const maxLat = Math.max(...poly.map((p:any)=>p.lat));
+      const minLon = Math.min(...poly.map((p:any)=>p.lon));
+      const maxLon = Math.max(...poly.map((p:any)=>p.lon));
+      
+      const latDiff = maxLat - minLat;
+      const lonDiff = maxLon - minLon;
+      
+      // Add 5% tolerance based on the total dimensions of the building boundaries,
+      // but enforce a minimum tolerance of ~11 meters (0.0001 degrees) for GPS jitter.
+      const tolLat = Math.max(0.0001, latDiff * 0.05);
+      const tolLon = Math.max(0.0001, lonDiff * 0.05);
+      
+      return (
+        drLocation.lat < minLat - tolLat ||
+        drLocation.lat > maxLat + tolLat ||
+        drLocation.lon < minLon - tolLon ||
+        drLocation.lon > maxLon + tolLon
+      );
+  }, [drLocation, autoBuilding]);
 
   // Dynamic Routing Evaluator
   const evaluateRouting = (currentLoc: {lat: number, lon: number}) => {
@@ -184,6 +250,17 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
       Speech.stop();
     };
   }, []);
+
+  // Sync drLocation for Web DevTools Sensor override
+  useEffect(() => {
+    if (Platform.OS === 'web' && currentLocation) {
+      setDrLocation(prev => {
+        if (!prev) return { lat: currentLocation.coords.latitude, lon: currentLocation.coords.longitude };
+        if (prev.lat === currentLocation.coords.latitude && prev.lon === currentLocation.coords.longitude) return prev;
+        return { lat: currentLocation.coords.latitude, lon: currentLocation.coords.longitude };
+      });
+    }
+  }, [currentLocation]);
 
   // Auto-Ping Location and Status
   useEffect(() => {
@@ -348,32 +425,177 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
     );
   }
   
+  const getImageBounds = () => {
+    const layoutW = Math.max(1, imgLayout.w);
+    const layoutH = Math.max(1, imgLayout.h);
+    const aspect = imageAspectRatio || 1;
+    const layoutAspect = layoutW / layoutH;
+    let renderW, renderH, offsetX, offsetY;
+    
+    // ZOOM TO BUILDING BOUNDING BOX
+    if (autoBuilding?.polygon && autoBuilding.polygon.length >= 4) {
+      const poly = autoBuilding.polygon;
+      const xs: number[] = [];
+      const ys: number[] = [];
+      for (const p of poly) {
+        const pt = interpolateLocation(p.lat, p.lon);
+        if (pt) {
+          xs.push(pt.x);
+          ys.push(pt.y);
+        }
+      }
+      if (xs.length >= 3) {
+        const minX = Math.min(...xs);
+        const maxX = Math.max(...xs);
+        const minY = Math.min(...ys);
+        const maxY = Math.max(...ys);
+        
+        const bw = Math.max(0.001, maxX - minX);
+        const bh = Math.max(0.001, maxY - minY);
+        const padding = 0.10; // 10% padding
+        
+        // Target bounded area we want to fit inside the layout
+        const targetW = bw * (1 + padding * 2);
+        const targetH = bh * (1 + padding * 2);
+        
+        // Scale so the target bounds perfectly fit within BOTH layout width and height
+        renderW = Math.min(layoutW / targetW, (layoutH * aspect) / targetH);
+        renderH = renderW / aspect;
+        
+        // Center the building exactly in the middle of the Map View container
+        const centerX = (minX + maxX) / 2;
+        const centerY = (minY + maxY) / 2;
+        offsetX = (layoutW / 2) - (centerX * renderW);
+        offsetY = (layoutH / 2) - (centerY * renderH);
+        
+        return { renderW, renderH, offsetX, offsetY };
+      }
+    }
+    
+    // FALLBACK: Cover math
+    if (layoutAspect > aspect) { // Container is wider. Cover fits width, crops height.
+      renderW = layoutW;
+      renderH = layoutW / aspect;
+      offsetX = 0;
+      offsetY = (layoutH - renderH) / 2;
+    } else { // Container is taller. Cover fits height, crops width.
+      renderH = layoutH;
+      renderW = layoutH * aspect;
+      offsetX = (layoutW - renderW) / 2;
+      offsetY = 0;
+    }
+    return { renderW, renderH, offsetX, offsetY };
+  };
+
   return (
-    <View className={`flex-1 ${evacStatus === 'PANIC' ? 'bg-red-900 animate-pulse' : 'bg-black'}`}>
-      {/* Header */}
-      <View className={`pt-16 pb-4 px-6 flex-row justify-between items-center border-b ${isDrill ? 'bg-amber-900 border-amber-800' : 'bg-neutral-900 border-neutral-800'}`}>
-        <View>
-          <Text className={`text-3xl font-extrabold uppercase tracking-widest ${isDrill ? 'text-amber-400' : 'text-red-500'}`}>
-            {isDrill ? 'TEST DRILL' : 'EVACUATE'}
-          </Text>
-          <Text className="text-white">Room: {dashboardData?.roomNumber || "Unknown"}</Text>
-        </View>
-        <TouchableOpacity 
-          onPress={onClose}
-          className="bg-neutral-800 px-4 py-2 rounded-full border border-neutral-700"
-        >
-          <Text className="text-white font-bold">End</Text>
-        </TouchableOpacity>
+    <View className={`flex-1 w-full ${evacStatus === 'PANIC' ? 'bg-red-900 animate-pulse' : 'bg-black'}`}>
+      
+      {/* Header (10%) */}
+      <View style={{ height: '10%' }} className={`justify-center items-center border-b ${isDrill ? 'bg-amber-900 border-amber-800' : 'bg-neutral-900 border-neutral-800'}`}>
+        <Text className={`text-2xl font-extrabold uppercase tracking-widest text-center ${isDrill ? 'text-amber-400' : 'text-red-500'}`}>
+          {isDrill ? 'TEST DRILL' : 'EVACUATE'}
+        </Text>
       </View>
 
-      {/* Top Half: Map View */}
-      <View className="flex-1 w-full bg-neutral-950 relative border-b-2 border-neutral-800">
-        {activePlanUrl ? (
-          <Image 
-            source={{ uri: activePlanUrl }} 
-            style={{ width: '100%', height: '100%', opacity: 0.8 }} 
-            resizeMode="contain"
-          />
+      {/* Map View (25%) */}
+      <View 
+        style={{ height: '25%' }}
+        className="w-full bg-neutral-950 relative border-b-2 border-neutral-800 overflow-hidden"
+        onLayout={(e) => setImgLayout({w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height)})}
+      >
+        {isOutsideBuilding ? (
+          <View className="flex-1 justify-center items-center px-8 bg-neutral-900">
+            <Text className="text-green-500 text-4xl font-extrabold text-center mb-4">
+              YOU ARE OUT AND SAFE
+            </Text>
+            <Text className="text-white text-lg text-center mb-8 font-bold">
+              Please inform the marshal by clicking the button below.
+            </Text>
+            <TouchableOpacity 
+              onPress={() => updateStatus({
+                clerkId: user?.id || '',
+                incidentId: activeIncident._id,
+                setPanic: false,
+                setSafe: true,
+                lat: drLocation?.lat ?? 0,
+                lon: drLocation?.lon ?? 0
+              })}
+              className="bg-green-600 px-10 py-5 rounded-full border-2 border-green-400 shadow-lg shadow-green-600/50 mb-8"
+            >
+              <Text className="text-white font-black text-2xl">I AM SAFE</Text>
+            </TouchableOpacity>
+
+            <View className="bg-black/50 p-4 rounded-xl w-full border border-neutral-800">
+              <Text className="text-neutral-400 text-xs font-bold mb-1">DEBUG DIAGNOSTICS:</Text>
+              <Text className="text-neutral-500 text-xs">Your Lat: {drLocation?.lat?.toFixed(6)}</Text>
+              <Text className="text-neutral-500 text-xs">Your Lon: {drLocation?.lon?.toFixed(6)}</Text>
+              {autoBuilding?.polygon && (
+                <>
+                  <Text className="text-neutral-500 text-xs mt-2">Building Lat: {Math.min(...autoBuilding.polygon.map((p:any)=>p.lat)).toFixed(5)} to {Math.max(...autoBuilding.polygon.map((p:any)=>p.lat)).toFixed(5)}</Text>
+                  <Text className="text-neutral-500 text-xs">Building Lon: {Math.min(...autoBuilding.polygon.map((p:any)=>p.lon)).toFixed(5)} to {Math.max(...autoBuilding.polygon.map((p:any)=>p.lon)).toFixed(5)}</Text>
+                </>
+              )}
+            </View>
+          </View>
+        ) : activePlanUrl ? (
+          <>
+            <Image 
+              source={{ uri: activePlanUrl }} 
+              style={{ 
+                position: 'absolute',
+                width: getImageBounds().renderW, 
+                height: getImageBounds().renderH, 
+                left: getImageBounds().offsetX, 
+                top: getImageBounds().offsetY,
+                opacity: 0.8 
+              }} 
+            />
+            {/* Exit Nodes */}
+            {(() => {
+              const { renderW, renderH, offsetX, offsetY } = getImageBounds();
+              return mapExits.map((exit: any, i: number) => {
+                const pos = interpolateLocation(exit.lat, exit.lon);
+                if (!pos) return null;
+                return (
+                  <View 
+                    key={`exit-${i}`}
+                    style={{
+                      position: 'absolute',
+                      left: offsetX + pos.x * renderW - 20,
+                      top: offsetY + pos.y * renderH - 40,
+                      width: 40,
+                      height: 40,
+                      alignItems: 'center'
+                    }}
+                    className="z-10"
+                  >
+                    <MaterialCommunityIcons name="map-marker" size={40} color="#22c55e" />
+                  </View>
+                );
+              });
+            })()}
+
+            {/* User Location */}
+            {userImgPos && (() => {
+              const { renderW, renderH, offsetX, offsetY } = getImageBounds();
+              const pos = userImgPos;
+              return (
+                <View 
+                  style={{
+                    position: 'absolute',
+                    left: offsetX + pos.x * renderW - 20,
+                    top: offsetY + pos.y * renderH - 40,
+                    width: 40,
+                    height: 40,
+                    alignItems: 'center'
+                  }}
+                  className="z-20"
+                >
+                  <MaterialCommunityIcons name="map-marker" size={40} color="#3b82f6" />
+                </View>
+              );
+            })()}
+          </>
         ) : (
           <View className="flex-1 justify-center items-center">
             <Text className="text-neutral-500">No map available.</Text>
@@ -381,55 +603,50 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
         )}
       </View>
 
-      {/* Bottom Half: Arrow and Status */}
-      <View className={`flex-1 items-center justify-between py-8 px-6 ${bgColor}`}>
-        
-        {/* Dynamic Arrow */}
-        <View className="flex-1 justify-center items-center">
-          <Animated.View style={{ transform: [{ rotate: arrowRotation }] }}>
-            <MaterialCommunityIcons 
-              name="arrow-up-thick" 
-              size={240} 
-              color={iconColor} 
-              style={Platform.OS === 'web' ? { filter: 'drop-shadow(0px 8px 12px rgba(0,0,0,0.8))' } as any : { shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.8, shadowRadius: 12 }}
-            />
-          </Animated.View>
-        </View>
+      {/* Bottom Interface (65%) */}
+      {!isOutsideBuilding && (
+        <>
+          {/* Arrow (25%) */}
+          <View style={{ height: '25%' }} className={`justify-center items-center ${bgColor}`}>
+            <Animated.View style={{ transform: [{ rotate: arrowRotation }] }}>
+              <MaterialCommunityIcons 
+                name="arrow-up-thick" 
+                size={Math.min(height * 0.25, width) * 1.0} 
+                color={iconColor} 
+                style={Platform.OS === 'web' ? { filter: 'drop-shadow(0px 8px 12px rgba(0,0,0,0.8))' } as any : { shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.8, shadowRadius: 12 }}
+              />
+            </Animated.View>
+          </View>
 
-        {/* Status Footer */}
-        <View className="items-center w-full mt-4">
-          <Text className={`text-4xl font-black uppercase ${statusTitleColor}`} style={Platform.OS === 'web' ? { textShadow: '1px 1px 4px rgba(0,0,0,0.8)' } as any : { textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: {width: 1, height: 1}, textShadowRadius: 4 }}>
-            {statusTitle}
-          </Text>
-          <Text className={`text-center mt-2 text-2xl font-bold ${statusSubColor}`} style={Platform.OS === 'web' ? { textShadow: '1px 1px 2px rgba(0,0,0,0.8)' } as any : { textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: {width: 1, height: 1}, textShadowRadius: 2 }}>
-            {statusSub}
-          </Text>
-          <Text className="text-neutral-400 mt-2 font-bold">{steps} steps tracked</Text>
-          {Platform.OS === 'web' && (
-            <View className="bg-neutral-800/80 px-4 py-2 rounded-full border border-neutral-700 mt-4">
-              <Text className="text-neutral-400 font-bold text-sm">Sensors disabled on web simulator</Text>
-            </View>
-          )}
-        </View>
-        
-        {/* Buttons Overlay */}
-        <View className="absolute bottom-10 left-6 right-6 flex-row justify-between">
-          <TouchableOpacity 
-            className={`w-20 h-20 rounded-full items-center justify-center border-4 shadow-lg ${evacStatus === 'PANIC' ? 'bg-white border-red-500' : 'bg-red-600 border-red-800'}`}
-            onPress={togglePanic}
-          >
-            <Text className={`font-black text-xs ${evacStatus === 'PANIC' ? 'text-red-600' : 'text-white'}`}>{evacStatus === 'PANIC' ? 'CANCEL' : 'SOS'}</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            className="w-20 h-20 rounded-full items-center justify-center bg-green-600 border-4 border-green-800 shadow-lg"
-            onPress={markAsSafe}
-          >
-            <Text className="font-black text-xs text-white text-center">I AM SAFE</Text>
-          </TouchableOpacity>
-        </View>
+          {/* Status Message (20%) */}
+          <View style={{ height: '20%' }} className={`justify-center items-center px-4 ${bgColor}`}>
+            <Text className={`text-3xl font-black uppercase text-center ${statusTitleColor}`} style={Platform.OS === 'web' ? { textShadow: '1px 1px 4px rgba(0,0,0,0.8)' } as any : { textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: {width: 1, height: 1}, textShadowRadius: 4 }}>
+              {statusTitle}
+            </Text>
+            <Text className={`text-center mt-1 text-xl font-bold ${statusSubColor}`} style={Platform.OS === 'web' ? { textShadow: '1px 1px 2px rgba(0,0,0,0.8)' } as any : { textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: {width: 1, height: 1}, textShadowRadius: 2 }}>
+              {statusSub}
+            </Text>
+            <Text className="text-neutral-400 mt-2 font-bold">{steps} steps tracked</Text>
+          </View>
 
-      </View>
+          {/* Buttons (20%) */}
+          <View style={{ height: '20%' }} className={`flex-row items-center justify-center px-4 pb-4 gap-4 ${bgColor}`}>
+            <TouchableOpacity 
+              className={`flex-1 h-full rounded-3xl border-2 shadow-lg justify-center items-center ${evacStatus === 'PANIC' ? 'bg-white border-red-500 shadow-red-600/50' : 'bg-red-600 border-red-500 shadow-red-600/50'}`}
+              onPress={togglePanic}
+            >
+              <Text className={`font-black text-xl text-center ${evacStatus === 'PANIC' ? 'text-red-600' : 'text-white'}`}>{evacStatus === 'PANIC' ? 'CANCEL SOS' : 'SOS'}</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              className="flex-1 h-full bg-green-600 rounded-3xl border-2 border-green-500 shadow-lg shadow-green-600/50 justify-center items-center"
+              onPress={markAsSafe}
+            >
+              <Text className="font-black text-xl text-white text-center">I AM SAFE</Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
     </View>
   );
 }

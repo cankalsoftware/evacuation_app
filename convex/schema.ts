@@ -11,6 +11,7 @@ export default defineSchema({
     role: v.union(v.literal("guest"), v.literal("admin")),
     createdAt: v.number(),
     expoPushToken: v.optional(v.string()), // Added for Phase 13 native push notifications
+    activeBuildingId: v.optional(v.id("buildings")), // Phase 15: Background Check-in Tracking
   }).index("by_clerkId", ["clerkId"]),
 
   plans: defineTable({
