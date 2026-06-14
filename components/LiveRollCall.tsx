@@ -39,8 +39,12 @@ export default function LiveRollCall({ incidentId, clerkId, onLocateUser }: { in
 
   const renderUser = (r: any) => (
     <View key={r._id} className="flex-row items-center justify-between py-2 border-b border-neutral-800">
-      <View>
-        <Text className={`font-bold ${r.status === 'PANIC' ? 'text-red-500 animate-pulse' : r.status === 'IN_BUILDING' ? 'text-neutral-300' : 'text-green-500'}`}>
+      <View className="flex-1 mr-2">
+        <Text 
+          numberOfLines={1} 
+          ellipsizeMode="tail"
+          className={`font-bold ${r.status === 'PANIC' ? 'text-red-500 animate-pulse' : r.status === 'IN_BUILDING' ? 'text-neutral-300' : 'text-green-500'}`}
+        >
           {r.status === 'PANIC' ? `[ 🆘 ${r.userName} ]` : r.status === 'IN_BUILDING' ? `❌ ${r.userName}` : `✅ ${r.userName}`}
         </Text>
         {r.status !== 'SAFE' && r.lastLat && r.lastLon && (
@@ -51,7 +55,7 @@ export default function LiveRollCall({ incidentId, clerkId, onLocateUser }: { in
       </View>
       {r.status !== 'SAFE' && r.lastLat && r.lastLon && (
         <TouchableOpacity 
-          className="bg-blue-600/20 border border-blue-500/50 px-3 py-1 rounded"
+          className="shrink-0 bg-blue-600/20 border border-blue-500/50 px-3 py-1 rounded"
           onPress={() => onLocateUser(r.lastLat, r.lastLon, r.userName)}
         >
           <Text className="text-blue-400 text-xs font-bold">Locate</Text>

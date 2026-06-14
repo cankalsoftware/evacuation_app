@@ -702,7 +702,7 @@ export default function AdminDashboard() {
   const needsSetup = !dashboardData.name || !dashboardData.phone;
   if (needsSetup || showSettings) {
     return (
-      <View className="flex-1 bg-neutral-900 pt-16 px-6">
+      <View className="flex-1 bg-neutral-900 pt-6 px-6">
         <View className="flex-row justify-between items-center mb-8">
           <Text className="text-3xl font-extrabold text-white">
             {needsSetup ? "Admin Setup" : "Admin Settings"}
@@ -790,11 +790,11 @@ export default function AdminDashboard() {
   }
 
   return (
-    <View className="flex-1 bg-neutral-900 pt-16">
+    <View className="flex-1 bg-neutral-900 pt-6">
       {/* Header */}
-      <View className="px-6 flex-row justify-between items-center mb-6 w-full">
+      <View className="px-6 flex-row justify-between items-center mb-6">
         <View className="flex-1 mr-4">
-          <Text className="text-2xl font-extrabold text-white" numberOfLines={1} adjustsFontSizeToFit>Admin Console</Text>
+          <Text className="text-2xl font-extrabold text-white">Admin Console</Text>
           <Text className="text-red-400 font-bold text-xs mt-1" numberOfLines={1} ellipsizeMode="tail">{dashboardData.name || user?.primaryEmailAddress?.emailAddress}</Text>
         </View>
         <View className="flex-row items-center shrink-0">
@@ -1080,7 +1080,29 @@ export default function AdminDashboard() {
         
         {/* Recent Incidents moved to Modal */}
         
-        <View className="h-10" />
+        {/* Footer */}
+        <View className="mt-4 mb-8 pt-6 border-t border-neutral-800 items-center px-4">
+          <Text className="text-neutral-500 text-xs text-center mb-4">
+            © 2026 FireVision. All rights reserved.
+          </Text>
+          <View className="flex-row flex-wrap justify-center items-center">
+            <TouchableOpacity onPress={() => alert("Privacy Policy coming soon")} className="mb-3">
+              <Text className="text-neutral-400 text-xs font-semibold">Privacy Policy</Text>
+            </TouchableOpacity>
+            <Text className="text-neutral-600 mx-2 mb-3">|</Text>
+            <TouchableOpacity onPress={() => alert("Terms of Service coming soon")} className="mb-3">
+              <Text className="text-neutral-400 text-xs font-semibold">Terms of Service</Text>
+            </TouchableOpacity>
+            <Text className="text-neutral-600 mx-2 mb-3">|</Text>
+            <TouchableOpacity onPress={() => alert("Cookie Policy coming soon")} className="mb-3">
+              <Text className="text-neutral-400 text-xs font-semibold">Cookie Policy</Text>
+            </TouchableOpacity>
+            <Text className="text-neutral-600 mx-2 mb-3">|</Text>
+            <TouchableOpacity onPress={() => alert("Acceptable Use coming soon")} className="mb-3">
+              <Text className="text-neutral-400 text-xs font-semibold">Acceptable Use</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </ScrollView>
 
       {/* Register Building Modal */}
