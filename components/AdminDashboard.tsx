@@ -1948,7 +1948,7 @@ export default function AdminDashboard() {
                     <TouchableOpacity
                       className="bg-neutral-700 p-2 rounded-lg"
                       onPress={() => {
-                        setStep1Zoom(z => Math.max(1, z - 0.5));
+                        setStep1Zoom(Math.max(1, step1Zoom - 0.5));
                         setStep1PanOffset({ x: 0, y: 0 });
                       }}
                     >
@@ -1958,8 +1958,20 @@ export default function AdminDashboard() {
                     <TouchableOpacity
                       className="bg-neutral-700 p-2 rounded-lg"
                       onPress={() => {
-                        setStep1Zoom(z => Math.min(5, z + 0.5));
-                        setStep1PanOffset({ x: 0, y: 0 });
+                        const newZoom = Math.min(5, step1Zoom + 0.5);
+                        setStep1Zoom(newZoom);
+                        if (activeCalibIdx !== -1 && calibPoints[activeCalibIdx]) {
+                          const p = calibPoints[activeCalibIdx];
+                          const bounds = getRenderedImageBounds();
+                          const px = p.x > 2 ? p.x : bounds.offsetX + p.x * bounds.renderW;
+                          const py = p.x > 2 ? p.y : bounds.offsetY + p.y * bounds.renderH;
+                          setStep1PanOffset({
+                            x: (imgLayout.w / 2 - px) * newZoom,
+                            y: (imgLayout.h / 2 - py) * newZoom
+                          });
+                        } else {
+                          setStep1PanOffset({ x: 0, y: 0 });
+                        }
                       }}
                     >
                       <MaterialCommunityIcons name="plus" size={24} color="white" />
@@ -2010,14 +2022,21 @@ export default function AdminDashboard() {
                                 key={i}
                                 activeOpacity={0.8}
                                 className="absolute items-center"
-                                style={{ left: px - 20, top: py - 40, width: 40, height: 40, zIndex: activeCalibIdx === i ? 10 : 1 }}
+                                style={{ 
+                                  left: px - 20, 
+                                  top: py - 20 - 20 / step1Zoom, 
+                                  width: 40, 
+                                  height: 40, 
+                                  zIndex: activeCalibIdx === i ? 10 : 1,
+                                  transform: [{ scale: 1 / step1Zoom }]
+                                }}
                                 onPress={(e) => {
                                   e.stopPropagation();
                                   setActiveCalibIdx(activeCalibIdx === i ? -1 : i);
                                 }}
                               >
                                 {activeCalibIdx === i ? (
-                                  <View className="absolute pointer-events-none" style={{ left: 4, top: 24, width: 32, height: 32 }}>
+                                  <View className="absolute pointer-events-none" style={{ left: 4, top: 24, width: 32, height: 32, transform: [{ scale: step1Zoom }] }}>
                                     <View className="absolute bg-red-500 shadow-md shadow-black" style={{ left: 15, top: 0, width: 2, height: 12 }} />
                                     <View className="absolute bg-red-500 shadow-md shadow-black" style={{ left: 15, bottom: 0, width: 2, height: 12 }} />
                                     <View className="absolute bg-red-500 shadow-md shadow-black" style={{ top: 15, left: 0, width: 12, height: 2 }} />
@@ -2036,10 +2055,10 @@ export default function AdminDashboard() {
                                 {activeCalibIdx === i && (() => {
                                   const screenX = (px - imgLayout.w / 2) * step1Zoom + step1PanOffset.x + imgLayout.w / 2;
                                   const screenY = (py - imgLayout.h / 2) * step1Zoom + step1PanOffset.y + imgLayout.h / 2;
-                                  const dpadBaseLeft = screenX > imgLayout.w - 100 ? -75 : 35;
-                                  const dpadBaseTop = screenY < 80 ? 40 : (screenY > imgLayout.h - 100 ? -80 : -20);
+                                  const dpadBaseLeft = screenX > imgLayout.w - 140 ? -115 : 75;
+                                  const dpadBaseTop = screenY < 100 ? 40 : (screenY > imgLayout.h - 100 ? -80 : -20);
                                   return (
-                                    <View className="absolute bg-neutral-900/90 rounded-full border border-neutral-600 shadow-xl z-50 flex-row items-center justify-center" style={{ width: 80, height: 80, left: (dpadBaseLeft + 20) / step1Zoom - 20, top: (dpadBaseTop + 20) / step1Zoom - 20, transform: [{ scale: 1 / step1Zoom }] }}>
+                                    <View className="absolute bg-neutral-900/90 rounded-full border border-neutral-600 shadow-xl z-50 flex-row items-center justify-center" style={{ width: 80, height: 80, left: dpadBaseLeft, top: dpadBaseTop }}>
                                       <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleNudgeCalib(i, 0, -1); }} className="absolute top-1 p-1 bg-neutral-700 rounded-full"><MaterialCommunityIcons name="chevron-up" size={20} color="white" /></TouchableOpacity>
                                       <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleNudgeCalib(i, 0, 1); }} className="absolute bottom-1 p-1 bg-neutral-700 rounded-full"><MaterialCommunityIcons name="chevron-down" size={20} color="white" /></TouchableOpacity>
                                       <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleNudgeCalib(i, -1, 0); }} className="absolute left-1 p-1 bg-neutral-700 rounded-full"><MaterialCommunityIcons name="chevron-left" size={20} color="white" /></TouchableOpacity>
