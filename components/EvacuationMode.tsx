@@ -531,15 +531,38 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
   
   if (evacStatus === "SAFE") {
     return (
-      <View className="flex-1 bg-green-900 justify-center items-center px-6">
-        <Text className="text-8xl mb-4">✅</Text>
-        <Text className="text-4xl font-black text-white mb-2 text-center">YOU ARE SAFE</Text>
-        <Text className="text-green-300 text-center mb-8 text-lg">Your status has been updated. Please wait for further instructions from the authorities.</Text>
+      <View className="flex-1 bg-green-900 justify-center items-center p-6">
+        <Text className="text-8xl mb-6">✅</Text>
+        <Text className="text-white text-3xl font-black uppercase tracking-widest text-center mb-4">You Are Safe</Text>
+        <Text className="text-green-300 text-center mb-8">Please remain at the assembly point until cleared by administration.</Text>
         <TouchableOpacity 
-          onPress={onClose}
-          className="bg-neutral-800 px-8 py-4 rounded-full border border-neutral-700"
+          onPress={() => {
+            if (sirenSound) sirenSound.stopAsync();
+            onClose();
+          }}
+          className="bg-white/20 px-8 py-4 rounded-xl border border-white/30"
         >
-          <Text className="text-white font-bold text-xl">Close</Text>
+          <Text className="text-white font-bold">Return to Dashboard</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (isOutsideBuilding) {
+    return (
+      <View className="flex-1 bg-green-950 justify-center items-center p-6">
+        <Text className="text-6xl mb-6">🎉</Text>
+        <Text className="text-white text-4xl font-extrabold text-center mb-4 leading-tight">
+          YOU ARE OUT AND SAFE
+        </Text>
+        <Text className="text-green-300 text-lg text-center mb-10 font-bold">
+          Please inform the marshal by clicking the button below.
+        </Text>
+        <TouchableOpacity 
+          onPress={markAsSafe}
+          className="bg-green-600 px-12 py-6 rounded-full border-4 border-green-400 shadow-[0_0_60px_rgba(34,197,94,0.6)] mb-8"
+        >
+          <Text className="text-white font-black text-3xl">I AM SAFE</Text>
         </TouchableOpacity>
       </View>
     );
@@ -623,41 +646,7 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
         className="w-full bg-neutral-950 relative border-b-2 border-neutral-800 overflow-hidden"
         onLayout={(e) => setImgLayout({w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height)})}
       >
-        {isOutsideBuilding ? (
-          <View className="flex-1 justify-center items-center px-8 bg-neutral-900">
-            <Text className="text-green-500 text-4xl font-extrabold text-center mb-4">
-              YOU ARE OUT AND SAFE
-            </Text>
-            <Text className="text-white text-lg text-center mb-8 font-bold">
-              Please inform the marshal by clicking the button below.
-            </Text>
-            <TouchableOpacity 
-              onPress={() => updateStatus({
-                clerkId: user?.id || '',
-                incidentId: activeIncident._id,
-                setPanic: false,
-                setSafe: true,
-                lat: drLocation?.lat ?? 0,
-                lon: drLocation?.lon ?? 0
-              })}
-              className="bg-green-600 px-10 py-5 rounded-full border-2 border-green-400 shadow-lg shadow-green-600/50 mb-8"
-            >
-              <Text className="text-white font-black text-2xl">I AM SAFE</Text>
-            </TouchableOpacity>
-
-            <View className="bg-black/50 p-4 rounded-xl w-full border border-neutral-800">
-              <Text className="text-neutral-400 text-xs font-bold mb-1">DEBUG DIAGNOSTICS:</Text>
-              <Text className="text-neutral-500 text-xs">Your Lat: {drLocation?.lat?.toFixed(6)}</Text>
-              <Text className="text-neutral-500 text-xs">Your Lon: {drLocation?.lon?.toFixed(6)}</Text>
-              {autoBuilding?.polygon && (
-                <>
-                  <Text className="text-neutral-500 text-xs mt-2">Building Lat: {Math.min(...autoBuilding.polygon.map((p:any)=>p.lat)).toFixed(5)} to {Math.max(...autoBuilding.polygon.map((p:any)=>p.lat)).toFixed(5)}</Text>
-                  <Text className="text-neutral-500 text-xs">Building Lon: {Math.min(...autoBuilding.polygon.map((p:any)=>p.lon)).toFixed(5)} to {Math.max(...autoBuilding.polygon.map((p:any)=>p.lon)).toFixed(5)}</Text>
-                </>
-              )}
-            </View>
-          </View>
-        ) : activePlanUrl ? (
+        {activePlanUrl ? (
           <>
             <Image 
               source={{ uri: activePlanUrl }} 

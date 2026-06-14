@@ -19,13 +19,13 @@ if (Platform.OS !== 'web') {
     MapView = Maps.default;
     Marker = Maps.Marker;
     Polygon = Maps.Polygon;
-  } catch (e) {}
+  } catch (e) { }
 }
 
 // Math helpers to detect if polygon lines criss-cross (self-intersect)
 function onSegment(p: any, q: any, r: any) {
   return q.lat <= Math.max(p.lat, r.lat) && q.lat >= Math.min(p.lat, r.lat) &&
-         q.lon <= Math.max(p.lon, r.lon) && q.lon >= Math.min(p.lon, r.lon);
+    q.lon <= Math.max(p.lon, r.lon) && q.lon >= Math.min(p.lon, r.lon);
 }
 
 function orientation(p: any, q: any, r: any) {
@@ -48,7 +48,7 @@ function doIntersect(p1: any, q1: any, p2: any, q2: any) {
   return false;
 }
 
-function hasSelfIntersection(polygon: {lat: number, lon: number}[]) {
+function hasSelfIntersection(polygon: { lat: number, lon: number }[]) {
   if (!polygon || polygon.length < 4) return false;
   for (let i = 0; i < polygon.length; i++) {
     const p1 = polygon[i];
@@ -64,7 +64,7 @@ function hasSelfIntersection(polygon: {lat: number, lon: number}[]) {
 }
 
 export default function AdminDashboard() {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const { signOut } = useAuth();
   const { user } = useUser();
   const dashboardData = useQuery(api.portal.getDashboardData, { clerkId: user?.id });
@@ -89,7 +89,7 @@ export default function AdminDashboard() {
   const [isRegistering, setIsRegistering] = React.useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = React.useState(false);
   const [selectedBuilding, setSelectedBuilding] = React.useState<any>(null);
-  
+
   const [isMapEditorOpen, setIsMapEditorOpen] = React.useState(false);
   const [isLocatingUser, setIsLocatingUser] = React.useState(false);
   const [mapEditorStep, setMapEditorStep] = React.useState<1 | 2>(1); // 1 = Calibration, 2 = Safe Routes
@@ -97,30 +97,30 @@ export default function AdminDashboard() {
   const [userZoom, setUserZoom] = React.useState(1);
   const [step1Zoom, setStep1Zoom] = React.useState(1);
   const [step1PanMode, setStep1PanMode] = React.useState(false);
-  
-  const [mapPanOffset, setMapPanOffset] = React.useState({x: 0, y: 0});
-  const [step1PanOffset, setStep1PanOffset] = React.useState({x: 0, y: 0});
-  
+
+  const [mapPanOffset, setMapPanOffset] = React.useState({ x: 0, y: 0 });
+  const [step1PanOffset, setStep1PanOffset] = React.useState({ x: 0, y: 0 });
+
   const gestureState = React.useRef({
     isTwoFinger: false,
     initialDistance: 0,
     initialZoom: 1,
-    lastCenter: {x: 0, y: 0},
-    lastPan: {x: 0, y: 0}
+    lastCenter: { x: 0, y: 0 },
+    lastPan: { x: 0, y: 0 }
   });
 
   const [activeCalibIdx, setActiveCalibIdx] = React.useState(0);
-  const [calibPoints, setCalibPoints] = React.useState<{x: number, y: number}[]>([]);
-  const [gridPaths, setGridPaths] = React.useState<{row: number, col: number, lat: number, lon: number, isExit: boolean}[]>([]);
-  const [imgLayout, setImgLayout] = React.useState<{w: number, h: number}>({w: 1, h: 1});
+  const [calibPoints, setCalibPoints] = React.useState<{ x: number, y: number }[]>([]);
+  const [gridPaths, setGridPaths] = React.useState<{ row: number, col: number, lat: number, lon: number, isExit: boolean }[]>([]);
+  const [imgLayout, setImgLayout] = React.useState<{ w: number, h: number }>({ w: 1, h: 1 });
   const [imageAspectRatio, setImageAspectRatio] = React.useState<number | null>(null);
   const [isUploading, setIsUploading] = React.useState(false);
-  const [editingPins, setEditingPins] = React.useState<{lat: number, lon: number, label?: string}[] | null>(null);
+  const [editingPins, setEditingPins] = React.useState<{ lat: number, lon: number, label?: string }[] | null>(null);
   const [editBName, setEditBName] = React.useState("");
   const [editBSite, setEditBSite] = React.useState("");
   const [editBAddress, setEditBAddress] = React.useState("");
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
-  const [confirmDialog, setConfirmDialog] = React.useState({ visible: false, title: "", message: "", onConfirm: () => {}, intent: "success" as "success" | "warning" | "danger" });
+  const [confirmDialog, setConfirmDialog] = React.useState({ visible: false, title: "", message: "", onConfirm: () => { }, intent: "success" as "success" | "warning" | "danger" });
 
   const [manageSiteName, setManageSiteName] = React.useState<string | null>(null);
   const [siteDesc, setSiteDesc] = React.useState("");
@@ -133,7 +133,7 @@ export default function AdminDashboard() {
   const [bName, setBName] = React.useState("");
   const [bSite, setBSite] = React.useState("");
   const [bAddress, setBAddress] = React.useState("");
-  const [bPins, setBPins] = React.useState<{lat: number, lon: number, label?: string}[]>([]);
+  const [bPins, setBPins] = React.useState<{ lat: number, lon: number, label?: string }[]>([]);
   const [bImageUri, setBImageUri] = React.useState<string | null>(null);
 
   const [showSettings, setShowSettings] = React.useState(false);
@@ -161,68 +161,88 @@ export default function AdminDashboard() {
     return inc?.incidentId;
   }, [isLocatingUser, selectedBuilding, activeIncidents]);
 
-  const locatingRollCall = useQuery(api.portal.getRollCall, locatingIncidentId ? { clerkId: user?.id || "", incidentId: locatingIncidentId } : "skip") || [];
+  const rawEvacData = useQuery(api.portal.getEvacuationData, locatingIncidentId ? { clerkId: user?.id || "", incidentId: locatingIncidentId } : "skip");
+  const locatingRollCall = rawEvacData ? rawEvacData.inside : [];
 
   const getDistanceInMeters = (lat1: number, lon1: number, lat2: number, lon2: number) => {
     const R = 6371e3;
-    const p1 = lat1 * Math.PI/180;
-    const p2 = lat2 * Math.PI/180;
-    const dp = (lat2-lat1) * Math.PI/180;
-    const dl = (lon2-lon1) * Math.PI/180;
-    const a = Math.sin(dp/2) * Math.sin(dp/2) + Math.cos(p1) * Math.cos(p2) * Math.sin(dl/2) * Math.sin(dl/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    const p1 = lat1 * Math.PI / 180;
+    const p2 = lat2 * Math.PI / 180;
+    const dp = (lat2 - lat1) * Math.PI / 180;
+    const dl = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dp / 2) * Math.sin(dp / 2) + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) * Math.sin(dl / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   };
 
   const getGridDimensions = () => {
     if (!selectedBuilding?.polygon || selectedBuilding.polygon.length < 4) return { rows: 1, cols: 1, minLat: 0, maxLat: 0, minLon: 0, maxLon: 0 };
     const poly = selectedBuilding.polygon;
-    const minLat = Math.min(...poly.map((p:any)=>p.lat));
-    const maxLat = Math.max(...poly.map((p:any)=>p.lat));
-    const minLon = Math.min(...poly.map((p:any)=>p.lon));
-    const maxLon = Math.max(...poly.map((p:any)=>p.lon));
-    
+    const minLat = Math.min(...poly.map((p: any) => p.lat));
+    const maxLat = Math.max(...poly.map((p: any) => p.lat));
+    const minLon = Math.min(...poly.map((p: any) => p.lon));
+    const maxLon = Math.max(...poly.map((p: any) => p.lon));
+
     const heightMeters = getDistanceInMeters(minLat, minLon, maxLat, minLon);
     const widthMeters = getDistanceInMeters(minLat, minLon, minLat, maxLon);
-    
+
     const rows = Math.max(1, Math.ceil(heightMeters / 5));
     const cols = Math.max(1, Math.ceil(widthMeters / 5));
-    
+
     return { rows, cols, minLat, maxLat, minLon, maxLon };
   };
 
   const getDynamicMapHeight = () => {
+    if (selectedBuilding?.imageCalibrationPoints?.length >= 4 && imageAspectRatio) {
+      const calib = selectedBuilding.imageCalibrationPoints;
+      // We assume pixel percentages (x <= 1, y <= 1) based on current architecture
+      // For legacy compatibility, we'll gracefully fallback to standard bounding if needed.
+      const minCX = Math.min(...calib.map((c: any) => c.x));
+      const maxCX = Math.max(...calib.map((c: any) => c.x));
+      const minCY = Math.min(...calib.map((c: any) => c.y));
+      const maxCY = Math.max(...calib.map((c: any) => c.y));
+
+      const widthPct = maxCX - minCX;
+      const heightPct = maxCY - minCY;
+
+      if (widthPct > 0 && heightPct > 0 && widthPct <= 1 && heightPct <= 1) {
+        const boxAspect = (widthPct / heightPct) * imageAspectRatio;
+        const containerWidth = width - 48; // padding
+        return Math.max(100, Math.min(height * 0.8, containerWidth / boxAspect));
+      }
+    }
+
     if (!selectedBuilding?.polygon || selectedBuilding.polygon.length < 4) return 400;
     const poly = selectedBuilding.polygon;
-    const minLat = Math.min(...poly.map((p:any)=>p.lat));
-    const maxLat = Math.max(...poly.map((p:any)=>p.lat));
-    const minLon = Math.min(...poly.map((p:any)=>p.lon));
-    const maxLon = Math.max(...poly.map((p:any)=>p.lon));
-    
+    const minLat = Math.min(...poly.map((p: any) => p.lat));
+    const maxLat = Math.max(...poly.map((p: any) => p.lat));
+    const minLon = Math.min(...poly.map((p: any) => p.lon));
+    const maxLon = Math.max(...poly.map((p: any) => p.lon));
+
     const heightMeters = getDistanceInMeters(minLat, minLon, maxLat, minLon);
     const widthMeters = getDistanceInMeters(minLat, minLon, minLat, maxLon);
-    
+
     if (widthMeters > 0 && heightMeters > 0) {
       const containerWidth = width - 48;
       const aspect = widthMeters / heightMeters;
-      return Math.max(300, Math.min(800, containerWidth / aspect));
+      return Math.max(100, Math.min(height * 0.8, containerWidth / aspect));
     }
     return 400;
   };
 
   const handleTouchStart = (
-    e: any, 
-    currentZoom: number, 
-    currentPan: {x: number, y: number}, 
-    isPanMode: boolean, 
-    onPaint?: (rawX: number, rawY: number)=>void
+    e: any,
+    currentZoom: number,
+    currentPan: { x: number, y: number },
+    isPanMode: boolean,
+    onPaint?: (rawX: number, rawY: number) => void
   ) => {
     const touches = e.nativeEvent.touches;
     if (touches && touches.length >= 2) {
       gestureState.current.isTwoFinger = true;
       const dx = touches[0].pageX - touches[1].pageX;
       const dy = touches[0].pageY - touches[1].pageY;
-      gestureState.current.initialDistance = Math.sqrt(dx*dx + dy*dy);
+      gestureState.current.initialDistance = Math.sqrt(dx * dx + dy * dy);
       gestureState.current.initialZoom = currentZoom;
       gestureState.current.lastCenter = {
         x: (touches[0].pageX + touches[1].pageX) / 2,
@@ -249,12 +269,12 @@ export default function AdminDashboard() {
   };
 
   const handleTouchMove = (
-    e: any, 
-    currentZoom: number, 
-    setZoom: (z: number)=>void, 
-    setPan: (p: {x:number, y:number})=>void, 
+    e: any,
+    currentZoom: number,
+    setZoom: (z: number) => void,
+    setPan: (p: { x: number, y: number }) => void,
     isPanMode: boolean,
-    onPaint: (rawX: number, rawY: number)=>void
+    onPaint: (rawX: number, rawY: number) => void
   ) => {
     const touches = e.nativeEvent.touches;
     if (touches && touches.length >= 2) {
@@ -263,17 +283,17 @@ export default function AdminDashboard() {
         handleTouchStart(e, currentZoom, gestureState.current.lastPan, isPanMode);
         return;
       }
-      
+
       // Zoom
       const dx = touches[0].pageX - touches[1].pageX;
       const dy = touches[0].pageY - touches[1].pageY;
-      const dist = Math.sqrt(dx*dx + dy*dy);
-      
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
       const scaleFactor = dist / Math.max(1, gestureState.current.initialDistance);
       let newZoom = gestureState.current.initialZoom * scaleFactor;
       newZoom = Math.max(1, Math.min(5, newZoom));
       setZoom(newZoom);
-      
+
       // Pan
       const center = {
         x: (touches[0].pageX + touches[1].pageX) / 2,
@@ -281,16 +301,16 @@ export default function AdminDashboard() {
       };
       const diffX = center.x - gestureState.current.lastCenter.x;
       const diffY = center.y - gestureState.current.lastCenter.y;
-      
+
       if (newZoom <= 1.01) {
-        setPan({x: 0, y: 0});
+        setPan({ x: 0, y: 0 });
       } else {
         setPan({
           x: gestureState.current.lastPan.x + diffX,
           y: gestureState.current.lastPan.y + diffY
         });
       }
-      
+
     } else if (!gestureState.current.isTwoFinger) {
       // 1 finger
       if (isPanMode) {
@@ -318,37 +338,37 @@ export default function AdminDashboard() {
     let maskH = imgLayout.h;
     let boxCenterX;
     let boxCenterY;
-    
+
     if (selectedBuilding?.imageCalibrationPoints?.length >= 4 && imgLayout.w > 1) {
       const calib = selectedBuilding.imageCalibrationPoints;
       const bounds = getRenderedImageBounds();
       const isLegacyPixels = calib[0].x > 2;
-      const minCX = Math.min(...calib.map((c:any)=> isLegacyPixels ? c.x / Math.max(1, imgLayout.w) : c.x));
-      const maxCX = Math.max(...calib.map((c:any)=> isLegacyPixels ? c.x / Math.max(1, imgLayout.w) : c.x));
-      const minCY = Math.min(...calib.map((c:any)=> isLegacyPixels ? c.y / Math.max(1, imgLayout.h) : c.y));
-      const maxCY = Math.max(...calib.map((c:any)=> isLegacyPixels ? c.y / Math.max(1, imgLayout.h) : c.y));
-      
+      const minCX = Math.min(...calib.map((c: any) => isLegacyPixels ? c.x / Math.max(1, imgLayout.w) : c.x));
+      const maxCX = Math.max(...calib.map((c: any) => isLegacyPixels ? c.x / Math.max(1, imgLayout.w) : c.x));
+      const minCY = Math.min(...calib.map((c: any) => isLegacyPixels ? c.y / Math.max(1, imgLayout.h) : c.y));
+      const maxCY = Math.max(...calib.map((c: any) => isLegacyPixels ? c.y / Math.max(1, imgLayout.h) : c.y));
+
       const boxW_px = (maxCX - minCX) * bounds.renderW;
       const boxH_px = (maxCY - minCY) * bounds.renderH;
-      
+
       if (boxW_px > 0 && boxH_px > 0) {
-        const idealMaskW = boxW_px / 0.90;
-        const idealMaskH = boxH_px / 0.90;
-        
+        const idealMaskW = boxW_px / 0.95;
+        const idealMaskH = boxH_px / 0.95;
+
         const containerW = imgLayout.w;
         const containerH = imgLayout.h;
-        
+
         const baseScale = Math.min(containerW / idealMaskW, containerH / idealMaskH);
         scale = baseScale * userZoom;
-        
+
         maskW = idealMaskW * scale;
         maskH = idealMaskH * scale;
-        
+
         boxCenterX = bounds.offsetX + ((minCX + maxCX) / 2) * bounds.renderW;
         boxCenterY = bounds.offsetY + ((minCY + maxCY) / 2) * bounds.renderH;
-        
-        translateX = maskW/2 - imgLayout.w/2 - (boxCenterX - imgLayout.w/2) * scale + mapPanOffset.x;
-        translateY = maskH/2 - imgLayout.h/2 - (boxCenterY - imgLayout.h/2) * scale + mapPanOffset.y;
+
+        translateX = maskW / 2 - imgLayout.w / 2 - (boxCenterX - imgLayout.w / 2) * scale + mapPanOffset.x;
+        translateY = maskH / 2 - imgLayout.h / 2 - (boxCenterY - imgLayout.h / 2) * scale + mapPanOffset.y;
       }
     }
     return { scale, translateX, translateY, maskW, maskH, boxCenterX, boxCenterY };
@@ -358,17 +378,17 @@ export default function AdminDashboard() {
     const bounds = getRenderedImageBounds();
     const screenX = rawX;
     const screenY = rawY;
-    const unzoomedX = imgLayout.w/2 + (screenX - imgLayout.w/2 - step1PanOffset.x) / step1Zoom;
-    const unzoomedY = 400/2 + (screenY - 400/2 - step1PanOffset.y) / step1Zoom;
-    
+    const unzoomedX = imgLayout.w / 2 + (screenX - imgLayout.w / 2 - step1PanOffset.x) / step1Zoom;
+    const unzoomedY = imgLayout.h / 2 + (screenY - imgLayout.h / 2 - step1PanOffset.y) / step1Zoom;
+
     const x = (unzoomedX - bounds.offsetX) / bounds.renderW;
     const y = (unzoomedY - bounds.offsetY) / bounds.renderH;
-    
+
     if (activeCalibIdx === -1) return;
-    
+
     const isNewPlacement = !calibPoints[activeCalibIdx];
     const newPoints = [...calibPoints];
-    newPoints[activeCalibIdx] = {x, y};
+    newPoints[activeCalibIdx] = { x, y };
     setCalibPoints(newPoints);
     if (isNewPlacement && activeCalibIdx < (selectedBuilding?.polygon?.length || 4) - 1) {
       setActiveCalibIdx(activeCalibIdx + 1);
@@ -377,20 +397,20 @@ export default function AdminDashboard() {
 
   const handleGridInteraction = (screenX: number, screenY: number) => {
     const { scale, maskW, maskH, boxCenterX, boxCenterY } = getMapTransform();
-    
+
     let rawX = screenX;
     let rawY = screenY;
 
     if (boxCenterX !== undefined && boxCenterY !== undefined) {
-      rawX = boxCenterX + (screenX - imgLayout.w/2 - mapPanOffset.x) / scale;
-      rawY = boxCenterY + (screenY - imgLayout.h/2 - mapPanOffset.y) / scale;
+      rawX = boxCenterX + (screenX - imgLayout.w / 2 - mapPanOffset.x) / scale;
+      rawY = boxCenterY + (screenY - imgLayout.h / 2 - mapPanOffset.y) / scale;
     }
 
     const gps = mapImageToGPS(rawX, rawY);
     const { rows, cols, minLat, maxLat, minLon, maxLon } = getGridDimensions();
     const row = Math.floor((maxLat - gps.lat) / (maxLat - minLat) * rows);
     const col = Math.floor((gps.lon - minLon) / (maxLon - minLon) * cols);
-    
+
     if (row >= 0 && row < rows && col >= 0 && col < cols) {
       setGridPaths(prev => {
         const existingIdx = prev.findIndex(p => p.row === row && p.col === col);
@@ -401,13 +421,13 @@ export default function AdminDashboard() {
             return newPaths;
           }
         } else {
-          const newCell = { 
-            row, col, 
-            lat: maxLat - ((row + 0.5) * (maxLat - minLat) / rows), 
-            lon: minLon + ((col + 0.5) * (maxLon - minLon) / cols), 
-            isExit: gridPaintMode === "exit" 
+          const newCell = {
+            row, col,
+            lat: maxLat - ((row + 0.5) * (maxLat - minLat) / rows),
+            lon: minLon + ((col + 0.5) * (maxLon - minLon) / cols),
+            isExit: gridPaintMode === "exit"
           };
-          
+
           if (existingIdx !== -1) {
             if (prev[existingIdx].isExit === newCell.isExit) return prev; // No change needed
             const newPaths = [...prev];
@@ -427,23 +447,23 @@ export default function AdminDashboard() {
       showToast("No history to export.");
       return;
     }
-    
+
     try {
       const headers = ['Type', 'Site Name', 'Building Name', 'Start Time', 'Duration (Seconds)'];
       const rows = [headers.join(',')];
-      
+
       for (const inc of allIncidentsHistory) {
         const type = inc.isDrill ? "Drill" : "Real Evacuation";
         const site = `"${inc.siteName || ''}"`;
         const building = `"${inc.buildingName || ''}"`;
         const start = `"${new Date(inc.triggeredAt).toLocaleString()}"`;
         const durationSecs = Math.floor(((inc.resolvedAt || Date.now()) - inc.triggeredAt) / 1000);
-        
+
         rows.push([type, site, building, start, durationSecs].join(','));
       }
-      
+
       const csvString = rows.join('\n');
-      
+
       if (Platform.OS === 'web') {
         const blob = new Blob([csvString], { type: 'text/csv' });
         const url = URL.createObjectURL(blob);
@@ -455,7 +475,7 @@ export default function AdminDashboard() {
       } else {
         const fileUri = `${(FileSystem as any).documentDirectory}evacuation_logs_${Date.now()}.csv`;
         await (FileSystem as any).writeAsStringAsync(fileUri, csvString, { encoding: (FileSystem as any).EncodingType.UTF8 });
-        
+
         if (await Sharing.isAvailableAsync()) {
           await Sharing.shareAsync(fileUri, { mimeType: 'text/csv', dialogTitle: 'Export Evacuation Logs' });
         } else {
@@ -490,9 +510,9 @@ export default function AdminDashboard() {
           updated.polygon?.length !== selectedBuilding.polygon?.length ||
           updated.gridPaths?.length !== selectedBuilding.gridPaths?.length
         )) {
-        setSelectedBuilding(updated);
+          setSelectedBuilding(updated);
+        }
       }
-    }
     }
   }, [dashboardData, selectedBuilding]);
 
@@ -517,8 +537,8 @@ export default function AdminDashboard() {
   };
 
   const mapImageToGPS = (rawX: number, rawY: number) => {
-    if (!selectedBuilding?.polygon || selectedBuilding.polygon.length < 4) return {lat: 0, lon: 0};
-    
+    if (!selectedBuilding?.polygon || selectedBuilding.polygon.length < 4) return { lat: 0, lon: 0 };
+
     const bounds = getRenderedImageBounds();
     let u = (rawX - bounds.offsetX) / bounds.renderW;
     let v = (rawY - bounds.offsetY) / bounds.renderH;
@@ -526,20 +546,20 @@ export default function AdminDashboard() {
     const calib = calibPoints.length >= 4 ? calibPoints : selectedBuilding.imageCalibrationPoints;
     if (calib && calib.length >= 4) {
       const isLegacyPixels = calib[0].x > 2;
-      const minCX = Math.min(...calib.map((c:any)=> isLegacyPixels ? c.x / Math.max(1, imgLayout.w) : c.x));
-      const maxCX = Math.max(...calib.map((c:any)=> isLegacyPixels ? c.x / Math.max(1, imgLayout.w) : c.x));
-      const minCY = Math.min(...calib.map((c:any)=> isLegacyPixels ? c.y / Math.max(1, imgLayout.h) : c.y));
-      const maxCY = Math.max(...calib.map((c:any)=> isLegacyPixels ? c.y / Math.max(1, imgLayout.h) : c.y));
-      
+      const minCX = Math.min(...calib.map((c: any) => isLegacyPixels ? c.x / Math.max(1, imgLayout.w) : c.x));
+      const maxCX = Math.max(...calib.map((c: any) => isLegacyPixels ? c.x / Math.max(1, imgLayout.w) : c.x));
+      const minCY = Math.min(...calib.map((c: any) => isLegacyPixels ? c.y / Math.max(1, imgLayout.h) : c.y));
+      const maxCY = Math.max(...calib.map((c: any) => isLegacyPixels ? c.y / Math.max(1, imgLayout.h) : c.y));
+
       u = (u - minCX) / (maxCX - minCX || 1);
       v = (v - minCY) / (maxCY - minCY || 1);
     }
 
     const poly = selectedBuilding.polygon;
-    const minLat = Math.min(...poly.map((p:any)=>p.lat));
-    const maxLat = Math.max(...poly.map((p:any)=>p.lat));
-    const minLon = Math.min(...poly.map((p:any)=>p.lon));
-    const maxLon = Math.max(...poly.map((p:any)=>p.lon));
+    const minLat = Math.min(...poly.map((p: any) => p.lat));
+    const maxLat = Math.max(...poly.map((p: any) => p.lat));
+    const minLon = Math.min(...poly.map((p: any) => p.lon));
+    const maxLon = Math.max(...poly.map((p: any) => p.lon));
 
     const lat = maxLat - v * (maxLat - minLat);
     const lon = minLon + u * (maxLon - minLon);
@@ -549,22 +569,22 @@ export default function AdminDashboard() {
   const mapGPSToImage = (lat: number, lon: number) => {
     if (!selectedBuilding?.polygon || selectedBuilding.polygon.length < 4) return null;
     const poly = selectedBuilding.polygon;
-    const minLat = Math.min(...poly.map((p:any)=>p.lat));
-    const maxLat = Math.max(...poly.map((p:any)=>p.lat));
-    const minLon = Math.min(...poly.map((p:any)=>p.lon));
-    const maxLon = Math.max(...poly.map((p:any)=>p.lon));
-    
+    const minLat = Math.min(...poly.map((p: any) => p.lat));
+    const maxLat = Math.max(...poly.map((p: any) => p.lat));
+    const minLon = Math.min(...poly.map((p: any) => p.lon));
+    const maxLon = Math.max(...poly.map((p: any) => p.lon));
+
     let v = (maxLat - lat) / (maxLat - minLat || 1);
     let u = (lon - minLon) / (maxLon - minLon || 1);
-    
+
     const calib = calibPoints.length >= 4 ? calibPoints : selectedBuilding.imageCalibrationPoints;
     if (calib && calib.length >= 4) {
       const isLegacyPixels = calib[0].x > 2;
-      const minCX = Math.min(...calib.map((c:any)=> isLegacyPixels ? c.x / Math.max(1, imgLayout.w) : c.x));
-      const maxCX = Math.max(...calib.map((c:any)=> isLegacyPixels ? c.x / Math.max(1, imgLayout.w) : c.x));
-      const minCY = Math.min(...calib.map((c:any)=> isLegacyPixels ? c.y / Math.max(1, imgLayout.h) : c.y));
-      const maxCY = Math.max(...calib.map((c:any)=> isLegacyPixels ? c.y / Math.max(1, imgLayout.h) : c.y));
-      
+      const minCX = Math.min(...calib.map((c: any) => isLegacyPixels ? c.x / Math.max(1, imgLayout.w) : c.x));
+      const maxCX = Math.max(...calib.map((c: any) => isLegacyPixels ? c.x / Math.max(1, imgLayout.w) : c.x));
+      const minCY = Math.min(...calib.map((c: any) => isLegacyPixels ? c.y / Math.max(1, imgLayout.h) : c.y));
+      const maxCY = Math.max(...calib.map((c: any) => isLegacyPixels ? c.y / Math.max(1, imgLayout.h) : c.y));
+
       u = minCX + u * (maxCX - minCX);
       v = minCY + v * (maxCY - minCY);
     }
@@ -576,13 +596,13 @@ export default function AdminDashboard() {
     if (!p) return;
     const bounds = getRenderedImageBounds();
     const isLegacyPixels = p.x > 2;
-    
+
     const rawX = (isLegacyPixels ? p.x : bounds.offsetX + p.x * bounds.renderW) + (dx * 2);
     const rawY = (isLegacyPixels ? p.y : bounds.offsetY + p.y * bounds.renderH) + (dy * 2);
-    
+
     const newX = (rawX - bounds.offsetX) / bounds.renderW;
     const newY = (rawY - bounds.offsetY) / bounds.renderH;
-    
+
     const newPoints = [...calibPoints];
     newPoints[idx] = { x: newX, y: newY };
     setCalibPoints(newPoints);
@@ -608,7 +628,7 @@ export default function AdminDashboard() {
     try {
       setIsUploading(true);
       let storageId: any = undefined;
-      
+
       // Upload the image first if provided
       if (bImageUri) {
         const postUrl = await generateUploadUrl();
@@ -628,14 +648,14 @@ export default function AdminDashboard() {
         name: bName,
         ...(bSite ? { siteName: bSite } : {}),
         address: bAddress || "No Address Provided",
-        ...(bPins.length >= 3 && { 
-          latitude: bPins[0].lat, 
-          longitude: bPins[0].lon, 
-          polygon: bPins 
+        ...(bPins.length >= 3 && {
+          latitude: bPins[0].lat,
+          longitude: bPins[0].lon,
+          polygon: bPins
         }),
         ...(storageId && { masterPlanId: storageId }),
       });
-      
+
       setIsRegistering(false);
       setBName("");
       setBSite("");
@@ -674,7 +694,7 @@ export default function AdminDashboard() {
       });
 
       const { storageId } = await uploadResult.json();
-      
+
       if (user?.id) {
         await updateBuildingImage({
           clerkId: user.id,
@@ -723,8 +743,8 @@ export default function AdminDashboard() {
         </View>
 
         <Text className="text-neutral-400 mb-6">
-          {needsSetup 
-            ? "Welcome to FireVision Admin! Please provide your emergency contact details before continuing." 
+          {needsSetup
+            ? "Welcome to FireVision Admin! Please provide your emergency contact details before continuing."
             : "Update your emergency contact information below."}
         </Text>
 
@@ -748,7 +768,7 @@ export default function AdminDashboard() {
             onChangeText={setSetupPhone}
           />
 
-          <TouchableOpacity 
+          <TouchableOpacity
             className={`bg-red-600 py-4 rounded-xl items-center mb-6 ${isSavingSetup ? 'opacity-50' : ''}`}
             disabled={isSavingSetup || (!setupName && !dashboardData.name) || (!setupPhone && !dashboardData.phone)}
             onPress={async () => {
@@ -760,7 +780,7 @@ export default function AdminDashboard() {
                   phone: setupPhone || dashboardData.phone || "",
                 });
                 setShowSettings(false);
-              } catch(e) {
+              } catch (e) {
                 showToast("Error saving profile", "error");
               } finally {
                 setIsSavingSetup(false);
@@ -771,7 +791,7 @@ export default function AdminDashboard() {
           </TouchableOpacity>
 
           {!needsSetup && (
-            <TouchableOpacity 
+            <TouchableOpacity
               className="bg-neutral-800 border border-neutral-700 py-4 rounded-xl items-center flex-row justify-center"
               onPress={async () => {
                 try {
@@ -806,13 +826,13 @@ export default function AdminDashboard() {
           <Text className="text-red-400 font-bold text-xs mt-1" numberOfLines={1} ellipsizeMode="tail">{dashboardData.name || user?.primaryEmailAddress?.emailAddress}</Text>
         </View>
         <View className="flex-row items-center shrink-0">
-          <TouchableOpacity 
+          <TouchableOpacity
             className="bg-neutral-800 p-3 rounded-full border border-neutral-700 mr-2"
             onPress={() => setShowSettings(true)}
           >
             <Text className="text-white">⚙️</Text>
           </TouchableOpacity>
-          <TouchableOpacity 
+          <TouchableOpacity
             className="bg-neutral-800 p-3 rounded-full border border-neutral-700"
             onPress={() => signOut()}
           >
@@ -822,17 +842,17 @@ export default function AdminDashboard() {
       </View>
 
       <ScrollView className="flex-1 px-6">
-        
+
         {/* Quick Actions */}
         <View className="flex-row space-x-4 mb-8">
-          <TouchableOpacity 
+          <TouchableOpacity
             className="flex-1 bg-neutral-800 border border-neutral-700 p-4 rounded-2xl items-center mr-2"
             onPress={() => setIsRegistering(true)}
           >
             <Text className="text-2xl mb-1">🗺️</Text>
             <Text className="text-white font-bold text-center text-xs">Add Location</Text>
           </TouchableOpacity>
-          <TouchableOpacity 
+          <TouchableOpacity
             className="flex-1 bg-neutral-800 border border-neutral-700 p-4 rounded-2xl items-center ml-2"
             onPress={() => setIsHistoryOpen(true)}
           >
@@ -865,10 +885,10 @@ export default function AdminDashboard() {
           });
 
           const renderBuilding = (building: any) => {
-            const isComplete = building.polygon && building.polygon.length >= 3 && 
-                               building.masterPlanId && 
-                               building.imageCalibrationPoints && building.imageCalibrationPoints.length >= 3 &&
-                               building.gridPaths && building.gridPaths.some((n: any) => n.isExit);
+            const isComplete = building.polygon && building.polygon.length >= 3 &&
+              building.masterPlanId &&
+              building.imageCalibrationPoints && building.imageCalibrationPoints.length >= 3 &&
+              building.gridPaths && building.gridPaths.some((n: any) => n.isExit);
             const activeIncident = activeIncidents.find((i: any) => i.buildingId === building._id);
             const isAlarming = !!activeIncident;
 
@@ -877,13 +897,13 @@ export default function AdminDashboard() {
                 <View className="flex-row justify-between items-center mb-3">
                   <View className="flex-row items-center flex-1">
                     <Text className="text-white font-bold text-xl mr-2 shrink" numberOfLines={1}>{building.name}</Text>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       className="bg-neutral-700/50 p-1.5 rounded-full"
                       onPress={() => {
                         const defaultLabels = ["Top Left", "Bottom Left", "Bottom Right", "Top Right"];
                         const populatedPolygon = (building.polygon || []).map((p: any, i: number) => ({
                           ...p,
-                          label: p.label || (i < 4 ? defaultLabels[i] : `P${i+1}`)
+                          label: p.label || (i < 4 ? defaultLabels[i] : `P${i + 1}`)
                         }));
                         setSelectedBuilding({ ...building, polygon: populatedPolygon });
                         setEditingPins(populatedPolygon);
@@ -896,9 +916,9 @@ export default function AdminDashboard() {
                       <Text className="text-sm">⚙️</Text>
                     </TouchableOpacity>
                   </View>
-                  
+
                   {!isAlarming && isComplete && (
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       className="bg-amber-600/80 px-4 py-2 rounded-lg border border-amber-500 ml-2 shrink-0"
                       onPress={() => confirmAction("Start Test Drill", `Are you sure you want to manually start a TEST DRILL for ${building.name}?`, () => triggerIncident({ clerkId: user?.id || "", buildingId: building._id, isDrill: true }), "warning")}
                     >
@@ -931,28 +951,28 @@ export default function AdminDashboard() {
                   <View className="border-t border-neutral-700 pt-3 mt-1">
                     {isAlarming ? (
                       <View>
-                        <TouchableOpacity 
+                        <TouchableOpacity
                           className={`w-full py-3 rounded-lg flex-row items-center justify-center ${activeIncident.isDrill ? 'bg-amber-600' : 'bg-green-600'}`}
                           onPress={() => confirmAction(activeIncident.isDrill ? "Resolve Drill" : "Resolve Evacuation", `Are you sure you want to end the ${activeIncident.isDrill ? 'drill' : 'evacuation'} for ${building.name}?`, () => resolveIncident({ clerkId: user?.id || "", buildingId: building._id }))}
                         >
                           <Text className="text-white font-bold text-center">✅ Resolve {activeIncident.isDrill ? 'Drill' : 'Evacuation'}</Text>
                         </TouchableOpacity>
-                        
-                        <LiveRollCall 
-                          clerkId={user?.id || ""} 
-                          incidentId={activeIncident.incidentId} 
+
+                        <LiveRollCall
+                          clerkId={user?.id || ""}
+                          incidentId={activeIncident.incidentId}
                           buildingPolygon={building.polygon}
                           onLocateUser={(lat, lon, name) => {
                             setSelectedBuilding(building);
                             setEditingPins([{ lat, lon, label: name }]);
                             setIsLocatingUser(true);
                             setIsMapEditorOpen(true);
-                          }}  
+                          }}
                         />
                       </View>
                     ) : (
                       <View className="pt-2">
-                        <TouchableOpacity 
+                        <TouchableOpacity
                           className="bg-red-600 w-full py-4 rounded-lg flex-row items-center justify-center border border-red-500 shadow-lg"
                           onPress={() => confirmAction("Trigger Evacuation", `Are you sure you want to trigger the REAL evacuation for ${building.name}? This will alert all guests.`, () => triggerIncident({ clerkId: user?.id || "", buildingId: building._id, isDrill: false }), "danger")}
                         >
@@ -970,22 +990,22 @@ export default function AdminDashboard() {
             <View>
               {Object.keys(sites).map(siteName => {
                 const siteBuildings = sites[siteName];
-                const activeIncidentsForSite = siteBuildings.map(b => activeIncidents.find((i:any) => i.buildingId === b._id)).filter(Boolean);
+                const activeIncidentsForSite = siteBuildings.map(b => activeIncidents.find((i: any) => i.buildingId === b._id)).filter(Boolean);
                 const activeCount = activeIncidentsForSite.length;
                 const activeInSite = activeCount > 0;
                 const allInSiteActive = activeCount === siteBuildings.length;
-                const isRealEmergency = activeIncidentsForSite.some((i:any) => !i.isDrill);
+                const isRealEmergency = activeIncidentsForSite.some((i: any) => !i.isDrill);
                 const siteDetail = dashboardData?.sites?.find((s: any) => s.name === siteName);
                 const isSiteComplete = siteBuildings.every(b => b.polygon && b.polygon.length >= 3 && b.masterPlanId && b.imageCalibrationPoints && b.imageCalibrationPoints.length >= 3 && b.gridPaths && b.gridPaths.some((n: any) => n.isExit));
-                
+
                 let siteStatusClass = 'border border-neutral-700/60';
                 if (allInSiteActive) {
-                  siteStatusClass = isRealEmergency 
-                    ? 'border-2 border-red-500 shadow-lg shadow-red-500/40 bg-red-950/10' 
+                  siteStatusClass = isRealEmergency
+                    ? 'border-2 border-red-500 shadow-lg shadow-red-500/40 bg-red-950/10'
                     : 'border-2 border-amber-500 shadow-lg shadow-amber-500/40 bg-amber-950/10';
                 } else if (activeInSite) {
-                  siteStatusClass = isRealEmergency 
-                    ? 'border-2 border-red-500/50 shadow-md shadow-red-500/20' 
+                  siteStatusClass = isRealEmergency
+                    ? 'border-2 border-red-500/50 shadow-md shadow-red-500/20'
                     : 'border-2 border-amber-500/50 shadow-md shadow-amber-500/20';
                 }
 
@@ -994,7 +1014,7 @@ export default function AdminDashboard() {
                     <View className="flex-row justify-between items-center bg-neutral-800/60 p-5 border-b border-neutral-700/50">
                       <View className="flex-row items-center flex-1">
                         <Text className="text-2xl font-black text-white tracking-wide mr-3 shrink">{siteName}</Text>
-                        <TouchableOpacity 
+                        <TouchableOpacity
                           className="bg-neutral-700/50 p-2 rounded-full"
                           onPress={() => {
                             setManageSiteName(siteName);
@@ -1007,9 +1027,9 @@ export default function AdminDashboard() {
                           <Text className="text-lg">⚙️</Text>
                         </TouchableOpacity>
                       </View>
-                      
+
                       {!allInSiteActive && isSiteComplete && siteBuildings.length > 0 && (
-                        <TouchableOpacity 
+                        <TouchableOpacity
                           className="bg-amber-600/80 px-4 py-2 rounded-lg border border-amber-500 ml-2"
                           onPress={() => confirmAction("Test Drill Site", `Are you sure you want to trigger a mass TEST DRILL for ALL buildings in ${siteName}?`, () => triggerSiteIncident({ clerkId: user?.id || "", siteName, isDrill: true }), "warning")}
                         >
@@ -1017,7 +1037,7 @@ export default function AdminDashboard() {
                         </TouchableOpacity>
                       )}
                     </View>
-                    
+
                     {(!siteDetail || !siteDetail.description || !siteDetail.contactPhone) && (
                       <View className="bg-amber-900/40 p-4 border-b border-neutral-700/50 flex-row items-center">
                         <Text className="text-amber-500 text-xl mr-3">⚠️</Text>
@@ -1031,13 +1051,13 @@ export default function AdminDashboard() {
                     <View className="p-4 pt-6">
                       {siteBuildings.map(b => renderBuilding(b))}
                     </View>
-                    
+
                     {/* Separated Evacuate Footer */}
                     {siteBuildings.length > 0 && (
                       <View className="bg-neutral-800/80 p-5 border-t border-neutral-700/50">
                         {allInSiteActive ? (
-                          <TouchableOpacity 
-                            className="bg-green-600 w-full py-4 rounded-xl shadow-sm items-center justify-center border border-green-500" 
+                          <TouchableOpacity
+                            className="bg-green-600 w-full py-4 rounded-xl shadow-sm items-center justify-center border border-green-500"
                             onPress={() => confirmAction(isRealEmergency ? "Resolve Site Emergency" : "Resolve Site Drill", isRealEmergency ? `Are you sure you want to end the real evacuation for all buildings in ${siteName}?` : `Are you sure you want to end the test drill for all buildings in ${siteName}?`, () => resolveSiteIncident({ clerkId: user?.id || "", siteName }), "success")}
                           >
                             <Text className="text-white text-base font-bold text-center">✅ Resolve {isRealEmergency ? 'Entire Site' : 'Site Drill'}</Text>
@@ -1048,14 +1068,14 @@ export default function AdminDashboard() {
                           </View>
                         ) : activeInSite ? (
                           <View className="flex-row space-x-2 mb-2">
-                            <TouchableOpacity 
-                              className={`flex-1 py-3 rounded-xl shadow-sm items-center justify-center border ${isRealEmergency ? 'bg-amber-500 border-amber-600' : 'bg-blue-500 border-blue-600'}`} 
+                            <TouchableOpacity
+                              className={`flex-1 py-3 rounded-xl shadow-sm items-center justify-center border ${isRealEmergency ? 'bg-amber-500 border-amber-600' : 'bg-blue-500 border-blue-600'}`}
                               onPress={() => confirmAction(isRealEmergency ? "Evacuate Rest of Site" : "Drill Rest of Site", isRealEmergency ? `Some buildings are already evacuating. Trigger real alarms for the remaining buildings in ${siteName}?` : `Some buildings are already drilling. Trigger test alarms for the remaining buildings in ${siteName}?`, () => triggerSiteIncident({ clerkId: user?.id || "", siteName, isDrill: !isRealEmergency }), isRealEmergency ? "danger" : "warning")}
                             >
                               <Text className="text-white text-xs font-bold text-center">{isRealEmergency ? `Evacuate Rest of\nSite` : `Drill Rest of\nSite`}</Text>
                             </TouchableOpacity>
-                            <TouchableOpacity 
-                              className="flex-1 bg-green-600 py-3 rounded-xl shadow-sm items-center justify-center border border-green-500" 
+                            <TouchableOpacity
+                              className="flex-1 bg-green-600 py-3 rounded-xl shadow-sm items-center justify-center border border-green-500"
                               onPress={() => confirmAction(isRealEmergency ? "Resolve Partial Evacuation" : "Resolve Partial Drill", isRealEmergency ? `Are you sure you want to resolve the ongoing real alarms for the evacuating buildings in ${siteName}?` : `Are you sure you want to resolve the ongoing test drills in ${siteName}?`, () => resolveSiteIncident({ clerkId: user?.id || "", siteName }), "success")}
                             >
                               <Text className="text-white text-xs font-bold text-center">Resolve Partial{'\n'}{isRealEmergency ? 'Evacuation' : 'Drill'}</Text>
@@ -1063,7 +1083,7 @@ export default function AdminDashboard() {
                           </View>
                         ) : (
                           <View>
-                            <TouchableOpacity 
+                            <TouchableOpacity
                               className="w-full bg-red-600 border-2 border-red-500 py-4 rounded-xl flex-row justify-center items-center shadow-[0_0_15px_rgba(220,38,38,0.4)]"
                               onPress={() => confirmAction("Evacuate Site", `Are you sure you want to trigger a mass evacuation for ALL buildings in ${siteName}?`, () => triggerSiteIncident({ clerkId: user?.id || "", siteName, isDrill: false }), "danger")}
                             >
@@ -1086,9 +1106,9 @@ export default function AdminDashboard() {
             </View>
           );
         })()}
-        
+
         {/* Recent Incidents moved to Modal */}
-        
+
         {/* Footer */}
         <View className="mt-4 mb-8 pt-6 border-t border-neutral-800 items-center px-4">
           <Text className="text-neutral-500 text-xs text-center mb-4">
@@ -1148,7 +1168,7 @@ export default function AdminDashboard() {
 
           <View className="flex-row items-center mb-2">
             <Text className="text-neutral-300 font-bold">Draw Footprint ({bPins.length} pins)</Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               className="bg-red-900/40 w-6 h-6 rounded-full items-center justify-center ml-2 border border-red-500/50"
               onPress={() => alert("Draw the pins sequentially around the outside wall of the building. Do not mix up the order or criss-cross the lines across the middle of the building. If the lines cross, the detection will fail.")}
             >
@@ -1173,65 +1193,65 @@ export default function AdminDashboard() {
           ) : (
             <View className="bg-neutral-800 rounded-2xl overflow-hidden mb-6 border border-neutral-700 relative" style={{ height: 300 }}>
               {Platform.OS === 'web' || !MapView ? (
-              <View className="flex-1 justify-center items-center p-6">
-                <Text className="text-white text-center mb-4">Interactive Maps are not supported in the Web Simulator.</Text>
-                <Text className="text-neutral-400 text-center text-sm mb-4">Please open this Admin Console on a physical mobile device via Expo Go to use the Pin Drop feature.</Text>
-                <View className="flex-row items-center bg-yellow-900/50 p-4 rounded-xl border border-yellow-700">
-                  <Text className="text-yellow-500 font-bold mr-2">⚠️</Text>
-                  <Text className="text-yellow-500 text-xs flex-1">Web Fallback: We will generate 4 fake pins for testing.</Text>
+                <View className="flex-1 justify-center items-center p-6">
+                  <Text className="text-white text-center mb-4">Interactive Maps are not supported in the Web Simulator.</Text>
+                  <Text className="text-neutral-400 text-center text-sm mb-4">Please open this Admin Console on a physical mobile device via Expo Go to use the Pin Drop feature.</Text>
+                  <View className="flex-row items-center bg-yellow-900/50 p-4 rounded-xl border border-yellow-700">
+                    <Text className="text-yellow-500 font-bold mr-2">⚠️</Text>
+                    <Text className="text-yellow-500 text-xs flex-1">Web Fallback: We will generate 4 fake pins for testing.</Text>
+                  </View>
+                  <TouchableOpacity
+                    className={`mt-6 px-6 py-3 rounded-xl ${bPins.length > 0 ? 'bg-green-600' : 'bg-blue-600'}`}
+                    onPress={() => {
+                      setBPins([
+                        { lat: 51.472, lon: -2.124, label: "Top Left" },
+                        { lat: 51.471, lon: -2.124, label: "Bottom Left" },
+                        { lat: 51.471, lon: -2.123, label: "Bottom Right" },
+                        { lat: 51.472, lon: -2.123, label: "Top Right" }
+                      ]);
+                      showToast("4 Test Pins Generated! You can now save the building.");
+                    }}
+                  >
+                    <Text className="text-white font-bold">{bPins.length > 0 ? "Test Polygon Generated!" : "Generate Test Polygon"}</Text>
+                  </TouchableOpacity>
                 </View>
-                <TouchableOpacity 
-                  className={`mt-6 px-6 py-3 rounded-xl ${bPins.length > 0 ? 'bg-green-600' : 'bg-blue-600'}`}
-                  onPress={() => {
-                    setBPins([
-                      {lat: 51.472, lon: -2.124, label: "Top Left"},
-                      {lat: 51.471, lon: -2.124, label: "Bottom Left"},
-                      {lat: 51.471, lon: -2.123, label: "Bottom Right"},
-                      {lat: 51.472, lon: -2.123, label: "Top Right"}
-                    ]);
-                    showToast("4 Test Pins Generated! You can now save the building.");
-                  }}
-                >
-                  <Text className="text-white font-bold">{bPins.length > 0 ? "Test Polygon Generated!" : "Generate Test Polygon"}</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <>
-                <MapView 
-                  style={{ flex: 1 }}
-                  onPress={handleMapPress}
-                  initialRegion={{
-                    latitude: 51.4717,
-                    longitude: -2.1239,
-                    latitudeDelta: 0.01,
-                    longitudeDelta: 0.01,
-                  }}
-                >
-                  {bPins.map((pin, i) => (
-                    <Marker key={i} coordinate={{ latitude: pin.lat, longitude: pin.lon }} />
-                  ))}
-                  {bPins.length > 2 && (
-                    <Polygon 
-                      coordinates={bPins.map(p => ({ latitude: p.lat, longitude: p.lon }))}
-                      fillColor="rgba(255, 0, 0, 0.3)"
-                      strokeColor="rgba(255, 0, 0, 0.8)"
-                      strokeWidth={2}
-                    />
-                  )}
-                </MapView>
-                <TouchableOpacity 
-                  className="absolute bottom-4 left-4 bg-neutral-900/80 p-3 rounded-full border border-neutral-700"
-                  onPress={() => setBPins([])}
-                >
-                  <Text className="text-white text-xs font-bold">Clear Pins</Text>
-                </TouchableOpacity>
-              </>
-            )}
-          </View>
+              ) : (
+                <>
+                  <MapView
+                    style={{ flex: 1 }}
+                    onPress={handleMapPress}
+                    initialRegion={{
+                      latitude: 51.4717,
+                      longitude: -2.1239,
+                      latitudeDelta: 0.01,
+                      longitudeDelta: 0.01,
+                    }}
+                  >
+                    {bPins.map((pin, i) => (
+                      <Marker key={i} coordinate={{ latitude: pin.lat, longitude: pin.lon }} />
+                    ))}
+                    {bPins.length > 2 && (
+                      <Polygon
+                        coordinates={bPins.map(p => ({ latitude: p.lat, longitude: p.lon }))}
+                        fillColor="rgba(255, 0, 0, 0.3)"
+                        strokeColor="rgba(255, 0, 0, 0.8)"
+                        strokeWidth={2}
+                      />
+                    )}
+                  </MapView>
+                  <TouchableOpacity
+                    className="absolute bottom-4 left-4 bg-neutral-900/80 p-3 rounded-full border border-neutral-700"
+                    onPress={() => setBPins([])}
+                  >
+                    <Text className="text-white text-xs font-bold">Clear Pins</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
           )}
 
           <Text className="text-neutral-300 font-bold mb-2">Master Plan Image</Text>
-          <TouchableOpacity 
+          <TouchableOpacity
             className="bg-neutral-800 border border-neutral-700 rounded-xl p-4 items-center mb-6"
             onPress={async () => {
               const libPerm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -1267,7 +1287,7 @@ export default function AdminDashboard() {
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             className={`py-4 rounded-xl items-center mb-8 ${bName && !hasSelfIntersection(bPins) ? 'bg-green-600' : 'bg-neutral-800'}`}
             onPress={handleSaveBuilding}
             disabled={!bName || hasSelfIntersection(bPins) || isUploading}
@@ -1291,12 +1311,12 @@ export default function AdminDashboard() {
                 <Text className="text-white font-bold">✕</Text>
               </TouchableOpacity>
             </View>
-            
+
             {(() => {
-              const isActive = selectedBuilding?.polygon && selectedBuilding.polygon.length >= 3 && 
-                               selectedBuilding.masterPlanId && 
-                               selectedBuilding.imageCalibrationPoints && selectedBuilding.imageCalibrationPoints.length >= 3 &&
-                               selectedBuilding.gridPaths && selectedBuilding.gridPaths.some((n: any) => n.isExit);
+              const isActive = selectedBuilding?.polygon && selectedBuilding.polygon.length >= 3 &&
+                selectedBuilding.masterPlanId &&
+                selectedBuilding.imageCalibrationPoints && selectedBuilding.imageCalibrationPoints.length >= 3 &&
+                selectedBuilding.gridPaths && selectedBuilding.gridPaths.some((n: any) => n.isExit);
               if (!isActive) {
                 return (
                   <View className="bg-red-900/30 p-4 rounded-xl border border-red-500/50 mb-6 flex-row items-center">
@@ -1320,54 +1340,54 @@ export default function AdminDashboard() {
               }
             })()}
 
-              <View className="bg-neutral-800 p-6 rounded-2xl border border-neutral-700 mb-6">
-                <Text className="text-white font-bold mb-2">Building Name</Text>
-                <TextInput
-                  className="bg-neutral-900 border border-neutral-700 rounded-xl p-4 text-white mb-4"
-                  value={editBName}
-                  onChangeText={setEditBName}
-                  placeholder="Building Name"
-                  placeholderTextColor="#525252"
-                />
-                <Text className="text-white font-bold mb-2">Site Name (Optional)</Text>
-                <TextInput
-                  className="bg-neutral-900 border border-neutral-700 rounded-xl p-4 text-white mb-4"
-                  value={editBSite}
-                  onChangeText={setEditBSite}
-                  placeholder="Site Name"
-                  placeholderTextColor="#525252"
-                />
-                <Text className="text-white font-bold mb-2">Address (Optional)</Text>
-                <TextInput
-                  className="bg-neutral-900 border border-neutral-700 rounded-xl p-4 text-white mb-4"
-                  value={editBAddress}
-                  onChangeText={setEditBAddress}
-                  placeholder="Address"
-                  placeholderTextColor="#525252"
-                />
-                <TouchableOpacity 
-                  className={`py-3 rounded-xl items-center ${editBName !== selectedBuilding.name || editBSite !== (selectedBuilding.siteName || "") || editBAddress !== selectedBuilding.address ? 'bg-blue-600' : 'bg-neutral-700'}`}
-                  disabled={editBName === selectedBuilding.name && editBSite === (selectedBuilding.siteName || "") && (editBAddress === selectedBuilding.address || (editBAddress === "" && selectedBuilding.address === "No Address Provided"))}
-                  onPress={async () => {
-                    try {
-                      const finalAddress = editBAddress || "No Address Provided";
-                      await updateBuildingInfo({
-                        clerkId: user?.id || "",
-                        buildingId: selectedBuilding._id,
-                        name: editBName,
-                        ...(editBSite ? { siteName: editBSite } : { siteName: "" }),
-                        address: finalAddress,
-                      });
-                      setSelectedBuilding({...selectedBuilding, name: editBName, siteName: editBSite, address: finalAddress});
-                      showToast("Building details updated!");
-                    } catch(e) {
-                      showToast("Error updating building", "error");
-                    }
-                  }}
-                >
-                  <Text className="text-white font-bold">Save Details</Text>
-                </TouchableOpacity>
-              </View>
+            <View className="bg-neutral-800 p-6 rounded-2xl border border-neutral-700 mb-6">
+              <Text className="text-white font-bold mb-2">Building Name</Text>
+              <TextInput
+                className="bg-neutral-900 border border-neutral-700 rounded-xl p-4 text-white mb-4"
+                value={editBName}
+                onChangeText={setEditBName}
+                placeholder="Building Name"
+                placeholderTextColor="#525252"
+              />
+              <Text className="text-white font-bold mb-2">Site Name (Optional)</Text>
+              <TextInput
+                className="bg-neutral-900 border border-neutral-700 rounded-xl p-4 text-white mb-4"
+                value={editBSite}
+                onChangeText={setEditBSite}
+                placeholder="Site Name"
+                placeholderTextColor="#525252"
+              />
+              <Text className="text-white font-bold mb-2">Address (Optional)</Text>
+              <TextInput
+                className="bg-neutral-900 border border-neutral-700 rounded-xl p-4 text-white mb-4"
+                value={editBAddress}
+                onChangeText={setEditBAddress}
+                placeholder="Address"
+                placeholderTextColor="#525252"
+              />
+              <TouchableOpacity
+                className={`py-3 rounded-xl items-center ${editBName !== selectedBuilding.name || editBSite !== (selectedBuilding.siteName || "") || editBAddress !== selectedBuilding.address ? 'bg-blue-600' : 'bg-neutral-700'}`}
+                disabled={editBName === selectedBuilding.name && editBSite === (selectedBuilding.siteName || "") && (editBAddress === selectedBuilding.address || (editBAddress === "" && selectedBuilding.address === "No Address Provided"))}
+                onPress={async () => {
+                  try {
+                    const finalAddress = editBAddress || "No Address Provided";
+                    await updateBuildingInfo({
+                      clerkId: user?.id || "",
+                      buildingId: selectedBuilding._id,
+                      name: editBName,
+                      ...(editBSite ? { siteName: editBSite } : { siteName: "" }),
+                      address: finalAddress,
+                    });
+                    setSelectedBuilding({ ...selectedBuilding, name: editBName, siteName: editBSite, address: finalAddress });
+                    showToast("Building details updated!");
+                  } catch (e) {
+                    showToast("Error updating building", "error");
+                  }
+                }}
+              >
+                <Text className="text-white font-bold">Save Details</Text>
+              </TouchableOpacity>
+            </View>
 
             <Text className="text-white font-bold text-lg mb-4">Polygon Footprint</Text>
             <View className="bg-neutral-800 rounded-2xl overflow-hidden mb-6 border border-neutral-700 relative" style={{ height: 300 }}>
@@ -1379,14 +1399,14 @@ export default function AdminDashboard() {
                     <Text className="text-green-500 font-bold mr-2">✅</Text>
                     <Text className="text-green-500 text-xs flex-1">This building has {selectedBuilding.polygon?.length || 0} pins saved.</Text>
                   </View>
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     className={`px-6 py-3 rounded-xl ${editingPins && editingPins.length > 0 ? 'bg-green-600' : 'bg-blue-600'}`}
                     onPress={() => {
                       setEditingPins([
-                        {lat: 51.472, lon: -2.124, label: "Top Left"},
-                        {lat: 51.471, lon: -2.124, label: "Bottom Left"},
-                        {lat: 51.471, lon: -2.123, label: "Bottom Right"},
-                        {lat: 51.472, lon: -2.123, label: "Top Right"}
+                        { lat: 51.472, lon: -2.124, label: "Top Left" },
+                        { lat: 51.471, lon: -2.124, label: "Bottom Left" },
+                        { lat: 51.471, lon: -2.123, label: "Bottom Right" },
+                        { lat: 51.472, lon: -2.123, label: "Top Right" }
                       ]);
                       showToast("4 Test Pins Generated! You can now update the building footprint.");
                     }}
@@ -1396,7 +1416,7 @@ export default function AdminDashboard() {
                 </View>
               ) : (
                 <>
-                  <MapView 
+                  <MapView
                     style={{ flex: 1 }}
                     onPress={(e: any) => {
                       if (e.nativeEvent.coordinate && editingPins) {
@@ -1406,24 +1426,24 @@ export default function AdminDashboard() {
                     initialRegion={
                       selectedBuilding.polygon && selectedBuilding.polygon.length > 0
                         ? {
-                            latitude: selectedBuilding.polygon[0].lat,
-                            longitude: selectedBuilding.polygon[0].lon,
-                            latitudeDelta: 0.005,
-                            longitudeDelta: 0.005,
-                          }
+                          latitude: selectedBuilding.polygon[0].lat,
+                          longitude: selectedBuilding.polygon[0].lon,
+                          latitudeDelta: 0.005,
+                          longitudeDelta: 0.005,
+                        }
                         : {
-                            latitude: 51.4717,
-                            longitude: -2.1239,
-                            latitudeDelta: 0.01,
-                            longitudeDelta: 0.01,
-                          }
+                          latitude: 51.4717,
+                          longitude: -2.1239,
+                          latitudeDelta: 0.01,
+                          longitudeDelta: 0.01,
+                        }
                     }
                   >
                     {editingPins?.map((pin: any, i: number) => (
                       <Marker key={i} coordinate={{ latitude: pin.lat, longitude: pin.lon }} />
                     ))}
                     {editingPins && editingPins.length > 2 && (
-                      <Polygon 
+                      <Polygon
                         coordinates={editingPins.map((p: any) => ({ latitude: p.lat, longitude: p.lon }))}
                         fillColor="rgba(255, 0, 0, 0.3)"
                         strokeColor="rgba(255, 0, 0, 0.8)"
@@ -1431,14 +1451,14 @@ export default function AdminDashboard() {
                       />
                     )}
                   </MapView>
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     className="absolute bottom-4 left-4 bg-neutral-900/80 p-3 rounded-full border border-neutral-700"
                     onPress={() => setEditingPins([])}
                   >
                     <Text className="text-white text-xs font-bold">Clear Pins</Text>
                   </TouchableOpacity>
                   {editingPins && editingPins !== selectedBuilding.polygon && editingPins.length >= 4 && !hasSelfIntersection(editingPins) && (
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       className="absolute bottom-4 right-4 bg-green-600 p-3 rounded-full"
                       onPress={async () => {
                         try {
@@ -1447,9 +1467,9 @@ export default function AdminDashboard() {
                             buildingId: selectedBuilding._id,
                             polygon: editingPins
                           });
-                          setSelectedBuilding({...selectedBuilding, polygon: editingPins});
+                          setSelectedBuilding({ ...selectedBuilding, polygon: editingPins });
                           showToast("Polygon updated successfully!");
-                        } catch(e) {
+                        } catch (e) {
                           showToast("Error saving polygon", "error");
                         }
                       }}
@@ -1463,7 +1483,7 @@ export default function AdminDashboard() {
 
             <View className="flex-row items-center mb-2">
               <Text className="text-white font-bold text-lg">Manual Coordinate Editor</Text>
-              <TouchableOpacity 
+              <TouchableOpacity
                 className="bg-red-900/40 w-6 h-6 rounded-full items-center justify-center ml-2 border border-red-500/50"
                 onPress={() => alert("Ensure the coordinates trace the perimeter sequentially. Mixing the order will cause lines to criss-cross and break the detection math.")}
               >
@@ -1471,7 +1491,7 @@ export default function AdminDashboard() {
               </TouchableOpacity>
             </View>
             <Text className="text-neutral-400 text-sm mb-4">You can manually fine-tune the exact GPS coordinates of your pins below. Useful for fixing inaccurate taps.</Text>
-            
+
             {editingPins && hasSelfIntersection(editingPins) && (
               <View className="bg-red-900/30 p-3 rounded-xl border border-red-500/50 mb-4 flex-row items-center">
                 <Text className="text-red-500 mr-2">⚠️</Text>
@@ -1493,8 +1513,8 @@ export default function AdminDashboard() {
                     <TextInput
                       style={{ minWidth: 0 }}
                       className="bg-neutral-900 border border-neutral-700 text-white p-3 rounded-lg text-sm w-full"
-                      value={p.label !== undefined ? p.label : `P${i+1}`}
-                      placeholder={`P${i+1}`}
+                      value={p.label !== undefined ? p.label : `P${i + 1}`}
+                      placeholder={`P${i + 1}`}
                       placeholderTextColor="#525252"
                       onChangeText={(val) => {
                         const newPins = [...(editingPins || [])];
@@ -1503,43 +1523,43 @@ export default function AdminDashboard() {
                       }}
                     />
                   </View>
-                  
+
                   <View className="flex-1 mr-2">
                     <TextInput
                       style={{ minWidth: 0 }}
                       className="bg-neutral-900 border border-neutral-700 text-white p-3 rounded-lg text-sm w-full"
-                    value={p.lat?.toString()}
-                    keyboardType="numeric"
-                    onChangeText={(val) => {
-                      const newPins = [...(editingPins || [])];
-                      newPins[i].lat = val as any;
-                      setEditingPins(newPins);
-                    }}
-                  />
+                      value={p.lat?.toString()}
+                      keyboardType="numeric"
+                      onChangeText={(val) => {
+                        const newPins = [...(editingPins || [])];
+                        newPins[i].lat = val as any;
+                        setEditingPins(newPins);
+                      }}
+                    />
                   </View>
 
                   <View className="flex-1">
                     <TextInput
                       style={{ minWidth: 0 }}
                       className="bg-neutral-900 border border-neutral-700 text-white p-3 rounded-lg text-sm w-full"
-                    value={p.lon?.toString()}
-                    keyboardType="numeric"
-                    onChangeText={(val) => {
-                      const newPins = [...(editingPins || [])];
-                      newPins[i].lon = val as any;
-                      setEditingPins(newPins);
-                    }}
-                  />
+                      value={p.lon?.toString()}
+                      keyboardType="numeric"
+                      onChangeText={(val) => {
+                        const newPins = [...(editingPins || [])];
+                        newPins[i].lon = val as any;
+                        setEditingPins(newPins);
+                      }}
+                    />
                   </View>
 
                   <View className="ml-2 flex-col justify-between">
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       className={`p-1 rounded mb-1 items-center justify-center ${i === 0 ? 'bg-neutral-800 opacity-50' : 'bg-neutral-700'}`}
                       onPress={() => {
                         if (i === 0) return;
                         const newPins = [...editingPins];
-                        const temp = newPins[i-1];
-                        newPins[i-1] = newPins[i];
+                        const temp = newPins[i - 1];
+                        newPins[i - 1] = newPins[i];
                         newPins[i] = temp;
                         setEditingPins(newPins);
                       }}
@@ -1547,13 +1567,13 @@ export default function AdminDashboard() {
                     >
                       <Text className="text-white text-[10px]">▲</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       className={`p-1 rounded items-center justify-center ${i === editingPins.length - 1 ? 'bg-neutral-800 opacity-50' : 'bg-neutral-700'}`}
                       onPress={() => {
                         if (i === editingPins.length - 1) return;
                         const newPins = [...editingPins];
-                        const temp = newPins[i+1];
-                        newPins[i+1] = newPins[i];
+                        const temp = newPins[i + 1];
+                        newPins[i + 1] = newPins[i];
                         newPins[i] = temp;
                         setEditingPins(newPins);
                       }}
@@ -1563,7 +1583,7 @@ export default function AdminDashboard() {
                     </TouchableOpacity>
                   </View>
 
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     className="ml-2 bg-red-900/50 p-2 rounded-lg items-center justify-center h-full"
                     style={{ minHeight: 48 }}
                     onPress={() => {
@@ -1577,30 +1597,30 @@ export default function AdminDashboard() {
               ))}
 
               <View className="flex-row justify-between mt-4">
-                <TouchableOpacity 
+                <TouchableOpacity
                   className="bg-neutral-700 px-4 py-2 rounded-lg"
                   onPress={() => {
-                    const newPins = [...(editingPins || []), {lat: 0, lon: 0}];
+                    const newPins = [...(editingPins || []), { lat: 0, lon: 0 }];
                     setEditingPins(newPins);
                   }}
                 >
                   <Text className="text-white font-bold text-sm">+ Add Pin</Text>
                 </TouchableOpacity>
 
-                {editingPins && editingPins.length >= 4 && !hasSelfIntersection(editingPins.map((p: any) => ({...p, lat: parseFloat(p.lat)||0, lon: parseFloat(p.lon)||0}))) && (
-                  <TouchableOpacity 
+                {editingPins && editingPins.length >= 4 && !hasSelfIntersection(editingPins.map((p: any) => ({ ...p, lat: parseFloat(p.lat) || 0, lon: parseFloat(p.lon) || 0 }))) && (
+                  <TouchableOpacity
                     className="bg-green-600 px-6 py-3 rounded-lg"
                     onPress={async () => {
                       try {
-                        const parsedPins = editingPins.map((p: any) => ({...p, lat: parseFloat(p.lat)||0, lon: parseFloat(p.lon)||0}));
+                        const parsedPins = editingPins.map((p: any) => ({ ...p, lat: parseFloat(p.lat) || 0, lon: parseFloat(p.lon) || 0 }));
                         await updateBuildingPolygon({
                           clerkId: user?.id || "",
                           buildingId: selectedBuilding._id,
                           polygon: parsedPins
                         });
-                        setSelectedBuilding({...selectedBuilding, polygon: parsedPins});
+                        setSelectedBuilding({ ...selectedBuilding, polygon: parsedPins });
                         showToast("Coordinates manually updated successfully!");
-                      } catch(e) {
+                      } catch (e) {
                         showToast("Error saving polygon", "error");
                       }
                     }}
@@ -1614,15 +1634,15 @@ export default function AdminDashboard() {
             <Text className="text-white font-bold text-lg mb-4">Master Floor Plan</Text>
             {selectedBuilding.masterPlanUrl ? (
               <View className="bg-neutral-800 border border-neutral-700 p-4 rounded-2xl items-center mb-6">
-                <Image 
-                  source={{ uri: selectedBuilding.masterPlanUrl }} 
-                  className="w-full h-48 rounded-xl mb-4" 
+                <Image
+                  source={{ uri: selectedBuilding.masterPlanUrl }}
+                  className="w-full h-48 rounded-xl mb-4"
                   resizeMode="contain"
                 />
                 <Text className="text-green-400 font-bold text-lg mb-1">✓ Floor Plan Active</Text>
                 <Text className="text-neutral-400 text-xs text-center mb-4">This map will be pushed to Guests entering the footprint.</Text>
-                
-                <TouchableOpacity 
+
+                <TouchableOpacity
                   className="bg-neutral-700 border border-neutral-600 px-6 py-3 rounded-xl flex-row items-center w-full justify-center"
                   onPress={() => handleUploadImage(selectedBuilding._id)}
                   disabled={isUploading}
@@ -1632,7 +1652,7 @@ export default function AdminDashboard() {
                 </TouchableOpacity>
 
                 <View className="w-full mt-4">
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     className="w-full bg-blue-600 py-4 rounded-xl items-center flex-row justify-center shadow-lg"
                     onPress={() => {
                       setCalibPoints(selectedBuilding.imageCalibrationPoints || []);
@@ -1652,7 +1672,7 @@ export default function AdminDashboard() {
             ) : (
               <View className="bg-neutral-800 border border-neutral-700 p-6 rounded-2xl items-center mb-6">
                 <Text className="text-neutral-400 text-center mb-4">No floor plan image uploaded yet. Guests will not see a map.</Text>
-                <TouchableOpacity 
+                <TouchableOpacity
                   className="bg-amber-600 px-6 py-3 rounded-xl flex-row items-center"
                   onPress={() => handleUploadImage(selectedBuilding._id)}
                   disabled={isUploading}
@@ -1663,7 +1683,7 @@ export default function AdminDashboard() {
               </View>
             )}
 
-            <TouchableOpacity 
+            <TouchableOpacity
               className="bg-red-900/30 border border-red-700 py-4 rounded-xl items-center mb-12"
               onPress={() => setShowDeleteConfirm(true)}
             >
@@ -1678,15 +1698,15 @@ export default function AdminDashboard() {
           <View className="bg-neutral-900 border border-neutral-700 p-6 rounded-3xl w-full max-w-sm">
             <Text className="text-xl font-bold text-white mb-2">Delete Building</Text>
             <Text className="text-neutral-400 mb-6">Are you sure you want to delete {selectedBuilding?.name}? This action cannot be undone and will permanently remove all associated maps and layouts.</Text>
-            
+
             <View className="flex-row space-x-4">
-              <TouchableOpacity 
+              <TouchableOpacity
                 className="flex-1 bg-neutral-800 py-4 rounded-xl items-center border border-neutral-700 mr-2"
                 onPress={() => setShowDeleteConfirm(false)}
               >
                 <Text className="text-white font-bold">Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
+              <TouchableOpacity
                 className="flex-1 bg-red-600 py-4 rounded-xl items-center border border-red-500"
                 onPress={async () => {
                   try {
@@ -1714,17 +1734,17 @@ export default function AdminDashboard() {
         <View className="flex-1 bg-neutral-900 pt-16 px-4">
           <View className="flex-row justify-between items-center mb-4">
             <Text className="text-xl font-bold text-white">{isLocatingUser ? "Locate Trapped User" : "Manage Map Layout"}</Text>
-            <TouchableOpacity onPress={() => { 
-              setIsMapEditorOpen(false); 
+            <TouchableOpacity onPress={() => {
+              setIsMapEditorOpen(false);
               if (isLocatingUser) {
                 setSelectedBuilding(null);
               }
-              setIsLocatingUser(false); 
+              setIsLocatingUser(false);
             }} className="bg-neutral-800 p-2 rounded-full border border-neutral-700">
               <Text className="text-white font-bold">✕</Text>
             </TouchableOpacity>
           </View>
-          
+
           {isLocatingUser ? (() => {
             const initialTarget = editingPins?.[0];
             const liveUser = locatingRollCall.find((r: any) => r.userName === initialTarget?.label);
@@ -1747,7 +1767,7 @@ export default function AdminDashboard() {
             return (
               <View className="flex-1">
                 <Text className="text-red-400 mb-4 font-bold text-center">Tracking: {target?.label}</Text>
-                
+
                 {!isInside ? (
                   <View className="bg-neutral-800 rounded-xl mb-6 w-full items-center justify-center border border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.4)]" style={{ height: '70%' }}>
                     <Text className="text-red-500 font-black text-2xl mb-2 text-center">OUT OF BOUNDS</Text>
@@ -1755,24 +1775,210 @@ export default function AdminDashboard() {
                     <Text className="text-red-300 text-center mt-4 px-8">They may have exited safely without pressing the 'I am Safe' button.</Text>
                   </View>
                 ) : (
-                  <View 
-                    className="bg-neutral-800 rounded-xl overflow-hidden mb-6 w-full" 
+                  <View
+                    className="bg-neutral-800 rounded-xl overflow-hidden mb-6 w-full"
                     style={{ height: '70%' }}
-                    onLayout={(e) => setImgLayout({w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height)})}
+                    onLayout={(e) => setImgLayout({ w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height) })}
                   >
-                  {selectedBuilding?.masterPlanUrl && (() => {
-                    const mapTransform = getMapTransform();
-                    return (
-                    <View className="flex-1 justify-center items-center relative">
-                      <View 
-                        style={{
-                          width: mapTransform.maskW,
-                          height: mapTransform.maskH,
-                          overflow: 'hidden',
-                          position: 'relative',
-                        }}
+                    {selectedBuilding?.masterPlanUrl && (() => {
+                      const mapTransform = getMapTransform();
+                      return (
+                        <View className="flex-1 justify-center items-center relative">
+                          <View
+                            style={{
+                              width: mapTransform.maskW,
+                              height: mapTransform.maskH,
+                              overflow: 'hidden',
+                              position: 'relative',
+                            }}
+                          >
+                            <View
+                              style={{
+                                position: 'absolute',
+                                left: 0,
+                                top: 0,
+                                width: imgLayout.w,
+                                height: imgLayout.h,
+                                transform: [
+                                  { translateX: mapTransform.translateX },
+                                  { translateY: mapTransform.translateY },
+                                  { scale: mapTransform.scale }
+                                ]
+                              }}
+                            >
+                              <Image
+                                source={{ uri: selectedBuilding.masterPlanUrl }}
+                                className="w-full h-full opacity-70"
+                                resizeMode="contain"
+                                onLoad={(e) => setImageAspectRatio(e.nativeEvent.source.width / Math.max(1, e.nativeEvent.source.height))}
+                              />
+                              {(() => {
+                                const initialTarget = editingPins?.[0];
+                                const liveUser = locatingRollCall.find((r: any) => r.userName === initialTarget?.label);
+                                const target = initialTarget ? {
+                                  label: initialTarget.label,
+                                  lat: liveUser?.lastLat ?? initialTarget.lat,
+                                  lon: liveUser?.lastLon ?? initialTarget.lon
+                                } : undefined;
+                                if (!selectedBuilding || !selectedBuilding.polygon || !selectedBuilding.imageCalibrationPoints || selectedBuilding.polygon.length < 3 || selectedBuilding.imageCalibrationPoints.length < 3 || !target) {
+                                  return (
+                                    <View className="absolute inset-0 items-center justify-center pointer-events-none">
+                                      <View className="w-16 h-16 rounded-full bg-red-600/30 items-center justify-center animate-ping">
+                                        <Text className="text-5xl">🆘</Text>
+                                      </View>
+                                    </View>
+                                  );
+                                }
+
+                                const poly = selectedBuilding.polygon;
+                                const rawImgPts = selectedBuilding.imageCalibrationPoints;
+                                const isLegacyPixels = rawImgPts[0].x > 2;
+                                const imgPts = rawImgPts.map((p: any) => ({
+                                  x: isLegacyPixels ? p.x / Math.max(1, imgLayout.w) : p.x,
+                                  y: isLegacyPixels ? p.y / Math.max(1, imgLayout.h) : p.y
+                                }));
+
+                                const minLat = Math.min(...poly.map((p: any) => p.lat));
+                                const maxLat = Math.max(...poly.map((p: any) => p.lat));
+                                const minLon = Math.min(...poly.map((p: any) => p.lon));
+                                const maxLon = Math.max(...poly.map((p: any) => p.lon));
+
+                                let y_pct = (maxLat - target.lat) / (maxLat - minLat || 1);
+                                let x_pct = (target.lon - minLon) / (maxLon - minLon || 1);
+
+                                if (imgPts && imgPts.length >= 4) {
+                                  const minCX = Math.min(...imgPts.map((c: any) => c.x));
+                                  const maxCX = Math.max(...imgPts.map((c: any) => c.x));
+                                  const minCY = Math.min(...imgPts.map((c: any) => c.y));
+                                  const maxCY = Math.max(...imgPts.map((c: any) => c.y));
+
+                                  x_pct = minCX + x_pct * (maxCX - minCX);
+                                  y_pct = minCY + y_pct * (maxCY - minCY);
+                                }
+
+                                const bounds = getRenderedImageBounds();
+                                const px = bounds.offsetX + x_pct * bounds.renderW;
+                                const py = bounds.offsetY + y_pct * bounds.renderH;
+
+                                return (
+                                  <View
+                                    className="absolute items-center justify-center pointer-events-none"
+                                    style={{ left: px - 20, top: py - 20, width: 40, height: 40 }}
+                                  >
+                                    <View className="absolute inset-0 rounded-full bg-red-600/30 animate-ping" />
+                                    <Text className="text-red-500 font-bold text-3xl z-10" style={{ transform: [{ scale: 1 / mapTransform.scale }] }}>+</Text>
+                                    <Text className="text-xl z-20 absolute top-8" style={{ transform: [{ scale: 1 / mapTransform.scale }] }}>🆘</Text>
+                                  </View>
+                                );
+                              })()}
+                            </View>
+                          </View>
+                        </View>
+                      );
+                    })()}
+                  </View>
+                )}
+                <TouchableOpacity
+                  className="bg-red-600 py-4 rounded-xl items-center border border-red-500 shadow-[0_0_15px_rgba(220,38,38,0.5)]"
+                  onPress={async () => {
+                    import('react-native').then(rn => {
+                      if (rn.Share) rn.Share.share({ message: `EMERGENCY! User ${editingPins?.[0]?.label} is trapped at coordinates: ${editingPins?.[0]?.lat}, ${editingPins?.[0]?.lon} in ${selectedBuilding?.name}. Dispatch help immediately!` });
+                    });
+                  }}
+                >
+                  <Text className="text-white font-bold text-xl tracking-widest">🚨 SHARE TO FIRE BRIGADE</Text>
+                </TouchableOpacity>
+              </View>
+            );
+          })() : (
+            <>
+              {/* Tabs */}
+              <View className="flex-row mb-6 bg-neutral-800 rounded-xl p-1">
+                <TouchableOpacity
+                  className={`flex-1 py-3 rounded-lg items-center ${mapEditorStep === 1 ? 'bg-neutral-700 shadow' : ''}`}
+                  onPress={() => setMapEditorStep(1)}
+                >
+                  <Text className={`font-bold ${mapEditorStep === 1 ? 'text-white' : 'text-neutral-400'}`}>Step 1: Calibrate</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  className={`flex-1 py-3 rounded-lg items-center ${mapEditorStep === 2 ? 'bg-neutral-700 shadow' : ''}`}
+                  onPress={() => setMapEditorStep(2)}
+                >
+                  <Text className={`font-bold ${mapEditorStep === 2 ? 'text-white' : 'text-neutral-400'}`}>Step 2: Safe Routes</Text>
+                </TouchableOpacity>
+              </View>
+
+              {mapEditorStep === 1 ? (
+                <ScrollView className="flex-1" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+                  <Text className="text-neutral-400 text-sm mb-4">Select a GPS pin from the list below, then tap its matching corner on the floor plan.</Text>
+
+                  <View className="flex-row flex-wrap mb-4 justify-center">
+                    {selectedBuilding?.polygon?.map((p: any, i: number) => {
+                      return (
+                        <TouchableOpacity
+                          key={i}
+                          className={`px-3 py-2 rounded-lg border mr-2 mb-2 ${activeCalibIdx === i ? 'bg-blue-600 border-blue-400' : 'bg-neutral-800 border-neutral-600'}`}
+                          onPress={() => setActiveCalibIdx(activeCalibIdx === i ? -1 : i)}
+                        >
+                          <Text className="text-white font-bold text-xs">{p.label || `P${i + 1}`}</Text>
+                          {calibPoints[i] && <Text className="text-green-400 text-[10px] mt-1 font-bold">✓ Placed</Text>}
+                        </TouchableOpacity>
+                      )
+                    })}
+                  </View>
+
+                  {/* Step 1 Toolbar */}
+                  <View className="flex-row space-x-2 mb-2">
+                    <TouchableOpacity
+                      className={`flex-1 py-3 rounded-xl items-center border-2 ${!step1PanMode ? 'bg-blue-600 border-blue-400' : 'bg-neutral-800 border-neutral-700'}`}
+                      onPress={() => setStep1PanMode(false)}
+                    >
+                      <Text className="text-white font-bold">📍 Place Pin</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      className={`flex-1 py-3 rounded-xl items-center border-2 ${step1PanMode ? 'bg-amber-600 border-amber-400' : 'bg-neutral-800 border-neutral-700'}`}
+                      onPress={() => setStep1PanMode(true)}
+                    >
+                      <Text className="text-white font-bold">✋ Pan</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <View className="flex-row justify-end space-x-2 mb-4">
+                    <Text className="text-white my-auto font-bold mr-2">Zoom:</Text>
+                    <TouchableOpacity
+                      className="bg-neutral-700 p-2 rounded-lg"
+                      onPress={() => {
+                        setStep1Zoom(z => Math.max(1, z - 0.5));
+                        setStep1PanOffset({ x: 0, y: 0 });
+                      }}
+                    >
+                      <MaterialCommunityIcons name="minus" size={24} color="white" />
+                    </TouchableOpacity>
+                    <Text className="text-white my-auto font-bold">{Math.round(step1Zoom * 100)}%</Text>
+                    <TouchableOpacity
+                      className="bg-neutral-700 p-2 rounded-lg"
+                      onPress={() => {
+                        setStep1Zoom(z => Math.min(5, z + 0.5));
+                        setStep1PanOffset({ x: 0, y: 0 });
+                      }}
+                    >
+                      <MaterialCommunityIcons name="plus" size={24} color="white" />
+                    </TouchableOpacity>
+                  </View>
+
+                  <View
+                    className="bg-neutral-800 rounded-xl overflow-hidden mb-6 w-full relative"
+                    style={{ height: getDynamicMapHeight() * 1.3 }}
+                    onLayout={(e) => setImgLayout({ w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height) })}
+                  >
+                    {selectedBuilding?.masterPlanUrl && (
+                      <View
+                        className="w-full h-full justify-center items-center"
+                        onStartShouldSetResponder={() => true}
+                        onResponderGrant={(e) => handleTouchStart(e, step1Zoom, step1PanOffset, step1PanMode, handleStep1Paint)}
+                        onResponderMove={(e) => handleTouchMove(e, step1Zoom, setStep1Zoom, setStep1PanOffset, step1PanMode, handleStep1Paint)}
                       >
-                        <View 
+                        <View
                           style={{
                             position: 'absolute',
                             left: 0,
@@ -1780,484 +1986,295 @@ export default function AdminDashboard() {
                             width: imgLayout.w,
                             height: imgLayout.h,
                             transform: [
-                              { translateX: mapTransform.translateX },
-                              { translateY: mapTransform.translateY },
-                              { scale: mapTransform.scale }
+                              { translateX: step1PanOffset.x },
+                              { translateY: step1PanOffset.y },
+                              { scale: step1Zoom }
                             ]
                           }}
                         >
-                          <Image 
-                            source={{ uri: selectedBuilding.masterPlanUrl }} 
-                            className="w-full h-full opacity-70" 
-                            resizeMode="contain" 
-                            onLoad={(e) => setImageAspectRatio(e.nativeEvent.source.width / Math.max(1, e.nativeEvent.source.height))}
+                          <Image
+                            source={{ uri: selectedBuilding.masterPlanUrl }}
+                            className="w-full h-full"
+                            resizeMode="contain"
                           />
-                          {(() => {
-                            const initialTarget = editingPins?.[0];
-                            const liveUser = locatingRollCall.find((r: any) => r.userName === initialTarget?.label);
-                            const target = initialTarget ? {
-                              label: initialTarget.label,
-                              lat: liveUser?.lastLat ?? initialTarget.lat,
-                              lon: liveUser?.lastLon ?? initialTarget.lon
-                            } : undefined;
-                        if (!selectedBuilding || !selectedBuilding.polygon || !selectedBuilding.imageCalibrationPoints || selectedBuilding.polygon.length < 3 || selectedBuilding.imageCalibrationPoints.length < 3 || !target) {
-                          return (
-                            <View className="absolute inset-0 items-center justify-center pointer-events-none">
-                              <View className="w-16 h-16 rounded-full bg-red-600/30 items-center justify-center animate-ping">
-                                <Text className="text-5xl">🆘</Text>
-                              </View>
-                            </View>
-                          );
-                        }
+                          {calibPoints.map((p, i) => {
+                            if (!p) return null;
+                            const labelStr = selectedBuilding?.polygon?.[i]?.label;
+                            const labelShort = labelStr ? labelStr.split(' ').map((w: string) => w[0]).join('').substring(0, 2).toUpperCase() : `P${i + 1}`;
+                            const isLegacyPixels = p.x > 2;
+                            const bounds = getRenderedImageBounds();
+                            const px = isLegacyPixels ? p.x : bounds.offsetX + p.x * bounds.renderW;
+                            const py = isLegacyPixels ? p.y : bounds.offsetY + p.y * bounds.renderH;
+                            return (
+                              <TouchableOpacity
+                                key={i}
+                                activeOpacity={0.8}
+                                className="absolute items-center"
+                                style={{ left: px - 20, top: py - 40, width: 40, height: 40, zIndex: activeCalibIdx === i ? 10 : 1 }}
+                                onPress={(e) => {
+                                  e.stopPropagation();
+                                  setActiveCalibIdx(activeCalibIdx === i ? -1 : i);
+                                }}
+                              >
+                                {activeCalibIdx === i ? (
+                                  <View className="absolute pointer-events-none" style={{ left: 4, top: 24, width: 32, height: 32 }}>
+                                    <View className="absolute bg-red-500 shadow-md shadow-black" style={{ left: 15, top: 0, width: 2, height: 12 }} />
+                                    <View className="absolute bg-red-500 shadow-md shadow-black" style={{ left: 15, bottom: 0, width: 2, height: 12 }} />
+                                    <View className="absolute bg-red-500 shadow-md shadow-black" style={{ top: 15, left: 0, width: 12, height: 2 }} />
+                                    <View className="absolute bg-red-500 shadow-md shadow-black" style={{ top: 15, right: 0, width: 12, height: 2 }} />
+                                  </View>
+                                ) : (
+                                  <>
+                                    <MaterialCommunityIcons
+                                      name="map-marker"
+                                      size={40}
+                                      color="#22c55e"
+                                    />
+                                    <Text className="text-white text-[10px] font-bold absolute top-2">{labelShort}</Text>
+                                  </>
+                                )}
+                                {activeCalibIdx === i && (() => {
+                                  const screenX = (px - imgLayout.w / 2) * step1Zoom + step1PanOffset.x + imgLayout.w / 2;
+                                  const screenY = (py - imgLayout.h / 2) * step1Zoom + step1PanOffset.y + imgLayout.h / 2;
+                                  const dpadBaseLeft = screenX > imgLayout.w - 100 ? -75 : 35;
+                                  const dpadBaseTop = screenY < 80 ? 40 : (screenY > imgLayout.h - 100 ? -80 : -20);
+                                  return (
+                                    <View className="absolute bg-neutral-900/90 rounded-full border border-neutral-600 shadow-xl z-50 flex-row items-center justify-center" style={{ width: 80, height: 80, left: (dpadBaseLeft + 20) / step1Zoom - 20, top: (dpadBaseTop + 20) / step1Zoom - 20, transform: [{ scale: 1 / step1Zoom }] }}>
+                                      <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleNudgeCalib(i, 0, -1); }} className="absolute top-1 p-1 bg-neutral-700 rounded-full"><MaterialCommunityIcons name="chevron-up" size={20} color="white" /></TouchableOpacity>
+                                      <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleNudgeCalib(i, 0, 1); }} className="absolute bottom-1 p-1 bg-neutral-700 rounded-full"><MaterialCommunityIcons name="chevron-down" size={20} color="white" /></TouchableOpacity>
+                                      <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleNudgeCalib(i, -1, 0); }} className="absolute left-1 p-1 bg-neutral-700 rounded-full"><MaterialCommunityIcons name="chevron-left" size={20} color="white" /></TouchableOpacity>
+                                      <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleNudgeCalib(i, 1, 0); }} className="absolute right-1 p-1 bg-neutral-700 rounded-full"><MaterialCommunityIcons name="chevron-right" size={20} color="white" /></TouchableOpacity>
+                                      <View className="w-2 h-2 bg-neutral-500 rounded-full" />
+                                    </View>
+                                  );
+                                })()}
+                              </TouchableOpacity>
+                            )
+                          })}
+                        </View>
+                      </View>
+                    )}
+                  </View>
 
-                        const poly = selectedBuilding.polygon;
-                        const rawImgPts = selectedBuilding.imageCalibrationPoints;
-                        const isLegacyPixels = rawImgPts[0].x > 2;
-                        const imgPts = rawImgPts.map((p: any) => ({
-                          x: isLegacyPixels ? p.x / Math.max(1, imgLayout.w) : p.x,
-                          y: isLegacyPixels ? p.y / Math.max(1, imgLayout.h) : p.y
-                        }));
+                  <View className="flex-row justify-between mb-4">
+                    <TouchableOpacity className="bg-neutral-700 px-6 py-3 rounded-xl flex-1 mr-2 items-center" onPress={() => { setCalibPoints([]); setActiveCalibIdx(0); }}>
+                      <Text className="text-white font-bold">Clear Points</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      className={`px-6 py-3 rounded-xl flex-1 ml-2 items-center bg-green-600`}
+                      onPress={async () => {
+                        try {
+                          if (calibPoints.filter(Boolean).length !== selectedBuilding?.polygon?.length) {
+                            showToast("Please place all GPS pins on the map first to calibrate.");
+                            return;
+                          }
+                          await updateBuildingCalibration({ clerkId: user?.id || "", buildingId: selectedBuilding._id, calibrationPoints: calibPoints });
+                          setMapEditorStep(2);
+                          showToast("Image calibrated successfully!");
+                        } catch (e) { showToast("Error saving calibration", "error"); }
+                      }}
+                    >
+                      <Text className="text-white font-bold">Next: Safe Routes ➔</Text>
+                    </TouchableOpacity>
+                  </View>
+                </ScrollView>
+              ) : (
+                <ScrollView className="flex-1" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+                  <Text className="text-neutral-400 text-sm mb-4">Select a brush type, then tap the map to paint grid cells (5x5m).</Text>
 
-                        const l1 = poly[0].lon, a1 = poly[0].lat, x1 = imgPts[0].x, y1 = imgPts[0].y;
-                        const l2 = poly[1].lon, a2 = poly[1].lat, x2 = imgPts[1].x, y2 = imgPts[1].y;
-                        const l3 = poly[2].lon, a3 = poly[2].lat, x3 = imgPts[2].x, y3 = imgPts[2].y;
+                  {/* Toolbar */}
+                  <View className="flex-row space-x-2 mb-2">
+                    <TouchableOpacity
+                      className={`flex-1 py-3 rounded-xl items-center border-2 ${gridPaintMode === "safe" ? 'bg-blue-600 border-blue-400' : 'bg-neutral-800 border-neutral-700'}`}
+                      onPress={() => setGridPaintMode("safe")}
+                    >
+                      <Text className="text-white font-bold">🟦 Safe Route</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      className={`flex-1 py-3 rounded-xl items-center border-2 ${gridPaintMode === "exit" ? 'bg-green-600 border-green-400' : 'bg-neutral-800 border-neutral-700'}`}
+                      onPress={() => setGridPaintMode("exit")}
+                    >
+                      <Text className="text-white font-bold">🚪 Exit</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      className={`flex-1 py-3 rounded-xl items-center border-2 ${gridPaintMode === "erase" ? 'bg-red-600 border-red-400' : 'bg-neutral-800 border-neutral-700'}`}
+                      onPress={() => setGridPaintMode("erase")}
+                    >
+                      <Text className="text-white font-bold">🧹 Erase</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      className={`flex-1 py-3 rounded-xl items-center border-2 ${gridPaintMode === "pan" ? 'bg-amber-600 border-amber-400' : 'bg-neutral-800 border-neutral-700'}`}
+                      onPress={() => setGridPaintMode("pan")}
+                    >
+                      <Text className="text-white font-bold">✋ Pan</Text>
+                    </TouchableOpacity>
+                  </View>
 
-                        const det = l1*(a2 - a3) - a1*(l2 - l3) + (l2*a3 - l3*a2);
-                        if (Math.abs(det) < 1e-10) {
-                          return (
-                            <View className="absolute inset-0 items-center justify-center pointer-events-none">
-                              <View className="w-16 h-16 rounded-full bg-red-600/30 items-center justify-center animate-ping">
-                                <Text className="text-5xl">🆘</Text>
-                              </View>
-                            </View>
-                          );
-                        }
+                  <View className="flex-row justify-end space-x-2 mb-4">
+                    <Text className="text-white my-auto font-bold mr-2">Zoom:</Text>
+                    <TouchableOpacity
+                      className="bg-neutral-700 p-2 rounded-lg"
+                      onPress={() => {
+                        setUserZoom(z => Math.max(1, z - 0.5));
+                        setMapPanOffset({ x: 0, y: 0 });
+                      }}
+                    >
+                      <MaterialCommunityIcons name="minus" size={24} color="white" />
+                    </TouchableOpacity>
+                    <Text className="text-white my-auto font-bold">{Math.round(userZoom * 100)}%</Text>
+                    <TouchableOpacity
+                      className="bg-neutral-700 p-2 rounded-lg"
+                      onPress={() => {
+                        setUserZoom(z => Math.min(5, z + 0.5));
+                        setMapPanOffset({ x: 0, y: 0 });
+                      }}
+                    >
+                      <MaterialCommunityIcons name="plus" size={24} color="white" />
+                    </TouchableOpacity>
+                  </View>
 
-                        const A = (x1*(a2 - a3) - a1*(x2 - x3) + (x2*a3 - x3*a2)) / det;
-                        const B = (l1*(x2 - x3) - x1*(l2 - l3) + (l2*x3 - l3*x2)) / det;
-                        const C = x1 - A*l1 - B*a1;
+                  <View
+                    className="bg-neutral-800 rounded-xl mb-4 w-full justify-center items-center relative overflow-hidden"
+                    style={{ height: getDynamicMapHeight() }}
+                    onLayout={(e) => setImgLayout({ w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height) })}
+                  >
+                    {selectedBuilding?.masterPlanUrl && (
+                      <View
+                        className="w-full h-full justify-center items-center"
+                        onStartShouldSetResponder={() => true}
+                        onResponderGrant={(e) => handleTouchStart(e, userZoom, mapPanOffset, gridPaintMode === "pan", handleGridInteraction)}
+                        onResponderMove={(e) => handleTouchMove(e, userZoom, setUserZoom, setMapPanOffset, gridPaintMode === "pan", handleGridInteraction)}
+                      >
+                        <View
+                          style={{
+                            width: getMapTransform().maskW,
+                            height: getMapTransform().maskH,
+                            overflow: 'hidden',
+                            position: 'relative',
+                            backgroundColor: '#171717'
+                          }}
+                          pointerEvents="none"
+                        >
+                          <View
+                            style={{
+                              position: 'absolute',
+                              left: 0,
+                              top: 0,
+                              width: imgLayout.w,
+                              height: imgLayout.h,
+                              transform: [
+                                { translateX: getMapTransform().translateX },
+                                { translateY: getMapTransform().translateY },
+                                { scale: getMapTransform().scale }
+                              ]
+                            }}
+                          >
+                            <Image
+                              source={{ uri: selectedBuilding.masterPlanUrl }}
+                              className="w-full h-full opacity-70"
+                              resizeMode="contain"
+                            />
 
-                        const D = (y1*(a2 - a3) - a1*(y2 - y3) + (y2*a3 - y3*a2)) / det;
-                        const E = (l1*(y2 - y3) - y1*(l2 - l3) + (l2*y3 - l3*y2)) / det;
-                        const F = y1 - D*l1 - E*a1;
+                            {/* Lightweight Grid Overlay & Painted Cells */}
+                            {(() => {
+                              const { rows, cols, minLat, maxLat, minLon, maxLon } = getGridDimensions();
+                              const cells = [];
+                              for (let r = 0; r < rows; r++) {
+                                for (let c = 0; c < cols; c++) {
+                                  const latCenter = maxLat - ((r + 0.5) * (maxLat - minLat) / rows);
+                                  const lonCenter = minLon + ((c + 0.5) * (maxLon - minLon) / cols);
+                                  const pu = mapGPSToImage(latCenter, lonCenter);
+                                  if (!pu) continue;
 
-                        const x_pct = A * target.lon + B * target.lat + C;
-                        const y_pct = D * target.lon + E * target.lat + F;
+                                  const bounds = getRenderedImageBounds();
+                                  const isLegacy = pu.x > 2;
+                                  const sx = isLegacy ? pu.x : bounds.offsetX + pu.x * bounds.renderW;
+                                  const sy = isLegacy ? pu.y : bounds.offsetY + pu.y * bounds.renderH;
 
-                        const bounds = getRenderedImageBounds();
-                        const px = bounds.offsetX + x_pct * bounds.renderW;
-                        const py = bounds.offsetY + y_pct * bounds.renderH;
+                                  const cellTopLeft = mapGPSToImage(maxLat - (r * (maxLat - minLat) / rows), minLon + (c * (maxLon - minLon) / cols));
+                                  const cellBottomRight = mapGPSToImage(maxLat - ((r + 1) * (maxLat - minLat) / rows), minLon + ((c + 1) * (maxLon - minLon) / cols));
 
-                          return (
-                            <View 
-                              className="absolute items-center justify-center pointer-events-none"
-                              style={{ left: px - 20, top: py - 20, width: 40, height: 40 }}
-                            >
-                              <View className="absolute inset-0 rounded-full bg-red-600/30 animate-ping" />
-                              <Text className="text-red-500 font-bold text-3xl z-10" style={{ transform: [{ scale: 1 / mapTransform.scale }] }}>+</Text>
-                              <Text className="text-xl z-20 absolute top-8" style={{ transform: [{ scale: 1 / mapTransform.scale }] }}>🆘</Text>
-                            </View>
-                          );
-                        })()}
+                                  let cellW = 20;
+                                  let cellH = 20;
+
+                                  if (cellTopLeft && cellBottomRight) {
+                                    const tlX = isLegacy ? cellTopLeft.x : bounds.offsetX + cellTopLeft.x * bounds.renderW;
+                                    const brX = isLegacy ? cellBottomRight.x : bounds.offsetX + cellBottomRight.x * bounds.renderW;
+                                    const tlY = isLegacy ? cellTopLeft.y : bounds.offsetY + cellTopLeft.y * bounds.renderH;
+                                    const brY = isLegacy ? cellBottomRight.y : bounds.offsetY + cellBottomRight.y * bounds.renderH;
+                                    cellW = Math.max(10, Math.abs(brX - tlX));
+                                    cellH = Math.max(10, Math.abs(brY - tlY));
+                                  }
+
+                                  const paintedCell = gridPaths.find(p => p.row === r && p.col === c);
+
+                                  cells.push(
+                                    <View
+                                      key={`grid-${r}-${c}`}
+                                      className={`absolute items-center justify-center border ${paintedCell
+                                        ? (paintedCell.isExit ? 'bg-green-500/50 border-green-400' : 'bg-blue-500/50 border-blue-400')
+                                        : 'border-neutral-500/10'
+                                        }`}
+                                      style={{
+                                        left: sx - (cellW / 2),
+                                        top: sy - (cellH / 2),
+                                        width: cellW,
+                                        height: cellH,
+                                        zIndex: paintedCell?.isExit ? 10 : 1
+                                      }}
+                                      pointerEvents="none"
+                                    >
+                                      {paintedCell?.isExit && <Text className="text-white text-[8px] font-bold">E</Text>}
+                                    </View>
+                                  );
+                                }
+                              }
+                              return cells;
+                            })()}
                           </View>
                         </View>
                       </View>
-                      );
-                    })()}
+                    )}
                   </View>
-                )}
-                 <TouchableOpacity 
-                className="bg-red-600 py-4 rounded-xl items-center border border-red-500 shadow-[0_0_15px_rgba(220,38,38,0.5)]"
-                onPress={async () => {
-                   import('react-native').then(rn => {
-                     if (rn.Share) rn.Share.share({ message: `EMERGENCY! User ${editingPins?.[0]?.label} is trapped at coordinates: ${editingPins?.[0]?.lat}, ${editingPins?.[0]?.lon} in ${selectedBuilding?.name}. Dispatch help immediately!`});
-                   });
-                }}
-              >
-                <Text className="text-white font-bold text-xl tracking-widest">🚨 SHARE TO FIRE BRIGADE</Text>
-              </TouchableOpacity>
-            </View>
-            );
-          })() : (
-            <>
-              {/* Tabs */}
-              <View className="flex-row mb-6 bg-neutral-800 rounded-xl p-1">
-            <TouchableOpacity 
-              className={`flex-1 py-3 rounded-lg items-center ${mapEditorStep === 1 ? 'bg-neutral-700 shadow' : ''}`}
-              onPress={() => setMapEditorStep(1)}
-            >
-              <Text className={`font-bold ${mapEditorStep === 1 ? 'text-white' : 'text-neutral-400'}`}>Step 1: Calibrate</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              className={`flex-1 py-3 rounded-lg items-center ${mapEditorStep === 2 ? 'bg-neutral-700 shadow' : ''}`}
-              onPress={() => setMapEditorStep(2)}
-            >
-              <Text className={`font-bold ${mapEditorStep === 2 ? 'text-white' : 'text-neutral-400'}`}>Step 2: Safe Routes</Text>
-            </TouchableOpacity>
-          </View>
 
-          {mapEditorStep === 1 ? (
-            <ScrollView className="flex-1" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
-              <Text className="text-neutral-400 text-sm mb-4">Select a GPS pin from the list below, then tap its matching corner on the floor plan.</Text>
-              
-              <View className="flex-row flex-wrap mb-4 justify-center">
-                {selectedBuilding?.polygon?.map((p: any, i: number) => {
-                  return (
-                    <TouchableOpacity 
-                      key={i} 
-                      className={`px-3 py-2 rounded-lg border mr-2 mb-2 ${activeCalibIdx === i ? 'bg-blue-600 border-blue-400' : 'bg-neutral-800 border-neutral-600'}`}
-                      onPress={() => setActiveCalibIdx(activeCalibIdx === i ? -1 : i)}
-                    >
-                      <Text className="text-white font-bold text-xs">{p.label || `P${i+1}`}</Text>
-                      {calibPoints[i] && <Text className="text-green-400 text-[10px] mt-1 font-bold">✓ Placed</Text>}
+                  <View className="bg-blue-900/30 p-4 rounded-xl border border-blue-600/50 mb-6 flex-row">
+                    <Text className="text-blue-500 mr-3 text-2xl">💡</Text>
+                    <View className="flex-1">
+                      <Text className="text-blue-400 font-bold mb-1 uppercase tracking-wider text-xs">Grid Strategy</Text>
+                      <Text className="text-blue-300 text-xs">Paint <Text className="font-bold text-white">Safe Routes</Text> along corridors and rooms to define where users can walk. Mark <Text className="font-bold text-white">Exits</Text> at the doors. The system automatically calculates the shortest path through painted routes.</Text>
+                    </View>
+                  </View>
+
+                  <View className="flex-row justify-between mb-4">
+                    <TouchableOpacity className="flex-1 bg-neutral-700 py-3 rounded-xl items-center mr-2" onPress={() => setGridPaths([])}>
+                      <Text className="text-white font-bold">Clear Grid</Text>
                     </TouchableOpacity>
-                  )
-                })}
-              </View>
-
-              {/* Step 1 Toolbar */}
-              <View className="flex-row space-x-2 mb-2">
-                <TouchableOpacity 
-                  className={`flex-1 py-3 rounded-xl items-center border-2 ${!step1PanMode ? 'bg-blue-600 border-blue-400' : 'bg-neutral-800 border-neutral-700'}`}
-                  onPress={() => setStep1PanMode(false)}
-                >
-                  <Text className="text-white font-bold">📍 Place Pin</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  className={`flex-1 py-3 rounded-xl items-center border-2 ${step1PanMode ? 'bg-amber-600 border-amber-400' : 'bg-neutral-800 border-neutral-700'}`}
-                  onPress={() => setStep1PanMode(true)}
-                >
-                  <Text className="text-white font-bold">✋ Pan</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View className="flex-row justify-end space-x-2 mb-4">
-                <Text className="text-white my-auto font-bold mr-2">Zoom:</Text>
-                <TouchableOpacity 
-                  className="bg-neutral-700 p-2 rounded-lg"
-                  onPress={() => {
-                    setStep1Zoom(z => Math.max(1, z - 0.5));
-                    setStep1PanOffset({x: 0, y: 0});
-                  }}
-                >
-                  <MaterialCommunityIcons name="minus" size={24} color="white" />
-                </TouchableOpacity>
-                <Text className="text-white my-auto font-bold">{Math.round(step1Zoom * 100)}%</Text>
-                <TouchableOpacity 
-                  className="bg-neutral-700 p-2 rounded-lg"
-                  onPress={() => {
-                    setStep1Zoom(z => Math.min(5, z + 0.5));
-                    setStep1PanOffset({x: 0, y: 0});
-                  }}
-                >
-                  <MaterialCommunityIcons name="plus" size={24} color="white" />
-                </TouchableOpacity>
-              </View>
-
-              <View 
-                className="bg-neutral-800 rounded-xl overflow-hidden mb-6 w-full relative" 
-                style={{ height: 400 }}
-                onLayout={(e) => setImgLayout({w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height)})}
-              >
-                {selectedBuilding?.masterPlanUrl && (
-                  <View 
-                    className="w-full h-full justify-center items-center"
-                    onStartShouldSetResponder={() => true}
-                    onResponderGrant={(e) => handleTouchStart(e, step1Zoom, step1PanOffset, step1PanMode, handleStep1Paint)}
-                    onResponderMove={(e) => handleTouchMove(e, step1Zoom, setStep1Zoom, setStep1PanOffset, step1PanMode, handleStep1Paint)}
-                  >
-                    <View 
-                      style={{
-                        position: 'absolute',
-                        left: 0,
-                        top: 0,
-                        width: imgLayout.w,
-                        height: 400,
-                        transform: [
-                          { translateX: step1PanOffset.x },
-                          { translateY: step1PanOffset.y },
-                          { scale: step1Zoom }
-                        ]
-                      }}
-                    >
-                      <Image 
-                          source={{ uri: selectedBuilding.masterPlanUrl }} 
-                          className="w-full h-full" 
-                          resizeMode="contain" 
-                        />
-                    {calibPoints.map((p, i) => {
-                      if (!p) return null;
-                      const labelStr = selectedBuilding?.polygon?.[i]?.label;
-                      const labelShort = labelStr ? labelStr.split(' ').map((w: string)=>w[0]).join('').substring(0,2).toUpperCase() : `P${i+1}`;
-                      const isLegacyPixels = p.x > 2;
-                      const bounds = getRenderedImageBounds();
-                      const px = isLegacyPixels ? p.x : bounds.offsetX + p.x * bounds.renderW;
-                      const py = isLegacyPixels ? p.y : bounds.offsetY + p.y * bounds.renderH;
-                      return (
-                        <TouchableOpacity 
-                          key={i} 
-                          activeOpacity={0.8}
-                          className="absolute items-center" 
-                          style={{ left: px - 20, top: py - 40, width: 40, height: 40, zIndex: activeCalibIdx === i ? 10 : 1 }}
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            setActiveCalibIdx(activeCalibIdx === i ? -1 : i);
-                          }}
-                        >
-                          {activeCalibIdx === i ? (
-                            <View className="absolute pointer-events-none" style={{ left: 4, top: 24, width: 32, height: 32 }}>
-                              <View className="absolute bg-red-500 shadow-md shadow-black" style={{ left: 15, top: 0, width: 2, height: 12 }} />
-                              <View className="absolute bg-red-500 shadow-md shadow-black" style={{ left: 15, bottom: 0, width: 2, height: 12 }} />
-                              <View className="absolute bg-red-500 shadow-md shadow-black" style={{ top: 15, left: 0, width: 12, height: 2 }} />
-                              <View className="absolute bg-red-500 shadow-md shadow-black" style={{ top: 15, right: 0, width: 12, height: 2 }} />
-                            </View>
-                          ) : (
-                            <>
-                              <MaterialCommunityIcons 
-                                name="map-marker" 
-                                size={40} 
-                                color="#22c55e" 
-                              />
-                              <Text className="text-white text-[10px] font-bold absolute top-2">{labelShort}</Text>
-                            </>
-                          )}
-                          {activeCalibIdx === i && (
-                            <View className="absolute bg-neutral-900/90 rounded-full border border-neutral-600 shadow-xl z-50 flex-row items-center justify-center" style={{ width: 80, height: 80, left: px > (imgLayout.w * step1Zoom) - 100 ? -75 : 35, top: -20 }}>
-                              <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleNudgeCalib(i, 0, -1); }} className="absolute top-1 p-1 bg-neutral-700 rounded-full"><MaterialCommunityIcons name="chevron-up" size={20} color="white" /></TouchableOpacity>
-                              <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleNudgeCalib(i, 0, 1); }} className="absolute bottom-1 p-1 bg-neutral-700 rounded-full"><MaterialCommunityIcons name="chevron-down" size={20} color="white" /></TouchableOpacity>
-                              <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleNudgeCalib(i, -1, 0); }} className="absolute left-1 p-1 bg-neutral-700 rounded-full"><MaterialCommunityIcons name="chevron-left" size={20} color="white" /></TouchableOpacity>
-                              <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleNudgeCalib(i, 1, 0); }} className="absolute right-1 p-1 bg-neutral-700 rounded-full"><MaterialCommunityIcons name="chevron-right" size={20} color="white" /></TouchableOpacity>
-                              <View className="w-2 h-2 bg-neutral-500 rounded-full" />
-                            </View>
-                          )}
-                        </TouchableOpacity>
-                      )
-                    })}
-                    </View>
-                  </View>
-                )}
-              </View>
-
-              <View className="flex-row justify-between mb-4">
-                <TouchableOpacity className="bg-neutral-700 px-6 py-3 rounded-xl flex-1 mr-2 items-center" onPress={() => { setCalibPoints([]); setActiveCalibIdx(0); }}>
-                  <Text className="text-white font-bold">Clear Points</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  className={`px-6 py-3 rounded-xl flex-1 ml-2 items-center bg-green-600`}
-                  onPress={async () => {
-                    try {
-                      if (calibPoints.filter(Boolean).length !== selectedBuilding?.polygon?.length) {
-                        showToast("Please place all GPS pins on the map first to calibrate.");
-                        return;
-                      }
-                      await updateBuildingCalibration({ clerkId: user?.id || "", buildingId: selectedBuilding._id, calibrationPoints: calibPoints });
-                      setMapEditorStep(2);
-                      showToast("Image calibrated successfully!");
-                    } catch(e) { showToast("Error saving calibration", "error"); }
-                  }}
-                >
-                  <Text className="text-white font-bold">Next: Safe Routes ➔</Text>
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
-          ) : (
-            <ScrollView className="flex-1" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
-              <Text className="text-neutral-400 text-sm mb-4">Select a brush type, then tap the map to paint grid cells (5x5m).</Text>
-
-              {/* Toolbar */}
-              <View className="flex-row space-x-2 mb-2">
-                <TouchableOpacity 
-                  className={`flex-1 py-3 rounded-xl items-center border-2 ${gridPaintMode === "safe" ? 'bg-blue-600 border-blue-400' : 'bg-neutral-800 border-neutral-700'}`}
-                  onPress={() => setGridPaintMode("safe")}
-                >
-                  <Text className="text-white font-bold">🟦 Safe Route</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  className={`flex-1 py-3 rounded-xl items-center border-2 ${gridPaintMode === "exit" ? 'bg-green-600 border-green-400' : 'bg-neutral-800 border-neutral-700'}`}
-                  onPress={() => setGridPaintMode("exit")}
-                >
-                  <Text className="text-white font-bold">🚪 Exit</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  className={`flex-1 py-3 rounded-xl items-center border-2 ${gridPaintMode === "erase" ? 'bg-red-600 border-red-400' : 'bg-neutral-800 border-neutral-700'}`}
-                  onPress={() => setGridPaintMode("erase")}
-                >
-                  <Text className="text-white font-bold">🧹 Erase</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  className={`flex-1 py-3 rounded-xl items-center border-2 ${gridPaintMode === "pan" ? 'bg-amber-600 border-amber-400' : 'bg-neutral-800 border-neutral-700'}`}
-                  onPress={() => setGridPaintMode("pan")}
-                >
-                  <Text className="text-white font-bold">✋ Pan</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View className="flex-row justify-end space-x-2 mb-4">
-                <Text className="text-white my-auto font-bold mr-2">Zoom:</Text>
-                <TouchableOpacity 
-                  className="bg-neutral-700 p-2 rounded-lg"
-                  onPress={() => {
-                    setUserZoom(z => Math.max(1, z - 0.5));
-                    setMapPanOffset({x: 0, y: 0});
-                  }}
-                >
-                  <MaterialCommunityIcons name="minus" size={24} color="white" />
-                </TouchableOpacity>
-                <Text className="text-white my-auto font-bold">{Math.round(userZoom * 100)}%</Text>
-                <TouchableOpacity 
-                  className="bg-neutral-700 p-2 rounded-lg"
-                  onPress={() => {
-                    setUserZoom(z => Math.min(5, z + 0.5));
-                    setMapPanOffset({x: 0, y: 0});
-                  }}
-                >
-                  <MaterialCommunityIcons name="plus" size={24} color="white" />
-                </TouchableOpacity>
-              </View>
-              
-              <View 
-                className="bg-neutral-800 rounded-xl mb-4 w-full justify-center items-center relative overflow-hidden" 
-                style={{ height: getDynamicMapHeight() }}
-                onLayout={(e) => setImgLayout({w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height)})}
-              >
-                {selectedBuilding?.masterPlanUrl && (
-                  <View 
-                    className="w-full h-full justify-center items-center"
-                    onStartShouldSetResponder={() => true}
-                    onResponderGrant={(e) => handleTouchStart(e, userZoom, mapPanOffset, gridPaintMode === "pan", handleGridInteraction)}
-                    onResponderMove={(e) => handleTouchMove(e, userZoom, setUserZoom, setMapPanOffset, gridPaintMode === "pan", handleGridInteraction)}
-                  >
-                    <View 
-                      style={{
-                        width: getMapTransform().maskW,
-                        height: getMapTransform().maskH,
-                        overflow: 'hidden',
-                        position: 'relative',
-                        backgroundColor: '#171717'
-                      }}
-                      pointerEvents="none"
-                    >
-                      <View 
-                        style={{
-                          position: 'absolute',
-                          left: 0,
-                          top: 0,
-                          width: imgLayout.w,
-                          height: imgLayout.h,
-                          transform: [
-                            { translateX: getMapTransform().translateX },
-                            { translateY: getMapTransform().translateY },
-                            { scale: getMapTransform().scale }
-                          ]
-                        }}
-                      >
-                      <Image 
-                        source={{ uri: selectedBuilding.masterPlanUrl }} 
-                        className="w-full h-full opacity-70" 
-                        resizeMode="contain" 
-                      />
-                      
-                      {/* Lightweight Grid Overlay & Painted Cells */}
-                    {(() => {
-                      const { rows, cols, minLat, maxLat, minLon, maxLon } = getGridDimensions();
-                      const cells = [];
-                      for (let r = 0; r < rows; r++) {
-                        for (let c = 0; c < cols; c++) {
-                          const latCenter = maxLat - ((r + 0.5) * (maxLat - minLat) / rows);
-                          const lonCenter = minLon + ((c + 0.5) * (maxLon - minLon) / cols);
-                          const pu = mapGPSToImage(latCenter, lonCenter);
-                          if (!pu) continue;
-                          
-                          const bounds = getRenderedImageBounds();
-                          const isLegacy = pu.x > 2;
-                          const sx = isLegacy ? pu.x : bounds.offsetX + pu.x * bounds.renderW;
-                          const sy = isLegacy ? pu.y : bounds.offsetY + pu.y * bounds.renderH;
-                          
-                          const cellTopLeft = mapGPSToImage(maxLat - (r * (maxLat - minLat) / rows), minLon + (c * (maxLon - minLon) / cols));
-                          const cellBottomRight = mapGPSToImage(maxLat - ((r + 1) * (maxLat - minLat) / rows), minLon + ((c + 1) * (maxLon - minLon) / cols));
-                          
-                          let cellW = 20;
-                          let cellH = 20;
-                          
-                          if (cellTopLeft && cellBottomRight) {
-                             const tlX = isLegacy ? cellTopLeft.x : bounds.offsetX + cellTopLeft.x * bounds.renderW;
-                             const brX = isLegacy ? cellBottomRight.x : bounds.offsetX + cellBottomRight.x * bounds.renderW;
-                             const tlY = isLegacy ? cellTopLeft.y : bounds.offsetY + cellTopLeft.y * bounds.renderH;
-                             const brY = isLegacy ? cellBottomRight.y : bounds.offsetY + cellBottomRight.y * bounds.renderH;
-                             cellW = Math.max(10, Math.abs(brX - tlX));
-                             cellH = Math.max(10, Math.abs(brY - tlY));
-                          }
-
-                          const paintedCell = gridPaths.find(p => p.row === r && p.col === c);
-
-                          cells.push(
-                            <View 
-                              key={`grid-${r}-${c}`}
-                              className={`absolute items-center justify-center border ${
-                                paintedCell 
-                                  ? (paintedCell.isExit ? 'bg-green-500/50 border-green-400' : 'bg-blue-500/50 border-blue-400')
-                                  : 'border-neutral-500/10'
-                              }`} 
-                              style={{ 
-                                left: sx - (cellW/2), 
-                                top: sy - (cellH/2), 
-                                width: cellW, 
-                                height: cellH, 
-                                zIndex: paintedCell?.isExit ? 10 : 1 
-                              }}
-                              pointerEvents="none"
-                            >
-                              {paintedCell?.isExit && <Text className="text-white text-[8px] font-bold">E</Text>}
-                            </View>
-                          );
+                    <TouchableOpacity
+                      className="flex-1 bg-green-600 py-3 rounded-xl items-center"
+                      onPress={async () => {
+                        if (calibPoints.filter(Boolean).length !== selectedBuilding?.polygon?.length) {
+                          showToast("Please complete Step 1 (Calibration) before saving.");
+                          setMapEditorStep(1);
+                          return;
                         }
-                      }
-                      return cells;
-                    })()}
-                        </View>
-                      </View>
-                    </View>
-                )}
-              </View>
+                        if (!gridPaths.some(p => p.isExit)) {
+                          showToast("Please paint at least one Exit.");
+                          return;
+                        }
 
-              <View className="bg-blue-900/30 p-4 rounded-xl border border-blue-600/50 mb-6 flex-row">
-                <Text className="text-blue-500 mr-3 text-2xl">💡</Text>
-                <View className="flex-1">
-                  <Text className="text-blue-400 font-bold mb-1 uppercase tracking-wider text-xs">Grid Strategy</Text>
-                  <Text className="text-blue-300 text-xs">Paint <Text className="font-bold text-white">Safe Routes</Text> along corridors and rooms to define where users can walk. Mark <Text className="font-bold text-white">Exits</Text> at the doors. The system automatically calculates the shortest path through painted routes.</Text>
-                </View>
-              </View>
-
-              <View className="flex-row justify-between mb-4">
-                <TouchableOpacity className="flex-1 bg-neutral-700 py-3 rounded-xl items-center mr-2" onPress={() => setGridPaths([])}>
-                  <Text className="text-white font-bold">Clear Grid</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  className="flex-1 bg-green-600 py-3 rounded-xl items-center"
-                  onPress={async () => {
-                    if (calibPoints.filter(Boolean).length !== selectedBuilding?.polygon?.length) {
-                      showToast("Please complete Step 1 (Calibration) before saving.");
-                      setMapEditorStep(1);
-                      return;
-                    }
-                    if (!gridPaths.some(p => p.isExit)) {
-                      showToast("Please paint at least one Exit.");
-                      return;
-                    }
-
-                    try {
-                      await updateBuildingGridPaths({ clerkId: user?.id || "", buildingId: selectedBuilding._id, gridPaths });
-                      setIsMapEditorOpen(false);
-                      showToast("Grid Layout saved!");
-                    } catch(e) { showToast("Error saving grid", "error"); }
-                  }}
-                >
-                  <Text className="text-white font-bold">Save Grid</Text>
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
-          )}
-          </>
+                        try {
+                          await updateBuildingGridPaths({ clerkId: user?.id || "", buildingId: selectedBuilding._id, gridPaths });
+                          setIsMapEditorOpen(false);
+                          showToast("Grid Layout saved!");
+                        } catch (e) { showToast("Error saving grid", "error"); }
+                      }}
+                    >
+                      <Text className="text-white font-bold">Save Grid</Text>
+                    </TouchableOpacity>
+                  </View>
+                </ScrollView>
+              )}
+            </>
           )}
         </View>
       </Modal>
@@ -2316,7 +2333,7 @@ export default function AdminDashboard() {
                 placeholderTextColor="#525252"
                 keyboardType="phone-pad"
               />
-              <TouchableOpacity 
+              <TouchableOpacity
                 className={`py-4 rounded-xl items-center ${isUploading ? 'bg-neutral-700' : 'bg-blue-600'}`}
                 disabled={isUploading}
                 onPress={async () => {
@@ -2331,7 +2348,7 @@ export default function AdminDashboard() {
                     });
                     setManageSiteName(null);
                     showToast("Site details saved successfully!");
-                  } catch(e) {
+                  } catch (e) {
                     showToast("Error updating site", "error");
                   }
                 }}
@@ -2355,7 +2372,7 @@ export default function AdminDashboard() {
               <Text className="text-white text-lg">✕</Text>
             </TouchableOpacity>
           </View>
-          
+
           <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
             <View className="mb-6 flex-row justify-end">
               <TouchableOpacity onPress={exportLogs} className="bg-neutral-800 px-4 py-3 rounded-xl border border-neutral-700 flex-row items-center">
@@ -2375,17 +2392,17 @@ export default function AdminDashboard() {
                 <View key={monthKey} className="mb-8">
                   <View className="flex-row justify-between items-center mb-4 px-2">
                     <Text className="text-white font-bold text-xl">{monthKey}</Text>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       className="bg-red-900/40 px-3 py-1.5 rounded-lg border border-red-500/50"
                       onPress={() => {
                         confirmAction(
-                          "Delete Logs", 
+                          "Delete Logs",
                           `Are you sure you want to delete all ${groupedIncidents[monthKey].length} logs from ${monthKey}? This cannot be undone.`,
                           async () => {
                             try {
-                              await deleteIncidents({ 
-                                clerkId: user?.id || "", 
-                                incidentIds: groupedIncidents[monthKey].map((i: any) => i._id) 
+                              await deleteIncidents({
+                                clerkId: user?.id || "",
+                                incidentIds: groupedIncidents[monthKey].map((i: any) => i._id)
                               });
                               showToast(`Deleted logs for ${monthKey}`);
                             } catch (e) {
@@ -2403,30 +2420,30 @@ export default function AdminDashboard() {
                     const durationMs = (inc.resolvedAt || Date.now()) - inc.triggeredAt;
                     const durationMins = Math.floor(durationMs / 60000);
                     const durationSecs = Math.floor((durationMs % 60000) / 1000);
-                
-                return (
-                  <View key={inc._id} className="bg-neutral-900 border border-neutral-800 p-5 rounded-2xl mb-4 flex-row justify-between items-center shadow-lg">
-                    <View>
-                      <View className="flex-row items-center mb-1">
-                        <Text className={`font-black text-lg ${inc.isDrill ? 'text-amber-500' : 'text-red-500'}`}>
-                          {inc.isDrill ? '🔔 TEST DRILL' : '🚨 REAL EVACUATION'}
-                        </Text>
-                        {!inc.resolvedAt && (
-                          <View className="bg-red-500 px-2 py-0.5 rounded ml-2">
-                            <Text className="text-white text-[10px] font-bold">ONGOING</Text>
+
+                    return (
+                      <View key={inc._id} className="bg-neutral-900 border border-neutral-800 p-5 rounded-2xl mb-4 flex-row justify-between items-center shadow-lg">
+                        <View>
+                          <View className="flex-row items-center mb-1">
+                            <Text className={`font-black text-lg ${inc.isDrill ? 'text-amber-500' : 'text-red-500'}`}>
+                              {inc.isDrill ? '🔔 TEST DRILL' : '🚨 REAL EVACUATION'}
+                            </Text>
+                            {!inc.resolvedAt && (
+                              <View className="bg-red-500 px-2 py-0.5 rounded ml-2">
+                                <Text className="text-white text-[10px] font-bold">ONGOING</Text>
+                              </View>
+                            )}
                           </View>
-                        )}
+                          <Text className="text-white font-bold text-base mt-1">{inc.buildingName}</Text>
+                          <Text className="text-neutral-400 text-sm mt-1">{new Date(inc.triggeredAt).toLocaleString()}</Text>
+                        </View>
+                        <View className="bg-black/50 px-4 py-3 rounded-xl items-center border border-neutral-800">
+                          <Text className="text-neutral-500 text-[10px] uppercase font-black tracking-widest mb-1">Duration</Text>
+                          <Text className="text-white font-black text-xl">{durationMins}m {durationSecs}s</Text>
+                        </View>
                       </View>
-                      <Text className="text-white font-bold text-base mt-1">{inc.buildingName}</Text>
-                      <Text className="text-neutral-400 text-sm mt-1">{new Date(inc.triggeredAt).toLocaleString()}</Text>
-                    </View>
-                    <View className="bg-black/50 px-4 py-3 rounded-xl items-center border border-neutral-800">
-                      <Text className="text-neutral-500 text-[10px] uppercase font-black tracking-widest mb-1">Duration</Text>
-                      <Text className="text-white font-black text-xl">{durationMins}m {durationSecs}s</Text>
-                    </View>
-                  </View>
-                );
-              })}
+                    );
+                  })}
                 </View>
               ))
             )}
@@ -2443,18 +2460,18 @@ export default function AdminDashboard() {
               {confirmDialog.title}
             </Text>
             <Text className="text-neutral-300 text-base mb-8 leading-relaxed">{confirmDialog.message}</Text>
-            
+
             <View className="flex-row space-x-4">
-              <TouchableOpacity 
+              <TouchableOpacity
                 className="flex-1 bg-neutral-800 py-4 rounded-xl items-center border border-neutral-700 mr-2"
-                onPress={() => setConfirmDialog({...confirmDialog, visible: false})}
+                onPress={() => setConfirmDialog({ ...confirmDialog, visible: false })}
               >
                 <Text className="text-white font-bold">Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
+              <TouchableOpacity
                 className={`flex-1 py-4 rounded-xl items-center border ${confirmDialog.intent === 'danger' ? 'bg-red-600 border-red-500 shadow-[0_0_15px_rgba(220,38,38,0.5)]' : confirmDialog.intent === 'warning' ? 'bg-amber-600 border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.5)]' : 'bg-green-600 border-green-500 shadow-[0_0_15px_rgba(22,163,74,0.5)]'}`}
                 onPress={() => {
-                  setConfirmDialog({...confirmDialog, visible: false});
+                  setConfirmDialog({ ...confirmDialog, visible: false });
                   confirmDialog.onConfirm();
                 }}
               >

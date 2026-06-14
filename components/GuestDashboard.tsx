@@ -47,6 +47,8 @@ export default function GuestDashboard() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [currentLocation, setCurrentLocation] = useState<Location.LocationObject | null>(null);
   const [isEvacuating, setIsEvacuating] = useState(false);
+  const [lockedIncident, setLockedIncident] = useState<any>(null);
+  const [lockedBuilding, setLockedBuilding] = useState<any>(null);
 
   // Draft state for confirmation modal
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -123,13 +125,15 @@ export default function GuestDashboard() {
   useEffect(() => {
     if (activeIncident && activeIncident.isActive) {
       setIsEvacuating(true);
+      setLockedIncident(activeIncident);
+      setLockedBuilding(autoBuilding);
     } else if (activeIncident && !activeIncident.isActive && isEvacuating) {
       // Optional: if the admin resolves it while guest is evacuating, we could auto-dismiss or show a toast.
       // For safety, we let them dismiss it manually or we can dismiss it. 
       // setIsEvacuating(false);
       showToast("The evacuation has been resolved by the administrator.", "success");
     }
-  }, [activeIncident]);
+  }, [activeIncident, autoBuilding]);
   
   const updateProfile = useMutation(api.portal.updateProfile);
   const generateUploadUrl = useMutation(api.portal.generateUploadUrl);
@@ -167,8 +171,8 @@ export default function GuestDashboard() {
 
       dist = getDistance(loc.coords.latitude, loc.coords.longitude, imageLat, imageLon);
       
-      if (dist > 50) {
-        showToast(`Image location is too far from your current location (${Math.round(dist)} meters away). Maximum allowed distance is 50m.`, "error");
+      if (dist > 500) {
+        showToast(`Image location is too far from your current location (${Math.round(dist)} meters away). Maximum allowed distance is 500m.`, "error");
         return;
       }
     }
@@ -344,8 +348,8 @@ export default function GuestDashboard() {
           dashboardData.scannedPlanLon
         );
         
-        // Valid if within 50 meters
-        if (dist <= 50) {
+        // Valid if within 500 meters
+        if (dist <= 500) {
           setIsScanned(true);
         } else {
           setIsScanned(false);
@@ -606,14 +610,17 @@ export default function GuestDashboard() {
         </View>
       </Modal>
 
-      {/* Evacuation Mode Modal (Full Screen) */}
       <Modal visible={isEvacuating} animationType="fade" presentationStyle="fullScreen">
         <EvacuationMode 
           dashboardData={dashboardData}
-          autoBuilding={autoBuilding}
+          autoBuilding={lockedBuilding || autoBuilding}
           currentLocation={currentLocation}
-          activeIncident={activeIncident}
-          onClose={() => setIsEvacuating(false)} 
+          activeIncident={lockedIncident || activeIncident}
+          onClose={() => {
+            setIsEvacuating(false);
+            setLockedIncident(null);
+            setLockedBuilding(null);
+          }} 
         />
       </Modal>
     </View>

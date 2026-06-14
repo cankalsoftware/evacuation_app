@@ -90,16 +90,23 @@ export default defineSchema({
     endTime: v.optional(v.number()), // Phase 13: exact timestamp when everyone was SAFE
   }).index("by_building", ["buildingId"]),
 
-  // Phase 13: Live Roll Call & Tracking
-  rollCall: defineTable({
+  inside: defineTable({
     incidentId: v.id("incidents"),
     userId: v.id("users"),
-    status: v.string(), // "IN_BUILDING", "SAFE", "PANIC"
+    status: v.string(), // "IN_BUILDING", "PANIC"
     lastLat: v.optional(v.number()),
     lastLon: v.optional(v.number()),
-    updatedAt: v.number(),
-  }).index("by_incident", ["incidentId"])
-    .index("by_incident_user", ["incidentId", "userId"]),
+    updatedAt: v.number()
+  }).index("by_incident", ["incidentId"]).index("by_incident_user", ["incidentId", "userId"]),
+
+  outside: defineTable({
+    incidentId: v.id("incidents"),
+    userId: v.id("users"),
+    status: v.string(), // "SAFE"
+    lastLat: v.optional(v.number()),
+    lastLon: v.optional(v.number()),
+    updatedAt: v.number()
+  }).index("by_incident", ["incidentId"]).index("by_incident_user", ["incidentId", "userId"]),
 
   // Phase 14: Push Notifications & Broadcasts
   announcements: defineTable({

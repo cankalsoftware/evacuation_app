@@ -378,8 +378,12 @@ export const deleteBuilding = mutation({
     // Cleanup incident and rollCall data
     const incidents = await ctx.db.query("incidents").withIndex("by_building", q => q.eq("buildingId", args.buildingId)).collect();
     for (const incident of incidents) {
-      const rollCalls = await ctx.db.query("rollCall").withIndex("by_incident_user", q => q.eq("incidentId", incident._id)).collect();
-      for (const rc of rollCalls) {
+      const insides = await ctx.db.query("inside").withIndex("by_incident_user", q => q.eq("incidentId", incident._id)).collect();
+      for (const rc of insides) {
+        await ctx.db.delete(rc._id);
+      }
+      const outsides = await ctx.db.query("outside").withIndex("by_incident_user", q => q.eq("incidentId", incident._id)).collect();
+      for (const rc of outsides) {
         await ctx.db.delete(rc._id);
       }
       await ctx.db.delete(incident._id);
@@ -496,7 +500,7 @@ export const triggerIncident = mutation({
     // --- PHASE 15: AUTO-POPULATE ROLL CALL ---
     const activeUsers = await ctx.db.query("users").filter(q => q.eq(q.field("activeBuildingId"), args.buildingId)).collect();
     for (const occupant of activeUsers) {
-      await ctx.db.insert("rollCall", {
+      await ctx.db.insert("inside", {
         incidentId,
         userId: occupant._id,
         status: "IN_BUILDING",
@@ -535,7 +539,7 @@ export const triggerSiteIncident = mutation({
         // --- PHASE 15: AUTO-POPULATE ROLL CALL ---
         const activeUsers = await ctx.db.query("users").filter(q => q.eq(q.field("activeBuildingId"), b._id)).collect();
         for (const occupant of activeUsers) {
-          await ctx.db.insert("rollCall", {
+          await ctx.db.insert("inside", {
             incidentId,
             userId: occupant._id,
             status: "IN_BUILDING",
@@ -713,21 +717,37 @@ export const updateEvacuationStatus = mutation({
       status = inside ? "IN_BUILDING" : "SAFE";
     }
 
-    const existing = await ctx.db.query("rollCall").withIndex("by_incident_user", q => q.eq("incidentId", args.incidentId).eq("userId", user._id)).first();
+    const existingInside = await ctx.db.query("inside").withIndex("by_incident_user", q => q.eq("incidentId", args.incidentId).eq("userId", user._id)).first();
+    const existingOutside = await ctx.db.query("outside").withIndex("by_incident_user", q => q.eq("incidentId", args.incidentId).eq("userId", user._id)).first();
 
-    if (existing) {
-      // Don't downgrade PANIC automatically
-      if (existing.status === "PANIC" && !args.setSafe) {
-        status = "PANIC";
-      }
-      await ctx.db.patch(existing._id, {
+    if (existingInside && status === "SAFE") {
+      await ctx.db.delete(existingInside._id);
+      await ctx.db.insert("outside", {
+        incidentId: args.incidentId,
+        userId: user._id,
         status,
         lastLat: args.lat,
         lastLon: args.lon,
         updatedAt: Date.now()
       });
+    } else if (existingOutside && status !== "SAFE") {
+      await ctx.db.delete(existingOutside._id);
+      await ctx.db.insert("inside", {
+        incidentId: args.incidentId,
+        userId: user._id,
+        status,
+        lastLat: args.lat,
+        lastLon: args.lon,
+        updatedAt: Date.now()
+      });
+    } else if (existingInside) {
+      if (existingInside.status === "PANIC" && !args.setSafe) status = "PANIC";
+      await ctx.db.patch(existingInside._id, { status, lastLat: args.lat, lastLon: args.lon, updatedAt: Date.now() });
+    } else if (existingOutside) {
+      await ctx.db.patch(existingOutside._id, { status, lastLat: args.lat, lastLon: args.lon, updatedAt: Date.now() });
     } else {
-      await ctx.db.insert("rollCall", {
+      const table = status === "SAFE" ? "outside" : "inside";
+      await ctx.db.insert(table as any, {
         incidentId: args.incidentId,
         userId: user._id,
         status,
@@ -739,28 +759,34 @@ export const updateEvacuationStatus = mutation({
   }
 });
 
-export const getRollCall = query({
+export const getEvacuationData = query({
   args: { clerkId: v.string(), incidentId: v.optional(v.id("incidents")) },
   handler: async (ctx, args) => {
-    if (!args.incidentId) return [];
+    if (!args.incidentId) return { inside: [], outside: [] };
     const user = await ctx.db.query("users").withIndex("by_clerkId", q => q.eq("clerkId", args.clerkId)).first();
-    if (!user || user.role !== "admin") return [];
+    if (!user || user.role !== "admin") return { inside: [], outside: [] };
 
-    const roll = await ctx.db.query("rollCall").withIndex("by_incident", q => q.eq("incidentId", args.incidentId!)).collect();
+    const insides = await ctx.db.query("inside").withIndex("by_incident", q => q.eq("incidentId", args.incidentId!)).collect();
+    const outsides = await ctx.db.query("outside").withIndex("by_incident", q => q.eq("incidentId", args.incidentId!)).collect();
     
     // Join with users
-    const results = await Promise.all(roll.map(async (r) => {
+    const resultsInside = await Promise.all(insides.map(async (r) => {
       const u = await ctx.db.get(r.userId);
       return { ...r, userName: u?.name || u?.email || "Unknown Guest" };
     }));
 
-    // Sort: PANIC -> IN_BUILDING -> SAFE
-    results.sort((a, b) => {
-      const order: Record<string, number> = { "PANIC": 0, "IN_BUILDING": 1, "SAFE": 2 };
-      return order[a.status] - order[b.status];
+    const resultsOutside = await Promise.all(outsides.map(async (r) => {
+      const u = await ctx.db.get(r.userId);
+      return { ...r, userName: u?.name || u?.email || "Unknown Guest" };
+    }));
+
+    // Sort Inside: PANIC -> IN_BUILDING
+    resultsInside.sort((a, b) => {
+      const order: Record<string, number> = { "PANIC": 0, "IN_BUILDING": 1 };
+      return (order[a.status] ?? 2) - (order[b.status] ?? 2);
     });
 
-    return results;
+    return { inside: resultsInside, outside: resultsOutside };
   }
 });
 
@@ -947,16 +973,24 @@ export const deleteIncidents = mutation({
   }
 });
 
-export const removeRollCallUsers = mutation({
-  args: { clerkId: v.string(), rollCallIds: v.array(v.id("rollCall")) },
+export const moveToOutside = mutation({
+  args: { clerkId: v.string(), insideIds: v.array(v.id("inside")) },
   handler: async (ctx, args) => {
     const user = await ctx.db.query("users").withIndex("by_clerkId", q => q.eq("clerkId", args.clerkId)).first();
     if (!user || user.role !== "admin") throw new Error("Unauthorized");
     
-    for (const id of args.rollCallIds) {
+    for (const id of args.insideIds) {
       const record = await ctx.db.get(id);
       if (record) {
         await ctx.db.delete(id);
+        await ctx.db.insert("outside", {
+          incidentId: record.incidentId,
+          userId: record.userId,
+          status: "SAFE",
+          lastLat: record.lastLat,
+          lastLon: record.lastLon,
+          updatedAt: Date.now()
+        });
       }
     }
   }
