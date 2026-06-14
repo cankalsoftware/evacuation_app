@@ -70,6 +70,82 @@ function distanceToLineSegment(p: { lat: number, lon: number }, v: { lat: number
   return Math.sqrt((p.lat - projLat)**2 + (p.lon - projLon)**2);
 }
 
+interface GridCell {
+  row: number;
+  col: number;
+  lat: number;
+  lon: number;
+  isExit: boolean;
+}
+
+function aStarGridPath(startCell: GridCell, exits: GridCell[], gridPaths: GridCell[]) {
+  // Finds shortest path from startCell to nearest exit using A* algorithm
+  // Allowed moves: 8-way (horizontal, vertical, diagonal)
+  if (exits.some(e => e.row === startCell.row && e.col === startCell.col)) {
+    return [startCell];
+  }
+
+  const openSet = [startCell];
+  const cameFrom = new Map<string, GridCell>();
+  const gScore = new Map<string, number>();
+  gScore.set(`${startCell.row},${startCell.col}`, 0);
+
+  const getH = (cell: GridCell) => {
+    // Distance to closest exit
+    let minD = Infinity;
+    for (const e of exits) {
+      const d = Math.hypot(cell.row - e.row, cell.col - e.col);
+      if (d < minD) minD = d;
+    }
+    return minD;
+  };
+
+  const fScore = new Map<string, number>();
+  fScore.set(`${startCell.row},${startCell.col}`, getH(startCell));
+
+  while (openSet.length > 0) {
+    // Node in openSet having the lowest fScore[] value
+    openSet.sort((a, b) => (fScore.get(`${a.row},${a.col}`) ?? Infinity) - (fScore.get(`${b.row},${b.col}`) ?? Infinity));
+    const current = openSet.shift()!;
+    const currentKey = `${current.row},${current.col}`;
+
+    if (exits.some(e => e.row === current.row && e.col === current.col)) {
+      // Reconstruct path
+      const path = [current];
+      let curr = current;
+      while (cameFrom.has(`${curr.row},${curr.col}`)) {
+        curr = cameFrom.get(`${curr.row},${curr.col}`)!;
+        path.unshift(curr);
+      }
+      return path;
+    }
+
+    // Neighbors
+    for (const dr of [-1, 0, 1]) {
+      for (const dc of [-1, 0, 1]) {
+        if (dr === 0 && dc === 0) continue;
+        const neighbor = gridPaths.find(p => p.row === current.row + dr && p.col === current.col + dc);
+        if (!neighbor) continue;
+
+        const moveCost = Math.hypot(dr, dc); // 1 for straight, 1.414 for diagonal
+        const tentative_gScore = (gScore.get(currentKey) ?? Infinity) + moveCost;
+        const neighborKey = `${neighbor.row},${neighbor.col}`;
+
+        if (tentative_gScore < (gScore.get(neighborKey) ?? Infinity)) {
+          cameFrom.set(neighborKey, current);
+          gScore.set(neighborKey, tentative_gScore);
+          fScore.set(neighborKey, tentative_gScore + getH(neighbor));
+          if (!openSet.some(n => n.row === neighbor.row && n.col === neighbor.col)) {
+            openSet.push(neighbor);
+          }
+        }
+      }
+    }
+  }
+
+  return null; // No path found
+}
+
 export default function EvacuationMode({ dashboardData, autoBuilding, currentLocation, activeIncident, onClose }: any) {
   const { width, height } = useWindowDimensions();
   const { user } = useUser();
@@ -84,7 +160,6 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
   const [evacStatus, setEvacStatus] = useState<"IN_BUILDING" | "PANIC" | "SAFE">("IN_BUILDING");
   const [sirenSound, setSirenSound] = useState<Audio.Sound | null>(null);
   
-  const visitedNodeIdsRef = useRef<Set<number>>(new Set());
   const hasReachedExitRef = useRef<boolean>(false);
 
   const subscriptionRef = useRef<Location.LocationSubscription | null>(null);
@@ -164,45 +239,65 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
   }, [drLocation, autoBuilding]);
 
   // Dynamic Routing Evaluator
+  const getGridDimensions = () => {
+    if (!autoBuilding?.polygon || autoBuilding.polygon.length < 4) return { rows: 1, cols: 1, minLat: 0, maxLat: 0, minLon: 0, maxLon: 0 };
+    const poly = autoBuilding.polygon;
+    const minLat = Math.min(...poly.map((p:any)=>p.lat));
+    const maxLat = Math.max(...poly.map((p:any)=>p.lat));
+    const minLon = Math.min(...poly.map((p:any)=>p.lon));
+    const maxLon = Math.max(...poly.map((p:any)=>p.lon));
+    
+    // Quick approximation of height/width in meters
+    const heightMeters = getDistance(minLat, minLon, maxLat, minLon);
+    const widthMeters = getDistance(minLat, minLon, minLat, maxLon);
+    
+    const rows = Math.max(1, Math.ceil(heightMeters / 5));
+    const cols = Math.max(1, Math.ceil(widthMeters / 5));
+    
+    return { rows, cols, minLat, maxLat, minLon, maxLon };
+  };
+
   const evaluateRouting = (currentLoc: {lat: number, lon: number}) => {
-    if (!autoBuilding?.safeNodes || autoBuilding.safeNodes.length === 0) return null;
+    if (!autoBuilding?.gridPaths || autoBuilding.gridPaths.length === 0) return null;
 
-    const exits = autoBuilding.safeNodes.map((n: any, i: number) => ({...n, _id: i})).filter((n: any) => n.isExit);
-    const turns = autoBuilding.safeNodes.map((n: any, i: number) => ({...n, _id: i})).filter((n: any) => !n.isExit);
-
+    const gridPaths = autoBuilding.gridPaths;
+    const exits = gridPaths.filter((p: any) => p.isExit);
     if (exits.length === 0) return null;
 
-    // 1. Identify absolute Nearest Exit
-    let nearestExit = exits[0];
-    let minExitDist = Infinity;
-    for (const e of exits) {
-      const d = getDistance(currentLoc.lat, currentLoc.lon, e.lat, e.lon);
-      if (d < minExitDist) {
-        minExitDist = d;
-        nearestExit = e;
+    // 1. Convert currentLoc to grid cell
+    const { rows, cols, minLat, maxLat, minLon, maxLon } = getGridDimensions();
+    const row = Math.floor((maxLat - currentLoc.lat) / (maxLat - minLat) * rows);
+    const col = Math.floor((currentLoc.lon - minLon) / (maxLon - minLon) * cols);
+
+    // 2. Find nearest valid cell on the gridPaths if the user is slightly off-path
+    let snappedCell = gridPaths[0];
+    let minDist = Infinity;
+    
+    // If user's cell is exactly in a painted cell, snap immediately
+    const exactMatch = gridPaths.find((p: any) => p.row === row && p.col === col);
+    if (exactMatch) {
+      snappedCell = exactMatch;
+    } else {
+      // Find physically closest painted cell
+      for (const p of gridPaths) {
+        const d = getDistance(currentLoc.lat, currentLoc.lon, p.lat, p.lon);
+        if (d < minDist) {
+          minDist = d;
+          snappedCell = p;
+        }
       }
     }
 
-    // 2. Filter valid unvisited Turn Points (must be closer to the exit than the user is)
-    const unvisitedTurns = turns.filter((t: any) => {
-      if (visitedNodeIdsRef.current.has(t._id)) return false;
-      const distToExit = getDistance(t.lat, t.lon, nearestExit.lat, nearestExit.lon);
-      return distToExit < minExitDist; // Mathematically guarantees progress towards exit
-    });
-
-    // 3. Find the valid Turn Point closest to the user's current location
-    let nearestTurn: any = null;
-    let minTurnDist = Infinity;
-    for (const t of unvisitedTurns) {
-      const d = getDistance(currentLoc.lat, currentLoc.lon, t.lat, t.lon);
-      if (d < minTurnDist) {
-        minTurnDist = d;
-        nearestTurn = t;
-      }
-    }
-
-    // 4. Direct arrow to the Turn Point, or Exit if no valid Turn Points exist
-    return nearestTurn ? nearestTurn : nearestExit;
+    // 3. Find shortest grid path to nearest exit
+    const path = aStarGridPath(snappedCell, exits, gridPaths);
+    
+    if (!path || path.length === 0) return null;
+    
+    // 4. Determine immediate target cell
+    // A* returns [CurrentCell, NextCell, ... ExitCell]. If path.length > 1, head to NextCell.
+    const targetCell = path.length > 1 ? path[1] : path[0];
+    
+    return targetCell;
   };
 
   useEffect(() => {
@@ -247,10 +342,6 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
                  if (target.isExit) {
                    hasReachedExitRef.current = true;
                    Speech.speak("You have reached the exit!");
-                 } else {
-                   // Mark the turn point as visited so we don't route back to it
-                   visitedNodeIdsRef.current.add(target._id);
-                   Speech.speak("Safe point reached. Continue following the arrow.");
                  }
                }
                

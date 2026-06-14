@@ -74,7 +74,7 @@ export default function AdminDashboard() {
   const updateBuildingPolygon = useMutation(api.portal.updateBuildingPolygon);
   const updateBuildingInfo = useMutation(api.portal.updateBuildingInfo);
   const updateBuildingCalibration = useMutation(api.portal.updateBuildingCalibration);
-  const updateBuildingSafeNodes = useMutation(api.portal.updateBuildingSafeNodes);
+  const updateBuildingGridPaths = useMutation(api.portal.updateBuildingGridPaths);
   const deleteBuilding = useMutation(api.portal.deleteBuilding);
   const triggerIncident = useMutation(api.portal.triggerIncident);
   const triggerSiteIncident = useMutation(api.portal.triggerSiteIncident);
@@ -93,12 +93,11 @@ export default function AdminDashboard() {
   const [isMapEditorOpen, setIsMapEditorOpen] = React.useState(false);
   const [isLocatingUser, setIsLocatingUser] = React.useState(false);
   const [mapEditorStep, setMapEditorStep] = React.useState<1 | 2>(1); // 1 = Calibration, 2 = Safe Routes
-  const [routeNodeType, setRouteNodeType] = React.useState<"turn" | "exit">("exit");
+  const [gridPaintMode, setGridPaintMode] = React.useState<"safe" | "exit" | "erase">("safe");
   
   const [activeCalibIdx, setActiveCalibIdx] = React.useState(0);
   const [calibPoints, setCalibPoints] = React.useState<{x: number, y: number}[]>([]);
-  const [routingNodes, setRoutingNodes] = React.useState<{lat: number, lon: number, isExit: boolean}[]>([]);
-  const [activeRouteIdx, setActiveRouteIdx] = React.useState<number | null>(null);
+  const [gridPaths, setGridPaths] = React.useState<{row: number, col: number, lat: number, lon: number, isExit: boolean}[]>([]);
   const [imgLayout, setImgLayout] = React.useState<{w: number, h: number}>({w: 1, h: 1});
   const [imageAspectRatio, setImageAspectRatio] = React.useState<number | null>(null);
   const [isUploading, setIsUploading] = React.useState(false);
@@ -141,6 +140,143 @@ export default function AdminDashboard() {
     });
     return groups;
   }, [allIncidentsHistory]);
+
+  const getDistanceInMeters = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371e3;
+    const p1 = lat1 * Math.PI/180;
+    const p2 = lat2 * Math.PI/180;
+    const dp = (lat2-lat1) * Math.PI/180;
+    const dl = (lon2-lon1) * Math.PI/180;
+    const a = Math.sin(dp/2) * Math.sin(dp/2) + Math.cos(p1) * Math.cos(p2) * Math.sin(dl/2) * Math.sin(dl/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  };
+
+  const getGridDimensions = () => {
+    if (!selectedBuilding?.polygon || selectedBuilding.polygon.length < 4) return { rows: 1, cols: 1, minLat: 0, maxLat: 0, minLon: 0, maxLon: 0 };
+    const poly = selectedBuilding.polygon;
+    const minLat = Math.min(...poly.map((p:any)=>p.lat));
+    const maxLat = Math.max(...poly.map((p:any)=>p.lat));
+    const minLon = Math.min(...poly.map((p:any)=>p.lon));
+    const maxLon = Math.max(...poly.map((p:any)=>p.lon));
+    
+    const heightMeters = getDistanceInMeters(minLat, minLon, maxLat, minLon);
+    const widthMeters = getDistanceInMeters(minLat, minLon, minLat, maxLon);
+    
+    const rows = Math.max(1, Math.ceil(heightMeters / 5));
+    const cols = Math.max(1, Math.ceil(widthMeters / 5));
+    
+    return { rows, cols, minLat, maxLat, minLon, maxLon };
+  };
+
+  const getDynamicMapHeight = () => {
+    if (!selectedBuilding?.polygon || selectedBuilding.polygon.length < 4) return 400;
+    const poly = selectedBuilding.polygon;
+    const minLat = Math.min(...poly.map((p:any)=>p.lat));
+    const maxLat = Math.max(...poly.map((p:any)=>p.lat));
+    const minLon = Math.min(...poly.map((p:any)=>p.lon));
+    const maxLon = Math.max(...poly.map((p:any)=>p.lon));
+    
+    const heightMeters = getDistanceInMeters(minLat, minLon, maxLat, minLon);
+    const widthMeters = getDistanceInMeters(minLat, minLon, minLat, maxLon);
+    
+    if (widthMeters > 0 && heightMeters > 0) {
+      const containerWidth = width - 48;
+      const aspect = widthMeters / heightMeters;
+      return Math.max(300, Math.min(800, containerWidth / aspect));
+    }
+    return 400;
+  };
+
+  const getMapTransform = () => {
+    let scale = 1;
+    let translateX = 0;
+    let translateY = 0;
+    let maskW = imgLayout.w;
+    let maskH = imgLayout.h;
+    let boxCenterX;
+    let boxCenterY;
+    
+    if (selectedBuilding?.imageCalibrationPoints?.length >= 4 && imgLayout.w > 1) {
+      const calib = selectedBuilding.imageCalibrationPoints;
+      const bounds = getRenderedImageBounds();
+      const isLegacyPixels = calib[0].x > 2;
+      const minCX = Math.min(...calib.map((c:any)=> isLegacyPixels ? c.x / Math.max(1, imgLayout.w) : c.x));
+      const maxCX = Math.max(...calib.map((c:any)=> isLegacyPixels ? c.x / Math.max(1, imgLayout.w) : c.x));
+      const minCY = Math.min(...calib.map((c:any)=> isLegacyPixels ? c.y / Math.max(1, imgLayout.h) : c.y));
+      const maxCY = Math.max(...calib.map((c:any)=> isLegacyPixels ? c.y / Math.max(1, imgLayout.h) : c.y));
+      
+      const boxW_px = (maxCX - minCX) * bounds.renderW;
+      const boxH_px = (maxCY - minCY) * bounds.renderH;
+      
+      if (boxW_px > 0 && boxH_px > 0) {
+        const idealMaskW = boxW_px / 0.90;
+        const idealMaskH = boxH_px / 0.90;
+        
+        const containerW = imgLayout.w;
+        const containerH = imgLayout.h;
+        
+        scale = Math.min(containerW / idealMaskW, containerH / idealMaskH);
+        
+        maskW = idealMaskW * scale;
+        maskH = idealMaskH * scale;
+        
+        boxCenterX = bounds.offsetX + ((minCX + maxCX) / 2) * bounds.renderW;
+        boxCenterY = bounds.offsetY + ((minCY + maxCY) / 2) * bounds.renderH;
+        
+        translateX = maskW/2 - imgLayout.w/2 - (boxCenterX - imgLayout.w/2) * scale;
+        translateY = maskH/2 - imgLayout.h/2 - (boxCenterY - imgLayout.h/2) * scale;
+      }
+    }
+    return { scale, translateX, translateY, maskW, maskH, boxCenterX, boxCenterY };
+  };
+
+  const handleGridInteraction = (screenX: number, screenY: number) => {
+    const { scale, maskW, maskH, boxCenterX, boxCenterY } = getMapTransform();
+    
+    let rawX = screenX;
+    let rawY = screenY;
+
+    if (boxCenterX !== undefined && boxCenterY !== undefined) {
+      rawX = boxCenterX + (screenX - maskW/2) / scale;
+      rawY = boxCenterY + (screenY - maskH/2) / scale;
+    }
+
+    const gps = mapImageToGPS(rawX, rawY);
+    const { rows, cols, minLat, maxLat, minLon, maxLon } = getGridDimensions();
+    const row = Math.floor((maxLat - gps.lat) / (maxLat - minLat) * rows);
+    const col = Math.floor((gps.lon - minLon) / (maxLon - minLon) * cols);
+    
+    if (row >= 0 && row < rows && col >= 0 && col < cols) {
+      setGridPaths(prev => {
+        const existingIdx = prev.findIndex(p => p.row === row && p.col === col);
+        if (gridPaintMode === "erase") {
+          if (existingIdx !== -1) {
+            const newPaths = [...prev];
+            newPaths.splice(existingIdx, 1);
+            return newPaths;
+          }
+        } else {
+          const newCell = { 
+            row, col, 
+            lat: maxLat - ((row + 0.5) * (maxLat - minLat) / rows), 
+            lon: minLon + ((col + 0.5) * (maxLon - minLon) / cols), 
+            isExit: gridPaintMode === "exit" 
+          };
+          
+          if (existingIdx !== -1) {
+            if (prev[existingIdx].isExit === newCell.isExit) return prev; // No change needed
+            const newPaths = [...prev];
+            newPaths[existingIdx] = newCell;
+            return newPaths;
+          } else {
+            return [...prev, newCell];
+          }
+        }
+        return prev;
+      });
+    }
+  };
 
   const exportLogs = async () => {
     if (!allIncidentsHistory || allIncidentsHistory.length === 0) {
@@ -203,14 +339,16 @@ export default function AdminDashboard() {
   // Keep selectedBuilding in sync with database updates (like image uploads)
   React.useEffect(() => {
     if (selectedBuilding && dashboardData?.buildings) {
-      const updated = dashboardData.buildings.find((b: any) => b._id === selectedBuilding._id);
-      if (updated && (
-          updated.masterPlanUrl !== selectedBuilding.masterPlanUrl || 
+      if (selectedBuilding) {
+        const updated = dashboardData.buildings.find((b: any) => b._id === selectedBuilding._id);
+        if (updated && (
           updated.imageCalibrationPoints?.length !== selectedBuilding.imageCalibrationPoints?.length ||
-          updated.safeNodes?.length !== selectedBuilding.safeNodes?.length
-      )) {
+          updated.polygon?.length !== selectedBuilding.polygon?.length ||
+          updated.gridPaths?.length !== selectedBuilding.gridPaths?.length
+        )) {
         setSelectedBuilding(updated);
       }
+    }
     }
   }, [dashboardData, selectedBuilding]);
 
@@ -306,22 +444,7 @@ export default function AdminDashboard() {
     setCalibPoints(newPoints);
   };
 
-  const handleNudgeRoute = (idx: number, dx: number, dy: number) => {
-    const node = routingNodes[idx];
-    if (!node) return;
-    const bounds = getRenderedImageBounds();
-    const pu = mapGPSToImage(node.lat, node.lon);
-    if (!pu) return;
-    const isLegacy = pu.x > 2;
-    
-    const rawX = (isLegacy ? pu.x : bounds.offsetX + pu.x * bounds.renderW) + (dx * 2);
-    const rawY = (isLegacy ? pu.y : bounds.offsetY + pu.y * bounds.renderH) + (dy * 2);
-    
-    const newGps = mapImageToGPS(rawX, rawY);
-    const newNodes = [...routingNodes];
-    newNodes[idx] = { ...newNodes[idx], lat: newGps.lat, lon: newGps.lon };
-    setRoutingNodes(newNodes);
-  };
+
 
   const handleMapPress = (e: any) => {
     if (e.nativeEvent.coordinate) {
@@ -601,7 +724,7 @@ export default function AdminDashboard() {
             const isComplete = building.polygon && building.polygon.length >= 3 && 
                                building.masterPlanId && 
                                building.imageCalibrationPoints && building.imageCalibrationPoints.length >= 3 &&
-                               building.safeNodes && building.safeNodes.some((n: any) => n.isExit);
+                               building.gridPaths && building.gridPaths.some((n: any) => n.isExit);
             const activeIncident = activeIncidents.find((i: any) => i.buildingId === building._id);
             const isAlarming = !!activeIncident;
 
@@ -708,7 +831,7 @@ export default function AdminDashboard() {
                 const allInSiteActive = activeCount === siteBuildings.length;
                 const isRealEmergency = activeIncidentsForSite.some((i:any) => !i.isDrill);
                 const siteDetail = dashboardData?.sites?.find((s: any) => s.name === siteName);
-                const isSiteComplete = siteBuildings.every(b => b.polygon && b.polygon.length >= 3 && b.masterPlanId && b.imageCalibrationPoints && b.imageCalibrationPoints.length >= 3 && b.safeNodes && b.safeNodes.some((n: any) => n.isExit));
+                const isSiteComplete = siteBuildings.every(b => b.polygon && b.polygon.length >= 3 && b.masterPlanId && b.imageCalibrationPoints && b.imageCalibrationPoints.length >= 3 && b.gridPaths && b.gridPaths.some((n: any) => n.isExit));
                 
                 let siteStatusClass = 'border border-neutral-700/60';
                 if (allInSiteActive) {
@@ -1006,7 +1129,7 @@ export default function AdminDashboard() {
               const isActive = selectedBuilding.polygon && selectedBuilding.polygon.length >= 3 && 
                                selectedBuilding.masterPlanId && 
                                selectedBuilding.imageCalibrationPoints && selectedBuilding.imageCalibrationPoints.length >= 3 &&
-                               selectedBuilding.safeNodes && selectedBuilding.safeNodes.some((n: any) => n.isExit);
+                               selectedBuilding.gridPaths && selectedBuilding.gridPaths.some((n: any) => n.isExit);
               if (!isActive) {
                 return (
                   <View className="bg-red-900/30 p-4 rounded-xl border border-red-500/50 mb-6 flex-row items-center">
@@ -1346,9 +1469,9 @@ export default function AdminDashboard() {
                     className="w-full bg-blue-600 py-4 rounded-xl items-center flex-row justify-center shadow-lg"
                     onPress={() => {
                       setCalibPoints(selectedBuilding.imageCalibrationPoints || []);
-                      setRoutingNodes(selectedBuilding.safeNodes || []);
+                      setGridPaths(selectedBuilding.gridPaths || []);
                       setMapEditorStep(1);
-                      setRouteNodeType("exit");
+                      setGridPaintMode("safe");
                       setIsMapEditorOpen(true);
                     }}
                   >
@@ -1596,267 +1719,150 @@ export default function AdminDashboard() {
             </ScrollView>
           ) : (
             <ScrollView className="flex-1" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
-              <Text className="text-neutral-400 text-sm mb-4">Select a node type, then tap the map to draw routes.</Text>
+              <Text className="text-neutral-400 text-sm mb-4">Select a brush type, then tap the map to paint grid cells (5x5m).</Text>
 
               {/* Toolbar */}
               <View className="flex-row space-x-2 mb-4">
                 <TouchableOpacity 
-                  className={`flex-1 py-3 rounded-xl items-center border-2 ${routeNodeType === "exit" ? 'bg-green-600 border-green-400' : 'bg-neutral-800 border-neutral-700'}`}
-                  onPress={() => setRouteNodeType("exit")}
+                  className={`flex-1 py-3 rounded-xl items-center border-2 ${gridPaintMode === "safe" ? 'bg-blue-600 border-blue-400' : 'bg-neutral-800 border-neutral-700'}`}
+                  onPress={() => setGridPaintMode("safe")}
+                >
+                  <Text className="text-white font-bold">🟦 Safe Zone</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  className={`flex-1 py-3 rounded-xl items-center border-2 ${gridPaintMode === "exit" ? 'bg-green-600 border-green-400' : 'bg-neutral-800 border-neutral-700'}`}
+                  onPress={() => setGridPaintMode("exit")}
                 >
                   <Text className="text-white font-bold">🚪 Exit</Text>
                 </TouchableOpacity>
                 <TouchableOpacity 
-                  className={`flex-1 py-3 rounded-xl items-center border-2 ${routeNodeType === "turn" ? 'bg-blue-600 border-blue-400' : 'bg-neutral-800 border-neutral-700'} ${!routingNodes.some(n => n.isExit) ? 'opacity-50' : ''}`}
-                  onPress={() => {
-                    if (!routingNodes.some(n => n.isExit)) {
-                      showToast("Please add an Exit to the map first!");
-                      return;
-                    }
-                    setRouteNodeType("turn");
-                  }}
-                  disabled={!routingNodes.some(n => n.isExit)}
+                  className={`flex-1 py-3 rounded-xl items-center border-2 ${gridPaintMode === "erase" ? 'bg-red-600 border-red-400' : 'bg-neutral-800 border-neutral-700'}`}
+                  onPress={() => setGridPaintMode("erase")}
                 >
-                  <Text className="text-white font-bold">🔵 Turn Point</Text>
+                  <Text className="text-white font-bold">🧹 Erase</Text>
                 </TouchableOpacity>
               </View>
               
-              <View className="bg-neutral-800 rounded-xl overflow-hidden mb-4 w-full" style={{ height: 400 }}>
+              <View 
+                className="bg-neutral-800 rounded-xl mb-4 w-full justify-center items-center relative" 
+                style={{ height: getDynamicMapHeight() }}
+                onLayout={(e) => setImgLayout({w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height)})}
+              >
                 {selectedBuilding?.masterPlanUrl && (
-                  <TouchableOpacity 
-                    activeOpacity={1}
-                    className="flex-1 relative"
-                    onLayout={(e) => setImgLayout({w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height)})}
-                    onPress={(e) => {
+                  <View 
+                    style={{
+                      width: getMapTransform().maskW,
+                      height: getMapTransform().maskH,
+                      overflow: 'hidden',
+                      position: 'relative',
+                      backgroundColor: '#171717'
+                    }}
+                    onStartShouldSetResponder={() => true}
+                    onResponderGrant={(e) => {
                       const rawX = Platform.OS === 'web' && (e.nativeEvent as any).offsetX !== undefined ? (e.nativeEvent as any).offsetX : e.nativeEvent.locationX;
                       const rawY = Platform.OS === 'web' && (e.nativeEvent as any).offsetY !== undefined ? (e.nativeEvent as any).offsetY : e.nativeEvent.locationY;
-                      const gps = mapImageToGPS(rawX, rawY);
-                      
-                      if (activeRouteIdx !== null) {
-                        const newNodes = [...routingNodes];
-                        newNodes[activeRouteIdx].lat = gps.lat;
-                        newNodes[activeRouteIdx].lon = gps.lon;
-                        setRoutingNodes(newNodes);
-                        setActiveRouteIdx(null);
-                      } else {
-                        if (routeNodeType === "turn" && !routingNodes.some(n => n.isExit)) {
-                          showToast("Please add an Exit to the map first!");
-                          return;
-                        }
-                        setRoutingNodes([...routingNodes, { lat: gps.lat, lon: gps.lon, isExit: routeNodeType === "exit" }]);
-                      }
+                      handleGridInteraction(rawX, rawY);
+                    }}
+                    onResponderMove={(e) => {
+                      const rawX = Platform.OS === 'web' && (e.nativeEvent as any).offsetX !== undefined ? (e.nativeEvent as any).offsetX : e.nativeEvent.locationX;
+                      const rawY = Platform.OS === 'web' && (e.nativeEvent as any).offsetY !== undefined ? (e.nativeEvent as any).offsetY : e.nativeEvent.locationY;
+                      handleGridInteraction(rawX, rawY);
                     }}
                   >
-                    <Image 
-                      source={{ uri: selectedBuilding.masterPlanUrl }} 
-                      className="w-full h-full opacity-70" 
-                      resizeMode="contain" 
-                    />
-                    
-                    {/* Show Calibration Points faded */}
-                    {calibPoints.map((p, i) => {
-                      if (!p) return null;
-                      const labelStr = selectedBuilding?.polygon?.[i]?.label;
-                      const labelShort = labelStr ? labelStr.split(' ').map((w: string)=>w[0]).join('').substring(0,2).toUpperCase() : `P${i+1}`;
-                      const isLegacyPixels = p.x > 2;
-                      const bounds = getRenderedImageBounds();
-                      const px = isLegacyPixels ? p.x : bounds.offsetX + p.x * bounds.renderW;
-                      const py = isLegacyPixels ? p.y : bounds.offsetY + p.y * bounds.renderH;
-                      return (
-                        <View key={i} className="absolute items-center pointer-events-none" style={{ left: px - 15, top: py - 30, width: 30, height: 30, opacity: 0.5 }}>
-                          <MaterialCommunityIcons name="map-marker" size={30} color="#22c55e" />
-                          <Text className="text-white text-[8px] font-bold absolute top-1">{labelShort}</Text>
-                        </View>
-                      )
-                    })}
-
-                    {/* Show Routing Nodes */}
+                    <View 
+                      style={{
+                        position: 'absolute',
+                        left: 0,
+                        top: 0,
+                        width: imgLayout.w,
+                        height: imgLayout.h,
+                        transform: [
+                          { translateX: getMapTransform().translateX },
+                          { translateY: getMapTransform().translateY },
+                          { scale: getMapTransform().scale }
+                        ]
+                      }}
+                      pointerEvents="none"
+                    >
+                      <Image 
+                        source={{ uri: selectedBuilding.masterPlanUrl }} 
+                        className="w-full h-full opacity-70" 
+                        resizeMode="contain" 
+                      />
+                      
+                      {/* Lightweight Grid Overlay & Painted Cells */}
                     {(() => {
-                      let turnCount = 0;
-                      return routingNodes.map((node, i) => {
-                        if (!node.isExit) turnCount++;
-                        const displayNum = node.isExit ? 'E' : turnCount;
-                        
-                        const pu = mapGPSToImage(node.lat, node.lon);
-                        if (!pu) return null;
-                        
-                        const bounds = getRenderedImageBounds();
-                        const isLegacy = pu.x > 2;
-                        const sx = isLegacy ? pu.x : bounds.offsetX + pu.x * bounds.renderW;
-                        const sy = isLegacy ? pu.y : bounds.offsetY + pu.y * bounds.renderH;
+                      const { rows, cols, minLat, maxLat, minLon, maxLon } = getGridDimensions();
+                      const cells = [];
+                      for (let r = 0; r < rows; r++) {
+                        for (let c = 0; c < cols; c++) {
+                          const latCenter = maxLat - ((r + 0.5) * (maxLat - minLat) / rows);
+                          const lonCenter = minLon + ((c + 0.5) * (maxLon - minLon) / cols);
+                          const pu = mapGPSToImage(latCenter, lonCenter);
+                          if (!pu) continue;
+                          
+                          const bounds = getRenderedImageBounds();
+                          const isLegacy = pu.x > 2;
+                          const sx = isLegacy ? pu.x : bounds.offsetX + pu.x * bounds.renderW;
+                          const sy = isLegacy ? pu.y : bounds.offsetY + pu.y * bounds.renderH;
+                          
+                          const cellTopLeft = mapGPSToImage(maxLat - (r * (maxLat - minLat) / rows), minLon + (c * (maxLon - minLon) / cols));
+                          const cellBottomRight = mapGPSToImage(maxLat - ((r + 1) * (maxLat - minLat) / rows), minLon + ((c + 1) * (maxLon - minLon) / cols));
+                          
+                          let cellW = 20;
+                          let cellH = 20;
+                          
+                          if (cellTopLeft && cellBottomRight) {
+                             const tlX = isLegacy ? cellTopLeft.x : bounds.offsetX + cellTopLeft.x * bounds.renderW;
+                             const brX = isLegacy ? cellBottomRight.x : bounds.offsetX + cellBottomRight.x * bounds.renderW;
+                             const tlY = isLegacy ? cellTopLeft.y : bounds.offsetY + cellTopLeft.y * bounds.renderH;
+                             const brY = isLegacy ? cellBottomRight.y : bounds.offsetY + cellBottomRight.y * bounds.renderH;
+                             cellW = Math.max(10, Math.abs(brX - tlX));
+                             cellH = Math.max(10, Math.abs(brY - tlY));
+                          }
 
-                        return (
-                          <TouchableOpacity 
-                            key={`route-${i}`}
-                            activeOpacity={0.8}
-                            className="absolute items-center" 
-                            style={{ left: sx - 20, top: sy - 40, width: 40, height: 40, zIndex: activeRouteIdx === i ? 999 : (node.isExit ? 10 : 1) }}
-                            onPress={(e) => {
-                              e.stopPropagation();
-                              setActiveRouteIdx(activeRouteIdx === i ? null : i);
-                            }}
-                          >
-                            {activeRouteIdx === i ? (
-                              <View className="absolute pointer-events-none" style={{ left: 4, top: 24, width: 32, height: 32 }}>
-                                <View className="absolute bg-red-500 shadow-md shadow-black" style={{ left: 15, top: 0, width: 2, height: 12 }} />
-                                <View className="absolute bg-red-500 shadow-md shadow-black" style={{ left: 15, bottom: 0, width: 2, height: 12 }} />
-                                <View className="absolute bg-red-500 shadow-md shadow-black" style={{ top: 15, left: 0, width: 12, height: 2 }} />
-                                <View className="absolute bg-red-500 shadow-md shadow-black" style={{ top: 15, right: 0, width: 12, height: 2 }} />
-                              </View>
-                            ) : (
-                              <>
-                                <MaterialCommunityIcons 
-                                  name="map-marker" 
-                                  size={40} 
-                                  color={node.isExit ? "#22c55e" : "#3b82f6"} 
-                                />
-                                <Text className="text-white text-[10px] font-bold absolute top-2">{displayNum}</Text>
-                              </>
-                            )}
-                            {activeRouteIdx === i && (
-                              <View className="absolute bg-neutral-900/90 rounded-full border border-neutral-600 shadow-xl z-50 flex-row items-center justify-center" style={{ width: 80, height: 80, left: sx > imgLayout.w - 100 ? -75 : 35, top: -20 }}>
-                                <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleNudgeRoute(i, 0, -1); }} className="absolute top-1 p-1 bg-neutral-700 rounded-full"><MaterialCommunityIcons name="chevron-up" size={20} color="white" /></TouchableOpacity>
-                                <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleNudgeRoute(i, 0, 1); }} className="absolute bottom-1 p-1 bg-neutral-700 rounded-full"><MaterialCommunityIcons name="chevron-down" size={20} color="white" /></TouchableOpacity>
-                                <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleNudgeRoute(i, -1, 0); }} className="absolute left-1 p-1 bg-neutral-700 rounded-full"><MaterialCommunityIcons name="chevron-left" size={20} color="white" /></TouchableOpacity>
-                                <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleNudgeRoute(i, 1, 0); }} className="absolute right-1 p-1 bg-neutral-700 rounded-full"><MaterialCommunityIcons name="chevron-right" size={20} color="white" /></TouchableOpacity>
-                                <View className="w-2 h-2 bg-neutral-500 rounded-full" />
-                              </View>
-                            )}
-                          </TouchableOpacity>
-                        )
-                      })})()}
-                  </TouchableOpacity>
+                          const paintedCell = gridPaths.find(p => p.row === r && p.col === c);
+
+                          cells.push(
+                            <View 
+                              key={`grid-${r}-${c}`}
+                              className={`absolute items-center justify-center border ${
+                                paintedCell 
+                                  ? (paintedCell.isExit ? 'bg-green-500/50 border-green-400' : 'bg-blue-500/50 border-blue-400')
+                                  : 'border-neutral-500/10'
+                              }`} 
+                              style={{ 
+                                left: sx - (cellW/2), 
+                                top: sy - (cellH/2), 
+                                width: cellW, 
+                                height: cellH, 
+                                zIndex: paintedCell?.isExit ? 10 : 1 
+                              }}
+                              pointerEvents="none"
+                            >
+                              {paintedCell?.isExit && <Text className="text-white text-[8px] font-bold">E</Text>}
+                            </View>
+                          );
+                        }
+                      }
+                      return cells;
+                    })()}
+                    </View>
+                  </View>
                 )}
               </View>
 
-              {routingNodes.length > 0 && (
-                <View className="mb-6">
-                  <Text className="text-white font-bold mb-2">Manage Route Nodes</Text>
-                  
-                  <View className="bg-blue-900/30 p-4 rounded-xl border border-blue-600/50 mb-4 flex-row">
-                    <Text className="text-blue-500 mr-3 text-2xl">💡</Text>
-                    <View className="flex-1">
-                      <Text className="text-blue-400 font-bold mb-1 uppercase tracking-wider text-xs">Routing Strategy</Text>
-                      <Text className="text-blue-300 text-xs">For best guidance, add Turn Points at all <Text className="font-bold text-white">critical corners</Text> and intersections. In long corridors, place a repeated Turn Point every <Text className="font-bold text-white">4-5 meters</Text> to ensure guests are continuously guided smoothly toward the exit.</Text>
-                    </View>
-                  </View>
-                  
-                  {/* Exits Group */}
-                  {routingNodes.map((n, i) => ({ n, i })).filter(({ n }) => n.isExit).map(({ n, i }) => (
-                    <View key={i} className={`p-3 rounded-xl mb-2 ${activeRouteIdx === i ? 'bg-neutral-700 border border-neutral-500' : 'bg-neutral-800'}`}>
-                      <View className="flex-row items-center mb-2">
-                        <Text className="text-white flex-1 font-bold">🚪 Exit</Text>
-                        <TouchableOpacity 
-                          onPress={() => setActiveRouteIdx(activeRouteIdx === i ? null : i)} 
-                          className={`px-3 py-1 rounded-lg mr-2 ${activeRouteIdx === i ? 'bg-blue-600' : 'bg-neutral-700'}`}
-                        >
-                          <Text className="text-white text-xs">{activeRouteIdx === i ? 'Tracking Map...' : 'Reposition'}</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity 
-                          onPress={() => {
-                            const newNodes = routingNodes.filter((_, idx) => idx !== i);
-                            setRoutingNodes(newNodes);
-                            if (activeRouteIdx === i) setActiveRouteIdx(null);
-                            else if (activeRouteIdx !== null && activeRouteIdx > i) setActiveRouteIdx(activeRouteIdx - 1);
-                          }} 
-                          className="bg-red-900/50 p-2 rounded-lg"
-                        >
-                          <Text className="text-red-500 font-bold text-xs">✕</Text>
-                        </TouchableOpacity>
-                      </View>
-                      <View className="flex-row space-x-2">
-                        <View className="flex-1 mr-2">
-                          <Text className="text-neutral-400 text-[10px] uppercase font-bold mb-1">Lat (N/S ↕️)</Text>
-                          <TextInput 
-                            className="bg-neutral-900 border border-neutral-700 text-white p-2 rounded-lg text-xs" 
-                            value={n.lat.toString()} 
-                            keyboardType="numeric"
-                            onChangeText={(val) => {
-                              const newNodes = [...routingNodes];
-                              newNodes[i].lat = parseFloat(val) || 0;
-                              setRoutingNodes(newNodes);
-                            }}
-                          />
-                        </View>
-                        <View className="flex-1">
-                          <Text className="text-neutral-400 text-[10px] uppercase font-bold mb-1">Lon (E/W ↔️)</Text>
-                          <TextInput 
-                            className="bg-neutral-900 border border-neutral-700 text-white p-2 rounded-lg text-xs" 
-                            value={n.lon.toString()} 
-                            keyboardType="numeric"
-                            onChangeText={(val) => {
-                              const newNodes = [...routingNodes];
-                              newNodes[i].lon = parseFloat(val) || 0;
-                              setRoutingNodes(newNodes);
-                            }}
-                          />
-                        </View>
-                      </View>
-                    </View>
-                  ))}
-
-                  {/* Turn Points Group */}
-                  {routingNodes.map((n, i) => ({ n, i })).filter(({ n }) => !n.isExit).map(({ n, i }, turnIndex) => (
-                    <View key={i} className={`p-3 rounded-xl mb-2 ${activeRouteIdx === i ? 'bg-neutral-700 border border-neutral-500' : 'bg-neutral-800'}`}>
-                      <View className="flex-row items-center mb-2">
-                        <Text className="text-white flex-1 font-bold">🔵 Turn Point {turnIndex + 1}</Text>
-                        <TouchableOpacity 
-                          onPress={() => setActiveRouteIdx(activeRouteIdx === i ? null : i)} 
-                          className={`px-3 py-1 rounded-lg mr-2 ${activeRouteIdx === i ? 'bg-blue-600' : 'bg-neutral-700'}`}
-                        >
-                          <Text className="text-white text-xs">{activeRouteIdx === i ? 'Tracking Map...' : 'Reposition'}</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity 
-                          onPress={() => {
-                            const newNodes = routingNodes.filter((_, idx) => idx !== i);
-                            setRoutingNodes(newNodes);
-                            if (activeRouteIdx === i) setActiveRouteIdx(null);
-                            else if (activeRouteIdx !== null && activeRouteIdx > i) setActiveRouteIdx(activeRouteIdx - 1);
-                          }} 
-                          className="bg-red-900/50 p-2 rounded-lg"
-                        >
-                          <Text className="text-red-500 font-bold text-xs">✕</Text>
-                        </TouchableOpacity>
-                      </View>
-                      <View className="flex-row space-x-2">
-                        <View className="flex-1 mr-2">
-                          <Text className="text-neutral-400 text-[10px] uppercase font-bold mb-1">Lat (N/S ↕️)</Text>
-                          <TextInput 
-                            className="bg-neutral-900 border border-neutral-700 text-white p-2 rounded-lg text-xs" 
-                            value={n.lat.toString()} 
-                            keyboardType="numeric"
-                            onChangeText={(val) => {
-                              const newNodes = [...routingNodes];
-                              newNodes[i].lat = parseFloat(val) || 0;
-                              setRoutingNodes(newNodes);
-                            }}
-                          />
-                        </View>
-                        <View className="flex-1">
-                          <Text className="text-neutral-400 text-[10px] uppercase font-bold mb-1">Lon (E/W ↔️)</Text>
-                          <TextInput 
-                            className="bg-neutral-900 border border-neutral-700 text-white p-2 rounded-lg text-xs" 
-                            value={n.lon.toString()} 
-                            keyboardType="numeric"
-                            onChangeText={(val) => {
-                              const newNodes = [...routingNodes];
-                              newNodes[i].lon = parseFloat(val) || 0;
-                              setRoutingNodes(newNodes);
-                            }}
-                          />
-                        </View>
-                      </View>
-                    </View>
-                  ))}
+              <View className="bg-blue-900/30 p-4 rounded-xl border border-blue-600/50 mb-6 flex-row">
+                <Text className="text-blue-500 mr-3 text-2xl">💡</Text>
+                <View className="flex-1">
+                  <Text className="text-blue-400 font-bold mb-1 uppercase tracking-wider text-xs">Grid Strategy</Text>
+                  <Text className="text-blue-300 text-xs">Paint <Text className="font-bold text-white">Safe Zones</Text> along corridors and rooms to define where users can walk. Mark <Text className="font-bold text-white">Exits</Text> at the doors. The system automatically calculates the shortest path through painted zones.</Text>
                 </View>
-              )}
+              </View>
 
               <View className="flex-row justify-between mb-4">
-                <TouchableOpacity className="flex-1 bg-neutral-700 py-3 rounded-xl items-center mr-2" onPress={() => setRoutingNodes([])}>
-                  <Text className="text-white font-bold">Clear All</Text>
-                </TouchableOpacity>
-                <TouchableOpacity className="flex-1 bg-neutral-700 py-3 rounded-xl items-center mr-2" onPress={() => setRoutingNodes(prev => prev.slice(0, -1))}>
-                  <Text className="text-white font-bold">Undo</Text>
+                <TouchableOpacity className="flex-1 bg-neutral-700 py-3 rounded-xl items-center mr-2" onPress={() => setGridPaths([])}>
+                  <Text className="text-white font-bold">Clear Grid</Text>
                 </TouchableOpacity>
                 <TouchableOpacity 
                   className="flex-1 bg-green-600 py-3 rounded-xl items-center"
@@ -1866,36 +1872,19 @@ export default function AdminDashboard() {
                       setMapEditorStep(1);
                       return;
                     }
-                    if (!routingNodes.some(n => n.isExit)) {
-                      showToast("Please add at least one Exit.");
+                    if (!gridPaths.some(p => p.isExit)) {
+                      showToast("Please paint at least one Exit.");
                       return;
                     }
 
-                    const doSave = async () => {
-                      try {
-                        await updateBuildingSafeNodes({ clerkId: user?.id || "", buildingId: selectedBuilding._id, safeNodes: routingNodes });
-                        setIsMapEditorOpen(false);
-                        showToast("Safe Routes saved!");
-                      } catch(e) { showToast("Error saving routes", "error"); }
-                    };
-
-                    if (!routingNodes.some(n => !n.isExit)) {
-                      if (Platform.OS === 'web') {
-                        if (window.confirm("You have not added any turn points. Is that OK?")) {
-                          doSave();
-                        }
-                      } else {
-                        Alert.alert("No Turn Points", "You have not added any turn points. Is that OK?", [
-                          { text: "Cancel", style: "cancel" },
-                          { text: "Yes, Save", onPress: doSave }
-                        ]);
-                      }
-                    } else {
-                      doSave();
-                    }
+                    try {
+                      await updateBuildingGridPaths({ clerkId: user?.id || "", buildingId: selectedBuilding._id, gridPaths });
+                      setIsMapEditorOpen(false);
+                      showToast("Grid Layout saved!");
+                    } catch(e) { showToast("Error saving grid", "error"); }
                   }}
                 >
-                  <Text className="text-white font-bold">Save All</Text>
+                  <Text className="text-white font-bold">Save Grid</Text>
                 </TouchableOpacity>
               </View>
             </ScrollView>

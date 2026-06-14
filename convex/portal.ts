@@ -334,6 +334,26 @@ export const updateBuildingSafeNodes = mutation({
     await ctx.db.patch(args.buildingId, { 
       safeNodes: args.safeNodes
     });
+  },
+});
+
+export const updateBuildingGridPaths = mutation({
+  args: {
+    clerkId: v.string(),
+    buildingId: v.id("buildings"),
+    gridPaths: v.array(v.object({ row: v.number(), col: v.number(), lat: v.number(), lon: v.number(), isExit: v.boolean() })),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerkId", (q) => q.eq("clerkId", args.clerkId))
+      .first();
+
+    if (!user || user.role !== "admin") throw new Error("Unauthorized");
+    
+    await ctx.db.patch(args.buildingId, { 
+      gridPaths: args.gridPaths
+    });
   }
 });
 

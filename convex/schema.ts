@@ -50,6 +50,9 @@ export default defineSchema({
     safeNodes: v.optional(v.array(
       v.object({ lat: v.number(), lon: v.number(), isExit: v.boolean() })
     )), // Added for Phase 9 Admin routing
+    gridPaths: v.optional(v.array(
+      v.object({ row: v.number(), col: v.number(), lat: v.number(), lon: v.number(), isExit: v.boolean() })
+    )), // Added for Phase 17 Grid routing
     masterPlanId: v.optional(v.id("_storage")),
     nextDrillAt: v.optional(v.number()), // Phase 13
     drillJobId: v.optional(v.id("_scheduled_functions")), // Phase 13
