@@ -583,15 +583,17 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
                 <View 
                   style={{
                     position: 'absolute',
-                    left: offsetX + pos.x * renderW - 20,
-                    top: offsetY + pos.y * renderH - 40,
-                    width: 40,
-                    height: 40,
-                    alignItems: 'center'
+                    left: offsetX + pos.x * renderW - 16,
+                    top: offsetY + pos.y * renderH - 16,
+                    width: 32,
+                    height: 32,
                   }}
-                  className="z-20"
+                  className="z-20 animate-pulse pointer-events-none"
                 >
-                  <MaterialCommunityIcons name="map-marker" size={40} color="#3b82f6" />
+                  <View className="absolute bg-red-500 shadow-md shadow-black" style={{ left: 15, top: 0, width: 2, height: 12 }} />
+                  <View className="absolute bg-red-500 shadow-md shadow-black" style={{ left: 15, bottom: 0, width: 2, height: 12 }} />
+                  <View className="absolute bg-red-500 shadow-md shadow-black" style={{ top: 15, left: 0, width: 12, height: 2 }} />
+                  <View className="absolute bg-red-500 shadow-md shadow-black" style={{ top: 15, right: 0, width: 12, height: 2 }} />
                 </View>
               );
             })()}
