@@ -2170,9 +2170,9 @@ export default function AdminDashboard() {
                             height: getMapTransform().maskH,
                             overflow: 'hidden',
                             position: 'relative',
-                            backgroundColor: '#171717'
+                            backgroundColor: '#171717',
+                            pointerEvents: 'none'
                           }}
-                          pointerEvents="none"
                         >
                           <View
                             style={{
@@ -2197,58 +2197,50 @@ export default function AdminDashboard() {
                             {/* Lightweight Grid Overlay & Painted Cells */}
                             {(() => {
                               const { rows, cols, minLat, maxLat, minLon, maxLon } = getGridDimensions();
-                              const cells = [];
-                              for (let r = 0; r < rows; r++) {
-                                for (let c = 0; c < cols; c++) {
-                                  const latCenter = maxLat - ((r + 0.5) * (maxLat - minLat) / rows);
-                                  const lonCenter = minLon + ((c + 0.5) * (maxLon - minLon) / cols);
-                                  const pu = mapGPSToImage(latCenter, lonCenter);
-                                  if (!pu) continue;
+                              const bounds = getRenderedImageBounds();
+                              
+                              return gridPaths.map(p => {
+                                const latCenter = maxLat - ((p.row + 0.5) * (maxLat - minLat) / rows);
+                                const lonCenter = minLon + ((p.col + 0.5) * (maxLon - minLon) / cols);
+                                const pu = mapGPSToImage(latCenter, lonCenter);
+                                if (!pu) return null;
 
-                                  const bounds = getRenderedImageBounds();
-                                  const isLegacy = pu.x > 2;
-                                  const sx = isLegacy ? pu.x : bounds.offsetX + pu.x * bounds.renderW;
-                                  const sy = isLegacy ? pu.y : bounds.offsetY + pu.y * bounds.renderH;
+                                const isLegacy = pu.x > 2;
+                                const sx = isLegacy ? pu.x : bounds.offsetX + pu.x * bounds.renderW;
+                                const sy = isLegacy ? pu.y : bounds.offsetY + pu.y * bounds.renderH;
 
-                                  const cellTopLeft = mapGPSToImage(maxLat - (r * (maxLat - minLat) / rows), minLon + (c * (maxLon - minLon) / cols));
-                                  const cellBottomRight = mapGPSToImage(maxLat - ((r + 1) * (maxLat - minLat) / rows), minLon + ((c + 1) * (maxLon - minLon) / cols));
+                                const cellTopLeft = mapGPSToImage(maxLat - (p.row * (maxLat - minLat) / rows), minLon + (p.col * (maxLon - minLon) / cols));
+                                const cellBottomRight = mapGPSToImage(maxLat - ((p.row + 1) * (maxLat - minLat) / rows), minLon + ((p.col + 1) * (maxLon - minLon) / cols));
 
-                                  let cellW = 20;
-                                  let cellH = 20;
+                                let cellW = 20;
+                                let cellH = 20;
 
-                                  if (cellTopLeft && cellBottomRight) {
-                                    const tlX = isLegacy ? cellTopLeft.x : bounds.offsetX + cellTopLeft.x * bounds.renderW;
-                                    const brX = isLegacy ? cellBottomRight.x : bounds.offsetX + cellBottomRight.x * bounds.renderW;
-                                    const tlY = isLegacy ? cellTopLeft.y : bounds.offsetY + cellTopLeft.y * bounds.renderH;
-                                    const brY = isLegacy ? cellBottomRight.y : bounds.offsetY + cellBottomRight.y * bounds.renderH;
-                                    cellW = Math.max(10, Math.abs(brX - tlX));
-                                    cellH = Math.max(10, Math.abs(brY - tlY));
-                                  }
-
-                                  const paintedCell = gridPaths.find(p => p.row === r && p.col === c);
-
-                                  cells.push(
-                                    <View
-                                      key={`grid-${r}-${c}`}
-                                      className={`absolute items-center justify-center border ${paintedCell
-                                        ? (paintedCell.isExit ? 'bg-green-500/50 border-green-400' : 'bg-blue-500/50 border-blue-400')
-                                        : 'border-neutral-500/10'
-                                        }`}
-                                      style={{
-                                        left: sx - (cellW / 2),
-                                        top: sy - (cellH / 2),
-                                        width: cellW,
-                                        height: cellH,
-                                        zIndex: paintedCell?.isExit ? 10 : 1
-                                      }}
-                                      pointerEvents="none"
-                                    >
-                                      {paintedCell?.isExit && <Text className="text-white text-[8px] font-bold">E</Text>}
-                                    </View>
-                                  );
+                                if (cellTopLeft && cellBottomRight) {
+                                  const tlX = isLegacy ? cellTopLeft.x : bounds.offsetX + cellTopLeft.x * bounds.renderW;
+                                  const brX = isLegacy ? cellBottomRight.x : bounds.offsetX + cellBottomRight.x * bounds.renderW;
+                                  const tlY = isLegacy ? cellTopLeft.y : bounds.offsetY + cellTopLeft.y * bounds.renderH;
+                                  const brY = isLegacy ? cellBottomRight.y : bounds.offsetY + cellBottomRight.y * bounds.renderH;
+                                  cellW = Math.max(10, Math.abs(brX - tlX));
+                                  cellH = Math.max(10, Math.abs(brY - tlY));
                                 }
-                              }
-                              return cells;
+
+                                return (
+                                  <View
+                                    key={`grid-${p.row}-${p.col}`}
+                                    className={`absolute items-center justify-center border ${p.isExit ? 'bg-green-500/50 border-green-400' : 'bg-blue-500/50 border-blue-400'}`}
+                                    style={{
+                                      pointerEvents: 'none',
+                                      left: sx - (cellW / 2),
+                                      top: sy - (cellH / 2),
+                                      width: cellW,
+                                      height: cellH,
+                                      zIndex: p.isExit ? 10 : 1
+                                    }}
+                                  >
+                                    {p.isExit && <Text style={{ pointerEvents: 'none' }} className="text-white text-[8px] font-bold">E</Text>}
+                                  </View>
+                                );
+                              });
                             })()}
                           </View>
                         </View>
