@@ -46,6 +46,30 @@ function updateLocationWithStep(lat: number, lon: number, heading: number, stepD
   };
 }
 
+function isPointInPolygon(point: { lat: number, lon: number }, polygon: { lat: number, lon: number }[]) {
+  let isInside = false;
+  let j = polygon.length - 1;
+  for (let i = 0; i < polygon.length; i++) {
+    const xi = polygon[i].lon, yi = polygon[i].lat;
+    const xj = polygon[j].lon, yj = polygon[j].lat;
+    const intersect = ((yi > point.lat) !== (yj > point.lat)) &&
+        (point.lon < (xj - xi) * (point.lat - yi) / (yj - yi) + xi);
+    if (intersect) isInside = !isInside;
+    j = i;
+  }
+  return isInside;
+}
+
+function distanceToLineSegment(p: { lat: number, lon: number }, v: { lat: number, lon: number }, w: { lat: number, lon: number }) {
+  const l2 = (w.lat - v.lat)**2 + (w.lon - v.lon)**2;
+  if (l2 === 0) return Math.sqrt((p.lat - v.lat)**2 + (p.lon - v.lon)**2);
+  let t = ((p.lon - v.lon) * (w.lon - v.lon) + (p.lat - v.lat) * (w.lat - v.lat)) / l2;
+  t = Math.max(0, Math.min(1, t));
+  const projLat = v.lat + t * (w.lat - v.lat);
+  const projLon = v.lon + t * (w.lon - v.lon);
+  return Math.sqrt((p.lat - projLat)**2 + (p.lon - projLon)**2);
+}
+
 export default function EvacuationMode({ dashboardData, autoBuilding, currentLocation, activeIncident, onClose }: any) {
   const { width, height } = useWindowDimensions();
   const { user } = useUser();
@@ -114,25 +138,29 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
   const isOutsideBuilding = useMemo(() => {
     if (!drLocation || !autoBuilding?.polygon || autoBuilding.polygon.length < 4) return false;
     const poly = autoBuilding.polygon;
-      const minLat = Math.min(...poly.map((p:any)=>p.lat));
-      const maxLat = Math.max(...poly.map((p:any)=>p.lat));
-      const minLon = Math.min(...poly.map((p:any)=>p.lon));
-      const maxLon = Math.max(...poly.map((p:any)=>p.lon));
-      
-      const latDiff = maxLat - minLat;
-      const lonDiff = maxLon - minLon;
-      
-      // Add 5% tolerance based on the total dimensions of the building boundaries,
-      // but enforce a minimum tolerance of ~11 meters (0.0001 degrees) for GPS jitter.
-      const tolLat = Math.max(0.0001, latDiff * 0.05);
-      const tolLon = Math.max(0.0001, lonDiff * 0.05);
-      
-      return (
-        drLocation.lat < minLat - tolLat ||
-        drLocation.lat > maxLat + tolLat ||
-        drLocation.lon < minLon - tolLon ||
-        drLocation.lon > maxLon + tolLon
-      );
+    const point = drLocation;
+    
+    if (isPointInPolygon(point, poly)) return false;
+    
+    let minLat = Infinity, maxLat = -Infinity;
+    let minLon = Infinity, maxLon = -Infinity;
+    for (const p of poly) {
+      if (p.lat < minLat) minLat = p.lat;
+      if (p.lat > maxLat) maxLat = p.lat;
+      if (p.lon < minLon) minLon = p.lon;
+      if (p.lon > maxLon) maxLon = p.lon;
+    }
+    
+    const diag = Math.sqrt((maxLat - minLat)**2 + (maxLon - minLon)**2);
+    const allowedDist = Math.max(0.00005, diag * 0.05);
+    
+    // Check precise distance to any edge to handle concave (L-shape) polygons
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const d = distanceToLineSegment(point, poly[j], poly[i]);
+      if (d <= allowedDist) return false;
+    }
+    
+    return true; // Point is outside the polygon and not within the 5% margin
   }, [drLocation, autoBuilding]);
 
   // Dynamic Routing Evaluator

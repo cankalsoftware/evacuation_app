@@ -389,6 +389,16 @@ export function isPointInPolygon(point: { lat: number, lon: number }, polygon: {
   return isInside;
 }
 
+function distanceToLineSegment(p: { lat: number, lon: number }, v: { lat: number, lon: number }, w: { lat: number, lon: number }) {
+  const l2 = (w.lat - v.lat)**2 + (w.lon - v.lon)**2;
+  if (l2 === 0) return Math.sqrt((p.lat - v.lat)**2 + (p.lon - v.lon)**2);
+  let t = ((p.lon - v.lon) * (w.lon - v.lon) + (p.lat - v.lat) * (w.lat - v.lat)) / l2;
+  t = Math.max(0, Math.min(1, t));
+  const projLat = v.lat + t * (w.lat - v.lat);
+  const projLon = v.lon + t * (w.lon - v.lon);
+  return Math.sqrt((p.lat - projLat)**2 + (p.lon - projLon)**2);
+}
+
 export function isPointInPolygonWithMargin(point: { lat: number, lon: number }, polygon: { lat: number, lon: number }[], marginFactor: number) {
   if (isPointInPolygon(point, polygon)) return true;
   
@@ -401,13 +411,16 @@ export function isPointInPolygonWithMargin(point: { lat: number, lon: number }, 
     if (p.lon > maxLon) maxLon = p.lon;
   }
   
-  const latMargin = Math.max(0.0001, (maxLat - minLat) * marginFactor);
-  const lonMargin = Math.max(0.0001, (maxLon - minLon) * marginFactor);
+  const diag = Math.sqrt((maxLat - minLat)**2 + (maxLon - minLon)**2);
+  const allowedDist = Math.max(0.00005, diag * marginFactor); // Dynamic margin based on polygon scale
   
-  return (
-    point.lat >= minLat - latMargin && point.lat <= maxLat + latMargin &&
-    point.lon >= minLon - lonMargin && point.lon <= maxLon + lonMargin
-  );
+  // Check precise distance to any edge to handle concave (L-shape) polygons
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const d = distanceToLineSegment(point, polygon[j], polygon[i]);
+    if (d <= allowedDist) return true;
+  }
+  
+  return false;
 }
 
 export const getAutoPushedBuilding = query({
