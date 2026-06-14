@@ -155,6 +155,14 @@ export default function AdminDashboard() {
     return groups;
   }, [allIncidentsHistory]);
 
+  const locatingIncidentId = React.useMemo(() => {
+    if (!isLocatingUser || !selectedBuilding) return undefined;
+    const inc = activeIncidents.find((i: any) => i.buildingId === selectedBuilding._id);
+    return inc?.incidentId;
+  }, [isLocatingUser, selectedBuilding, activeIncidents]);
+
+  const locatingRollCall = useQuery(api.portal.getRollCall, locatingIncidentId ? { clerkId: user?.id || "", incidentId: locatingIncidentId } : "skip") || [];
+
   const getDistanceInMeters = (lat1: number, lon1: number, lat2: number, lon2: number) => {
     const R = 6371e3;
     const p1 = lat1 * Math.PI/180;
@@ -933,6 +941,7 @@ export default function AdminDashboard() {
                         <LiveRollCall 
                           clerkId={user?.id || ""} 
                           incidentId={activeIncident.incidentId} 
+                          buildingPolygon={building.polygon}
                           onLocateUser={(lat, lon, name) => {
                             setSelectedBuilding(building);
                             setEditingPins([{ lat, lon, label: name }]);
@@ -1717,7 +1726,13 @@ export default function AdminDashboard() {
           </View>
           
           {isLocatingUser ? (() => {
-            const target = editingPins?.[0];
+            const initialTarget = editingPins?.[0];
+            const liveUser = locatingRollCall.find((r: any) => r.userName === initialTarget?.label);
+            const target = initialTarget ? {
+              label: initialTarget.label,
+              lat: liveUser?.lastLat ?? initialTarget.lat,
+              lon: liveUser?.lastLon ?? initialTarget.lon
+            } : undefined;
             let isInside = false;
             if (selectedBuilding?.polygon && target) {
               const poly = selectedBuilding.polygon;
@@ -1778,7 +1793,13 @@ export default function AdminDashboard() {
                             onLoad={(e) => setImageAspectRatio(e.nativeEvent.source.width / Math.max(1, e.nativeEvent.source.height))}
                           />
                           {(() => {
-                            const target = editingPins?.[0];
+                            const initialTarget = editingPins?.[0];
+                            const liveUser = locatingRollCall.find((r: any) => r.userName === initialTarget?.label);
+                            const target = initialTarget ? {
+                              label: initialTarget.label,
+                              lat: liveUser?.lastLat ?? initialTarget.lat,
+                              lon: liveUser?.lastLon ?? initialTarget.lon
+                            } : undefined;
                         if (!selectedBuilding || !selectedBuilding.polygon || !selectedBuilding.imageCalibrationPoints || selectedBuilding.polygon.length < 3 || selectedBuilding.imageCalibrationPoints.length < 3 || !target) {
                           return (
                             <View className="absolute inset-0 items-center justify-center pointer-events-none">

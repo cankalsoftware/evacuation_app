@@ -1,15 +1,52 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { View, Text, TouchableOpacity, ScrollView, Platform } from "react-native";
-import { useQuery } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
 
-export default function LiveRollCall({ incidentId, clerkId, onLocateUser }: { incidentId: any, clerkId: string, onLocateUser: (lat: number, lon: number, name: string) => void }) {
+export default function LiveRollCall({ incidentId, clerkId, onLocateUser, buildingPolygon }: { incidentId: any, clerkId: string, onLocateUser: (lat: number, lon: number, name: string) => void, buildingPolygon?: any[] }) {
   const rollCall = useQuery(api.portal.getRollCall, { clerkId, incidentId }) || [];
+  const removeRollCallUsers = useMutation(api.portal.removeRollCallUsers);
+  
+  const [countdown, setCountdown] = useState(5);
+
+  const isInsidePolygon = (lat: number, lon: number, poly: any[]) => {
+    let isInside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const xi = poly[i].lon, yi = poly[i].lat;
+      const xj = poly[j].lon, yj = poly[j].lat;
+      const intersect = ((yi > lat) !== (yj > lat)) && (lon < (xj - xi) * (lat - yi) / (yj - yi) + xi);
+      if (intersect) isInside = !isInside;
+    }
+    return isInside;
+  };
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev === 1) {
+          // When countdown finishes, perform the database cleanup if needed
+          if (buildingPolygon && buildingPolygon.length >= 3) {
+            const outsideIds = rollCall
+              .filter((r: any) => r.status === 'IN_BUILDING')
+              .filter((r: any) => r.lastLat && r.lastLon && !isInsidePolygon(r.lastLat, r.lastLon, buildingPolygon))
+              .map((r: any) => r._id);
+            
+            if (outsideIds.length > 0) {
+              removeRollCallUsers({ clerkId, rollCallIds: outsideIds }).catch(e => console.error("Failed to clean up outside users", e));
+            }
+          }
+          return 5;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [buildingPolygon, rollCall, clerkId, removeRollCallUsers]);
 
   // Group roll call by status
-  const panicUsers = rollCall.filter(r => r.status === 'PANIC');
-  const inBuildingUsers = rollCall.filter(r => r.status === 'IN_BUILDING');
-  const safeUsers = rollCall.filter(r => r.status === 'SAFE');
+  const panicUsers = rollCall.filter((r: any) => r.status === 'PANIC');
+  const inBuildingUsers = rollCall.filter((r: any) => r.status === 'IN_BUILDING');
+  const safeUsers = rollCall.filter((r: any) => r.status === 'SAFE');
 
   const totalIn = panicUsers.length + inBuildingUsers.length;
   const totalOut = safeUsers.length;
@@ -22,7 +59,7 @@ export default function LiveRollCall({ incidentId, clerkId, onLocateUser }: { in
     
     // Generate CSV string
     const headers = "Name,Status,Last Latitude,Last Longitude,Updated At\n";
-    const rows = rollCall.map(r => `"${r.userName}","${r.status}",${r.lastLat || ""},${r.lastLon || ""},"${new Date(r.updatedAt).toLocaleString()}"`).join("\n");
+    const rows = rollCall.map((r: any) => `"${r.userName}","${r.status}",${r.lastLat || ""},${r.lastLon || ""},"${new Date(r.updatedAt).toLocaleString()}"`).join("\n");
     const csvContent = headers + rows;
     
     // Create Blob and download
@@ -67,7 +104,7 @@ export default function LiveRollCall({ incidentId, clerkId, onLocateUser }: { in
   return (
     <View className="mt-4 bg-neutral-900 border border-neutral-700 rounded-xl p-4">
       <View className="flex-row justify-between items-center mb-3">
-        <Text className="text-white font-bold text-lg">Live Roll Call</Text>
+        <Text className="text-white font-bold text-lg">Live Locations</Text>
         <TouchableOpacity onPress={handleExportCSV} className="bg-neutral-800 px-3 py-1 rounded border border-neutral-700">
           <Text className="text-white text-xs font-bold">Export CSV</Text>
         </TouchableOpacity>
@@ -98,7 +135,10 @@ export default function LiveRollCall({ incidentId, clerkId, onLocateUser }: { in
 
           {inBuildingUsers.length > 0 && (
             <View className="mb-4">
-              <Text className="text-amber-500 font-black tracking-widest text-xs uppercase mb-1 bg-amber-900/30 px-2 py-1 rounded">🏢 Inside Building</Text>
+              <View className="flex-row items-center justify-between mb-1 bg-amber-900/30 px-2 py-1 rounded">
+                <Text className="text-amber-500 font-black tracking-widest text-xs uppercase">🏢 Inside Building</Text>
+                <Text className="text-amber-400 text-[10px] font-bold">Refresh in {countdown}s</Text>
+              </View>
               {inBuildingUsers.map(renderUser)}
             </View>
           )}

@@ -946,3 +946,18 @@ export const deleteIncidents = mutation({
     }
   }
 });
+
+export const removeRollCallUsers = mutation({
+  args: { clerkId: v.string(), rollCallIds: v.array(v.id("rollCall")) },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.query("users").withIndex("by_clerkId", q => q.eq("clerkId", args.clerkId)).first();
+    if (!user || user.role !== "admin") throw new Error("Unauthorized");
+    
+    for (const id of args.rollCallIds) {
+      const record = await ctx.db.get(id);
+      if (record) {
+        await ctx.db.delete(id);
+      }
+    }
+  }
+});
