@@ -12,27 +12,27 @@ import { Audio } from 'expo-av';
 // Basic Haversine distance
 function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371e3; // meters
-  const φ1 = lat1 * Math.PI/180;
-  const φ2 = lat2 * Math.PI/180;
-  const Δφ = (lat2-lat1) * Math.PI/180;
-  const Δλ = (lon2-lon1) * Math.PI/180;
-  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-            Math.cos(φ1) * Math.cos(φ2) *
-            Math.sin(Δλ/2) * Math.sin(Δλ/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  return R * c; 
+  const φ1 = lat1 * Math.PI / 180;
+  const φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180;
+  const Δλ = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) *
+    Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
 }
 
 // Bearing calculation
 function getBearing(lat1: number, lon1: number, lat2: number, lon2: number) {
-  const φ1 = lat1 * Math.PI/180;
-  const φ2 = lat2 * Math.PI/180;
-  const λ1 = lon1 * Math.PI/180;
-  const λ2 = lon2 * Math.PI/180;
-  const y = Math.sin(λ2-λ1) * Math.cos(φ2);
-  const x = Math.cos(φ1)*Math.sin(φ2) - Math.sin(φ1)*Math.cos(φ2)*Math.cos(λ2-λ1);
+  const φ1 = lat1 * Math.PI / 180;
+  const φ2 = lat2 * Math.PI / 180;
+  const λ1 = lon1 * Math.PI / 180;
+  const λ2 = lon2 * Math.PI / 180;
+  const y = Math.sin(λ2 - λ1) * Math.cos(φ2);
+  const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(λ2 - λ1);
   const θ = Math.atan2(y, x);
-  return (θ*180/Math.PI + 360) % 360; // in degrees
+  return (θ * 180 / Math.PI + 360) % 360; // in degrees
 }
 
 // Dead Reckoning Step update
@@ -53,7 +53,7 @@ function isPointInPolygon(point: { lat: number, lon: number }, polygon: { lat: n
     const xi = polygon[i].lon, yi = polygon[i].lat;
     const xj = polygon[j].lon, yj = polygon[j].lat;
     const intersect = ((yi > point.lat) !== (yj > point.lat)) &&
-        (point.lon < (xj - xi) * (point.lat - yi) / (yj - yi) + xi);
+      (point.lon < (xj - xi) * (point.lat - yi) / (yj - yi) + xi);
     if (intersect) isInside = !isInside;
     j = i;
   }
@@ -61,13 +61,13 @@ function isPointInPolygon(point: { lat: number, lon: number }, polygon: { lat: n
 }
 
 function distanceToLineSegment(p: { lat: number, lon: number }, v: { lat: number, lon: number }, w: { lat: number, lon: number }) {
-  const l2 = (w.lat - v.lat)**2 + (w.lon - v.lon)**2;
-  if (l2 === 0) return Math.sqrt((p.lat - v.lat)**2 + (p.lon - v.lon)**2);
+  const l2 = (w.lat - v.lat) ** 2 + (w.lon - v.lon) ** 2;
+  if (l2 === 0) return Math.sqrt((p.lat - v.lat) ** 2 + (p.lon - v.lon) ** 2);
   let t = ((p.lon - v.lon) * (w.lon - v.lon) + (p.lat - v.lat) * (w.lat - v.lat)) / l2;
   t = Math.max(0, Math.min(1, t));
   const projLat = v.lat + t * (w.lat - v.lat);
   const projLon = v.lon + t * (w.lon - v.lon);
-  return Math.sqrt((p.lat - projLat)**2 + (p.lon - projLon)**2);
+  return Math.sqrt((p.lat - projLat) ** 2 + (p.lon - projLon) ** 2);
 }
 
 interface GridCell {
@@ -153,19 +153,19 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
   const [heading, setHeading] = useState<number>(0);
   const [targetHeading, setTargetHeading] = useState<number>(0);
   const [steps, setSteps] = useState(0);
-  const [drLocation, setDrLocation] = useState<{lat: number, lon: number} | null>(currentLocation ? { lat: currentLocation.coords.latitude, lon: currentLocation.coords.longitude } : null);
-  const [imgLayout, setImgLayout] = useState<{w: number, h: number}>({w: 1, h: 1});
+  const [drLocation, setDrLocation] = useState<{ lat: number, lon: number } | null>(currentLocation ? { lat: currentLocation.coords.latitude, lon: currentLocation.coords.longitude } : null);
+  const [imgLayout, setImgLayout] = useState<{ w: number, h: number }>({ w: 1, h: 1 });
   const [imageAspectRatio, setImageAspectRatio] = useState<number | null>(null);
-  
+
   const [evacStatus, setEvacStatus] = useState<"IN_BUILDING" | "PANIC" | "SAFE">("IN_BUILDING");
   const [sirenSound, setSirenSound] = useState<Audio.Sound | null>(null);
-  
+
   const hasReachedExitRef = useRef<boolean>(false);
 
   const subscriptionRef = useRef<Location.LocationSubscription | null>(null);
   const pedoSubRef = useRef<any>(null);
   const lastSpokenRef = useRef<number>(0);
-  
+
   const HEADING_TOLERANCE = 45;
 
   const activePlanUrl = autoBuilding?.masterPlanUrl || dashboardData?.scannedPlanUrl;
@@ -182,28 +182,28 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
 
   const interpolateLocation = (lat: number, lon: number) => {
     if (!autoBuilding?.polygon || autoBuilding.polygon.length < 4) return null;
-    
+
     const poly = autoBuilding.polygon;
-    const minLat = Math.min(...poly.map((p:any)=>p.lat));
-    const maxLat = Math.max(...poly.map((p:any)=>p.lat));
-    const minLon = Math.min(...poly.map((p:any)=>p.lon));
-    const maxLon = Math.max(...poly.map((p:any)=>p.lon));
-    
+    const minLat = Math.min(...poly.map((p: any) => p.lat));
+    const maxLat = Math.max(...poly.map((p: any) => p.lat));
+    const minLon = Math.min(...poly.map((p: any) => p.lon));
+    const maxLon = Math.max(...poly.map((p: any) => p.lon));
+
     let v = (maxLat - lat) / (maxLat - minLat || 1);
     let u = (lon - minLon) / (maxLon - minLon || 1);
-    
+
     const calib = autoBuilding.imageCalibrationPoints;
     if (calib && calib.length >= 4) {
       const isLegacyPixels = calib[0].x > 2;
-      const minCX = Math.min(...calib.map((c:any)=> isLegacyPixels ? c.x / Math.max(1, imgLayout.w) : c.x));
-      const maxCX = Math.max(...calib.map((c:any)=> isLegacyPixels ? c.x / Math.max(1, imgLayout.w) : c.x));
-      const minCY = Math.min(...calib.map((c:any)=> isLegacyPixels ? c.y / Math.max(1, imgLayout.h) : c.y));
-      const maxCY = Math.max(...calib.map((c:any)=> isLegacyPixels ? c.y / Math.max(1, imgLayout.h) : c.y));
-      
+      const minCX = Math.min(...calib.map((c: any) => isLegacyPixels ? c.x / Math.max(1, imgLayout.w) : c.x));
+      const maxCX = Math.max(...calib.map((c: any) => isLegacyPixels ? c.x / Math.max(1, imgLayout.w) : c.x));
+      const minCY = Math.min(...calib.map((c: any) => isLegacyPixels ? c.y / Math.max(1, imgLayout.h) : c.y));
+      const maxCY = Math.max(...calib.map((c: any) => isLegacyPixels ? c.y / Math.max(1, imgLayout.h) : c.y));
+
       u = minCX + u * (maxCX - minCX);
       v = minCY + v * (maxCY - minCY);
     }
-    
+
     return { x: u, y: v };
   };
 
@@ -214,9 +214,9 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
     if (!drLocation || !autoBuilding?.polygon || autoBuilding.polygon.length < 4) return false;
     const poly = autoBuilding.polygon;
     const point = drLocation;
-    
+
     if (isPointInPolygon(point, poly)) return false;
-    
+
     let minLat = Infinity, maxLat = -Infinity;
     let minLon = Infinity, maxLon = -Infinity;
     for (const p of poly) {
@@ -225,16 +225,16 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
       if (p.lon < minLon) minLon = p.lon;
       if (p.lon > maxLon) maxLon = p.lon;
     }
-    
-    const diag = Math.sqrt((maxLat - minLat)**2 + (maxLon - minLon)**2);
+
+    const diag = Math.sqrt((maxLat - minLat) ** 2 + (maxLon - minLon) ** 2);
     const allowedDist = Math.max(0.00005, diag * 0.05);
-    
+
     // Check precise distance to any edge to handle concave (L-shape) polygons
     for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
       const d = distanceToLineSegment(point, poly[j], poly[i]);
       if (d <= allowedDist) return false;
     }
-    
+
     return true; // Point is outside the polygon and not within the 5% margin
   }, [drLocation, autoBuilding]);
 
@@ -242,22 +242,22 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
   const getGridDimensions = () => {
     if (!autoBuilding?.polygon || autoBuilding.polygon.length < 4) return { rows: 1, cols: 1, minLat: 0, maxLat: 0, minLon: 0, maxLon: 0 };
     const poly = autoBuilding.polygon;
-    const minLat = Math.min(...poly.map((p:any)=>p.lat));
-    const maxLat = Math.max(...poly.map((p:any)=>p.lat));
-    const minLon = Math.min(...poly.map((p:any)=>p.lon));
-    const maxLon = Math.max(...poly.map((p:any)=>p.lon));
-    
+    const minLat = Math.min(...poly.map((p: any) => p.lat));
+    const maxLat = Math.max(...poly.map((p: any) => p.lat));
+    const minLon = Math.min(...poly.map((p: any) => p.lon));
+    const maxLon = Math.max(...poly.map((p: any) => p.lon));
+
     // Quick approximation of height/width in meters
     const heightMeters = getDistance(minLat, minLon, maxLat, minLon);
     const widthMeters = getDistance(minLat, minLon, minLat, maxLon);
-    
+
     const rows = Math.max(1, Math.ceil(heightMeters / 5));
     const cols = Math.max(1, Math.ceil(widthMeters / 5));
-    
+
     return { rows, cols, minLat, maxLat, minLon, maxLon };
   };
 
-  const evaluateRouting = (currentLoc: {lat: number, lon: number}) => {
+  const evaluateRouting = (currentLoc: { lat: number, lon: number }) => {
     if (!autoBuilding?.gridPaths || autoBuilding.gridPaths.length === 0) return null;
 
     const gridPaths = autoBuilding.gridPaths;
@@ -272,7 +272,7 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
     // 2. Find nearest valid cell on the gridPaths if the user is slightly off-path
     let snappedCell = gridPaths[0];
     let minDist = Infinity;
-    
+
     // If user's cell is exactly in a painted cell, snap immediately
     const exactMatch = gridPaths.find((p: any) => p.row === row && p.col === col);
     if (exactMatch) {
@@ -290,13 +290,13 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
 
     // 3. Find shortest grid path to nearest exit
     const path = aStarGridPath(snappedCell, exits, gridPaths);
-    
+
     if (!path || path.length === 0) return null;
-    
+
     // 4. Determine immediate target cell
     // A* returns [CurrentCell, NextCell, ... ExitCell]. If path.length > 1, head to NextCell.
     const targetCell = path.length > 1 ? path[1] : path[0];
-    
+
     return targetCell;
   };
 
@@ -325,38 +325,38 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
 
       const pedoAvailable = await Pedometer.isAvailableAsync();
       if (pedoAvailable) {
-         pedoSubRef.current = Pedometer.watchStepCount(result => {
-           if (!isMounted) return;
-           setSteps(result.steps);
-           
-           // Apply Dead Reckoning & Dynamic Routing
-           setDrLocation(prev => {
-             if (!prev) return prev;
-             const nextLoc = updateLocationWithStep(prev.lat, prev.lon, heading);
-             
-             const target = evaluateRouting(nextLoc);
-             if (target && !hasReachedExitRef.current) {
-               const distToTarget = getDistance(nextLoc.lat, nextLoc.lon, target.lat, target.lon);
-               
-               if (distToTarget <= 5) { // within 5 meters threshold
-                 if (target.isExit) {
-                   hasReachedExitRef.current = true;
-                   Speech.speak("You have reached the exit!");
-                 }
-               }
-               
-               // Update target bearing dynamically
-               setTargetHeading(getBearing(nextLoc.lat, nextLoc.lon, target.lat, target.lon));
-             }
+        pedoSubRef.current = Pedometer.watchStepCount(result => {
+          if (!isMounted) return;
+          setSteps(result.steps);
 
-             return nextLoc;
-           });
-         });
+          // Apply Dead Reckoning & Dynamic Routing
+          setDrLocation(prev => {
+            if (!prev) return prev;
+            const nextLoc = updateLocationWithStep(prev.lat, prev.lon, heading);
+
+            const target = evaluateRouting(nextLoc);
+            if (target && !hasReachedExitRef.current) {
+              const distToTarget = getDistance(nextLoc.lat, nextLoc.lon, target.lat, target.lon);
+
+              if (distToTarget <= 5) { // within 5 meters threshold
+                if (target.isExit) {
+                  hasReachedExitRef.current = true;
+                  Speech.speak("You have reached the exit!");
+                }
+              }
+
+              // Update target bearing dynamically
+              setTargetHeading(getBearing(nextLoc.lat, nextLoc.lon, target.lat, target.lon));
+            }
+
+            return nextLoc;
+          });
+        });
       }
     };
 
     startCompassAndPedometer();
-    
+
     if (activeIncident?.isDrill) {
       Speech.speak("This is a test drill. Please follow the evacuation route calmly.");
     } else {
@@ -385,7 +385,7 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
   // Auto-Ping Location and Status
   useEffect(() => {
     if (!user?.id || !activeIncident?._id) return;
-    
+
     const pingStatus = async () => {
       try {
         await updateStatus({
@@ -403,7 +403,7 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
 
     pingStatus(); // initial ping
     const interval = setInterval(pingStatus, 5000); // ping every 5 seconds
-    
+
     return () => clearInterval(interval);
   }, [user?.id, activeIncident?._id, evacStatus, drLocation]);
 
@@ -435,7 +435,7 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
       } catch (e) {
         console.log("Could not play siren", e);
       }
-      
+
       // Update immediately
       if (user?.id && activeIncident?._id) {
         await updateStatus({
@@ -475,7 +475,7 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
 
     const isSafe = Math.abs(diff) <= HEADING_TOLERANCE;
     const now = Date.now();
-    
+
     if (!isSafe && (now - lastSpokenRef.current > 5000)) {
       if (diff > 45 && diff <= 135) Speech.speak("Turn Left.");
       else if (diff < -45 && diff >= -135) Speech.speak("Turn Right.");
@@ -525,17 +525,17 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
   }
 
   const arrowAngle = targetHeading - heading;
-  const arrowRotation = `${arrowAngle}deg`; 
-  
+  const arrowRotation = `${arrowAngle}deg`;
+
   const isDrill = activeIncident?.isDrill;
-  
+
   if (evacStatus === "SAFE") {
     return (
       <View className="flex-1 bg-green-900 justify-center items-center p-6">
         <Text className="text-8xl mb-6">✅</Text>
         <Text className="text-white text-3xl font-black uppercase tracking-widest text-center mb-4">You Are Safe</Text>
         <Text className="text-green-300 text-center mb-8">Please remain at the assembly point until cleared by administration.</Text>
-        <TouchableOpacity 
+        <TouchableOpacity
           onPress={() => {
             if (sirenSound) sirenSound.stopAsync();
             onClose();
@@ -558,7 +558,7 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
         <Text className="text-green-300 text-lg text-center mb-10 font-bold">
           Please inform the marshal by clicking the button below.
         </Text>
-        <TouchableOpacity 
+        <TouchableOpacity
           onPress={markAsSafe}
           className="bg-green-600 px-12 py-6 rounded-full border-4 border-green-400 shadow-[0_0_60px_rgba(34,197,94,0.6)] mb-8"
         >
@@ -567,14 +567,14 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
       </View>
     );
   }
-  
+
   const getImageBounds = () => {
     const layoutW = Math.max(1, imgLayout.w);
     const layoutH = Math.max(1, imgLayout.h);
     const aspect = imageAspectRatio || 1;
     const layoutAspect = layoutW / layoutH;
     let renderW, renderH, offsetX, offsetY;
-    
+
     // ZOOM TO BUILDING BOUNDING BOX
     if (autoBuilding?.polygon && autoBuilding.polygon.length >= 4) {
       const poly = autoBuilding.polygon;
@@ -592,29 +592,29 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
         const maxX = Math.max(...xs);
         const minY = Math.min(...ys);
         const maxY = Math.max(...ys);
-        
+
         const bw = Math.max(0.001, maxX - minX);
         const bh = Math.max(0.001, maxY - minY);
         const padding = 0.10; // 10% padding
-        
+
         // Target bounded area we want to fit inside the layout
         const targetW = bw * (1 + padding * 2);
         const targetH = bh * (1 + padding * 2);
-        
+
         // Scale so the target bounds perfectly fit within BOTH layout width and height
         renderW = Math.min(layoutW / targetW, (layoutH * aspect) / targetH);
         renderH = renderW / aspect;
-        
+
         // Center the building exactly in the middle of the Map View container
         const centerX = (minX + maxX) / 2;
         const centerY = (minY + maxY) / 2;
         offsetX = (layoutW / 2) - (centerX * renderW);
         offsetY = (layoutH / 2) - (centerY * renderH);
-        
+
         return { renderW, renderH, offsetX, offsetY };
       }
     }
-    
+
     // FALLBACK: Cover math
     if (layoutAspect > aspect) { // Container is wider. Cover fits width, crops height.
       renderW = layoutW;
@@ -632,7 +632,7 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
 
   return (
     <View className={`flex-1 w-full ${evacStatus === 'PANIC' ? 'bg-red-900 animate-pulse' : 'bg-black'}`}>
-      
+
       {/* Header (10%) */}
       <View style={{ height: '10%' }} className={`justify-center items-center border-b ${isDrill ? 'bg-amber-900 border-amber-800' : 'bg-neutral-900 border-neutral-800'}`}>
         <Text className={`text-2xl font-extrabold uppercase tracking-widest text-center ${isDrill ? 'text-amber-400' : 'text-red-500'}`}>
@@ -641,23 +641,23 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
       </View>
 
       {/* Map View (25%) */}
-      <View 
+      <View
         style={{ height: '25%' }}
         className="w-full bg-neutral-950 relative border-b-2 border-neutral-800 overflow-hidden"
-        onLayout={(e) => setImgLayout({w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height)})}
+        onLayout={(e) => setImgLayout({ w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height) })}
       >
         {activePlanUrl ? (
           <>
-            <Image 
-              source={{ uri: activePlanUrl }} 
-              style={{ 
+            <Image
+              source={{ uri: activePlanUrl }}
+              style={{
                 position: 'absolute',
-                width: getImageBounds().renderW, 
-                height: getImageBounds().renderH, 
-                left: getImageBounds().offsetX, 
+                width: getImageBounds().renderW,
+                height: getImageBounds().renderH,
+                left: getImageBounds().offsetX,
                 top: getImageBounds().offsetY,
-                opacity: 0.8 
-              }} 
+                opacity: 0.8
+              }}
             />
             {/* Exit Nodes */}
             {(() => {
@@ -666,19 +666,18 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
                 const pos = interpolateLocation(exit.lat, exit.lon);
                 if (!pos) return null;
                 return (
-                  <View 
+                  <View
                     key={`exit-${i}`}
                     style={{
                       position: 'absolute',
-                      left: offsetX + pos.x * renderW - 20,
-                      top: offsetY + pos.y * renderH - 40,
-                      width: 40,
-                      height: 40,
-                      alignItems: 'center'
+                      left: offsetX + pos.x * renderW - 16,
+                      top: offsetY + pos.y * renderH - 16,
+                      width: 32,
+                      height: 32,
                     }}
-                    className="z-10"
+                    className="z-10 bg-green-500 rounded-md justify-center items-center shadow-lg shadow-green-500 animate-pulse border-2 border-white"
                   >
-                    <MaterialCommunityIcons name="map-marker" size={40} color="#22c55e" />
+                    <MaterialCommunityIcons name="door-open" size={20} color="#ffffff" />
                   </View>
                 );
               });
@@ -689,20 +688,22 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
               const { renderW, renderH, offsetX, offsetY } = getImageBounds();
               const pos = userImgPos;
               return (
-                <View 
+                <View
                   style={{
                     position: 'absolute',
-                    left: offsetX + pos.x * renderW - 16,
-                    top: offsetY + pos.y * renderH - 16,
-                    width: 32,
-                    height: 32,
+                    left: offsetX + pos.x * renderW - 24,
+                    top: offsetY + pos.y * renderH - 24,
+                    width: 48,
+                    height: 48,
                   }}
-                  className="z-20 animate-pulse pointer-events-none"
+                  className="z-20 pointer-events-none justify-center items-center"
                 >
-                  <View className="absolute bg-red-500 shadow-md shadow-black" style={{ left: 15, top: 0, width: 2, height: 12 }} />
-                  <View className="absolute bg-red-500 shadow-md shadow-black" style={{ left: 15, bottom: 0, width: 2, height: 12 }} />
-                  <View className="absolute bg-red-500 shadow-md shadow-black" style={{ top: 15, left: 0, width: 12, height: 2 }} />
-                  <View className="absolute bg-red-500 shadow-md shadow-black" style={{ top: 15, right: 0, width: 12, height: 2 }} />
+                  <View className="absolute w-full h-full rounded-full border-4 border-red-500 bg-red-500/30 animate-pulse shadow-lg shadow-red-500/50" />
+
+                  <View className="absolute bg-red-600 shadow-md shadow-black" style={{ left: 23, top: 8, width: 2, height: 12 }} />
+                  <View className="absolute bg-red-600 shadow-md shadow-black" style={{ left: 23, bottom: 8, width: 2, height: 12 }} />
+                  <View className="absolute bg-red-600 shadow-md shadow-black" style={{ top: 23, left: 8, width: 12, height: 2 }} />
+                  <View className="absolute bg-red-600 shadow-md shadow-black" style={{ top: 23, right: 8, width: 12, height: 2 }} />
                 </View>
               );
             })()}
@@ -720,10 +721,10 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
           {/* Arrow (25%) */}
           <View style={{ height: '25%' }} className={`justify-center items-center ${bgColor}`}>
             <Animated.View style={{ transform: [{ rotate: arrowRotation }] }}>
-              <MaterialCommunityIcons 
-                name="arrow-up-thick" 
-                size={Math.min(height * 0.25, width) * 1.0} 
-                color={iconColor} 
+              <MaterialCommunityIcons
+                name="arrow-up-thick"
+                size={Math.min(height * 0.25, width) * 1.0}
+                color={iconColor}
                 style={Platform.OS === 'web' ? { filter: 'drop-shadow(0px 8px 12px rgba(0,0,0,0.8))' } as any : { shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.8, shadowRadius: 12 }}
               />
             </Animated.View>
@@ -731,10 +732,10 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
 
           {/* Status Message (20%) */}
           <View style={{ height: '20%' }} className={`justify-center items-center px-4 ${bgColor}`}>
-            <Text className={`text-3xl font-black uppercase text-center ${statusTitleColor}`} style={Platform.OS === 'web' ? { textShadow: '1px 1px 4px rgba(0,0,0,0.8)' } as any : { textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: {width: 1, height: 1}, textShadowRadius: 4 }}>
+            <Text className={`text-3xl font-black uppercase text-center ${statusTitleColor}`} style={Platform.OS === 'web' ? { textShadow: '1px 1px 4px rgba(0,0,0,0.8)' } as any : { textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 4 }}>
               {statusTitle}
             </Text>
-            <Text className={`text-center mt-1 text-xl font-bold ${statusSubColor}`} style={Platform.OS === 'web' ? { textShadow: '1px 1px 2px rgba(0,0,0,0.8)' } as any : { textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: {width: 1, height: 1}, textShadowRadius: 2 }}>
+            <Text className={`text-center mt-1 text-xl font-bold ${statusSubColor}`} style={Platform.OS === 'web' ? { textShadow: '1px 1px 2px rgba(0,0,0,0.8)' } as any : { textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 }}>
               {statusSub}
             </Text>
             <Text className="text-neutral-400 mt-2 font-bold">{steps} steps tracked</Text>
@@ -742,14 +743,14 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
 
           {/* Buttons (20%) */}
           <View style={{ height: '20%' }} className={`flex-row items-center justify-center px-4 pb-4 gap-4 ${bgColor}`}>
-            <TouchableOpacity 
+            <TouchableOpacity
               className={`flex-1 h-full rounded-3xl border-2 shadow-lg justify-center items-center ${evacStatus === 'PANIC' ? 'bg-white border-red-500 shadow-red-600/50' : 'bg-red-600 border-red-500 shadow-red-600/50'}`}
               onPress={togglePanic}
             >
               <Text className={`font-black text-xl text-center ${evacStatus === 'PANIC' ? 'text-red-600' : 'text-white'}`}>{evacStatus === 'PANIC' ? 'CANCEL SOS' : 'SOS'}</Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               className="flex-1 h-full bg-green-600 rounded-3xl border-2 border-green-500 shadow-lg shadow-green-600/50 justify-center items-center"
               onPress={markAsSafe}
             >
