@@ -93,8 +93,22 @@ export default function AdminDashboard() {
   const [isMapEditorOpen, setIsMapEditorOpen] = React.useState(false);
   const [isLocatingUser, setIsLocatingUser] = React.useState(false);
   const [mapEditorStep, setMapEditorStep] = React.useState<1 | 2>(1); // 1 = Calibration, 2 = Safe Routes
-  const [gridPaintMode, setGridPaintMode] = React.useState<"safe" | "exit" | "erase">("safe");
+  const [gridPaintMode, setGridPaintMode] = React.useState<"safe" | "exit" | "erase" | "pan">("safe");
+  const [userZoom, setUserZoom] = React.useState(1);
+  const [step1Zoom, setStep1Zoom] = React.useState(1);
+  const [step1PanMode, setStep1PanMode] = React.useState(false);
   
+  const [mapPanOffset, setMapPanOffset] = React.useState({x: 0, y: 0});
+  const [step1PanOffset, setStep1PanOffset] = React.useState({x: 0, y: 0});
+  
+  const gestureState = React.useRef({
+    isTwoFinger: false,
+    initialDistance: 0,
+    initialZoom: 1,
+    lastCenter: {x: 0, y: 0},
+    lastPan: {x: 0, y: 0}
+  });
+
   const [activeCalibIdx, setActiveCalibIdx] = React.useState(0);
   const [calibPoints, setCalibPoints] = React.useState<{x: number, y: number}[]>([]);
   const [gridPaths, setGridPaths] = React.useState<{row: number, col: number, lat: number, lon: number, isExit: boolean}[]>([]);
@@ -188,6 +202,106 @@ export default function AdminDashboard() {
     return 400;
   };
 
+  const handleTouchStart = (
+    e: any, 
+    currentZoom: number, 
+    currentPan: {x: number, y: number}, 
+    isPanMode: boolean, 
+    onPaint?: (rawX: number, rawY: number)=>void
+  ) => {
+    const touches = e.nativeEvent.touches;
+    if (touches && touches.length >= 2) {
+      gestureState.current.isTwoFinger = true;
+      const dx = touches[0].pageX - touches[1].pageX;
+      const dy = touches[0].pageY - touches[1].pageY;
+      gestureState.current.initialDistance = Math.sqrt(dx*dx + dy*dy);
+      gestureState.current.initialZoom = currentZoom;
+      gestureState.current.lastCenter = {
+        x: (touches[0].pageX + touches[1].pageX) / 2,
+        y: (touches[0].pageY + touches[1].pageY) / 2
+      };
+      gestureState.current.lastPan = currentPan;
+    } else {
+      gestureState.current.isTwoFinger = false;
+      if (touches && touches.length === 1) {
+        gestureState.current.lastCenter = { x: touches[0].pageX, y: touches[0].pageY };
+        gestureState.current.lastPan = currentPan;
+        if (!isPanMode && onPaint) {
+          onPaint(touches[0].locationX, touches[0].locationY);
+        }
+      } else {
+        // web single touch
+        gestureState.current.lastCenter = { x: e.nativeEvent.pageX || 0, y: e.nativeEvent.pageY || 0 };
+        gestureState.current.lastPan = currentPan;
+        if (!isPanMode && onPaint) {
+          onPaint((e.nativeEvent as any).offsetX !== undefined ? (e.nativeEvent as any).offsetX : e.nativeEvent.locationX, (e.nativeEvent as any).offsetY !== undefined ? (e.nativeEvent as any).offsetY : e.nativeEvent.locationY);
+        }
+      }
+    }
+  };
+
+  const handleTouchMove = (
+    e: any, 
+    currentZoom: number, 
+    setZoom: (z: number)=>void, 
+    setPan: (p: {x:number, y:number})=>void, 
+    isPanMode: boolean,
+    onPaint: (rawX: number, rawY: number)=>void
+  ) => {
+    const touches = e.nativeEvent.touches;
+    if (touches && touches.length >= 2) {
+      if (!gestureState.current.isTwoFinger) {
+        // Transitioned to 2 fingers
+        handleTouchStart(e, currentZoom, gestureState.current.lastPan, isPanMode);
+        return;
+      }
+      
+      // Zoom
+      const dx = touches[0].pageX - touches[1].pageX;
+      const dy = touches[0].pageY - touches[1].pageY;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      
+      const scaleFactor = dist / Math.max(1, gestureState.current.initialDistance);
+      let newZoom = gestureState.current.initialZoom * scaleFactor;
+      newZoom = Math.max(1, Math.min(5, newZoom));
+      setZoom(newZoom);
+      
+      // Pan
+      const center = {
+        x: (touches[0].pageX + touches[1].pageX) / 2,
+        y: (touches[0].pageY + touches[1].pageY) / 2
+      };
+      const diffX = center.x - gestureState.current.lastCenter.x;
+      const diffY = center.y - gestureState.current.lastCenter.y;
+      
+      if (newZoom <= 1.01) {
+        setPan({x: 0, y: 0});
+      } else {
+        setPan({
+          x: gestureState.current.lastPan.x + diffX,
+          y: gestureState.current.lastPan.y + diffY
+        });
+      }
+      
+    } else if (!gestureState.current.isTwoFinger) {
+      // 1 finger
+      if (isPanMode) {
+        const pageX = touches ? touches[0].pageX : (e.nativeEvent.pageX || 0);
+        const pageY = touches ? touches[0].pageY : (e.nativeEvent.pageY || 0);
+        const diffX = pageX - gestureState.current.lastCenter.x;
+        const diffY = pageY - gestureState.current.lastCenter.y;
+        setPan({
+          x: gestureState.current.lastPan.x + diffX,
+          y: gestureState.current.lastPan.y + diffY
+        });
+      } else {
+        const rawX = Platform.OS === 'web' && (e.nativeEvent as any).offsetX !== undefined ? (e.nativeEvent as any).offsetX : e.nativeEvent.locationX;
+        const rawY = Platform.OS === 'web' && (e.nativeEvent as any).offsetY !== undefined ? (e.nativeEvent as any).offsetY : e.nativeEvent.locationY;
+        onPaint(rawX, rawY);
+      }
+    }
+  };
+
   const getMapTransform = () => {
     let scale = 1;
     let translateX = 0;
@@ -216,7 +330,8 @@ export default function AdminDashboard() {
         const containerW = imgLayout.w;
         const containerH = imgLayout.h;
         
-        scale = Math.min(containerW / idealMaskW, containerH / idealMaskH);
+        const baseScale = Math.min(containerW / idealMaskW, containerH / idealMaskH);
+        scale = baseScale * userZoom;
         
         maskW = idealMaskW * scale;
         maskH = idealMaskH * scale;
@@ -224,11 +339,32 @@ export default function AdminDashboard() {
         boxCenterX = bounds.offsetX + ((minCX + maxCX) / 2) * bounds.renderW;
         boxCenterY = bounds.offsetY + ((minCY + maxCY) / 2) * bounds.renderH;
         
-        translateX = maskW/2 - imgLayout.w/2 - (boxCenterX - imgLayout.w/2) * scale;
-        translateY = maskH/2 - imgLayout.h/2 - (boxCenterY - imgLayout.h/2) * scale;
+        translateX = maskW/2 - imgLayout.w/2 - (boxCenterX - imgLayout.w/2) * scale + mapPanOffset.x;
+        translateY = maskH/2 - imgLayout.h/2 - (boxCenterY - imgLayout.h/2) * scale + mapPanOffset.y;
       }
     }
     return { scale, translateX, translateY, maskW, maskH, boxCenterX, boxCenterY };
+  };
+
+  const handleStep1Paint = (rawX: number, rawY: number) => {
+    const bounds = getRenderedImageBounds();
+    const screenX = rawX;
+    const screenY = rawY;
+    const unzoomedX = imgLayout.w/2 + (screenX - imgLayout.w/2 - step1PanOffset.x) / step1Zoom;
+    const unzoomedY = 400/2 + (screenY - 400/2 - step1PanOffset.y) / step1Zoom;
+    
+    const x = (unzoomedX - bounds.offsetX) / bounds.renderW;
+    const y = (unzoomedY - bounds.offsetY) / bounds.renderH;
+    
+    if (activeCalibIdx === -1) return;
+    
+    const isNewPlacement = !calibPoints[activeCalibIdx];
+    const newPoints = [...calibPoints];
+    newPoints[activeCalibIdx] = {x, y};
+    setCalibPoints(newPoints);
+    if (isNewPlacement && activeCalibIdx < (selectedBuilding?.polygon?.length || 4) - 1) {
+      setActiveCalibIdx(activeCalibIdx + 1);
+    }
   };
 
   const handleGridInteraction = (screenX: number, screenY: number) => {
@@ -238,8 +374,8 @@ export default function AdminDashboard() {
     let rawY = screenY;
 
     if (boxCenterX !== undefined && boxCenterY !== undefined) {
-      rawX = boxCenterX + (screenX - maskW/2) / scale;
-      rawY = boxCenterY + (screenY - maskH/2) / scale;
+      rawX = boxCenterX + (screenX - imgLayout.w/2 - mapPanOffset.x) / scale;
+      rawY = boxCenterY + (screenY - imgLayout.h/2 - mapPanOffset.y) / scale;
     }
 
     const gps = mapImageToGPS(rawX, rawY);
@@ -1608,7 +1744,7 @@ export default function AdminDashboard() {
                     <TouchableOpacity 
                       key={i} 
                       className={`px-3 py-2 rounded-lg border mr-2 mb-2 ${activeCalibIdx === i ? 'bg-blue-600 border-blue-400' : 'bg-neutral-800 border-neutral-600'}`}
-                      onPress={() => setActiveCalibIdx(i)}
+                      onPress={() => setActiveCalibIdx(activeCalibIdx === i ? -1 : i)}
                     >
                       <Text className="text-white font-bold text-xs">{p.label || `P${i+1}`}</Text>
                       {calibPoints[i] && <Text className="text-green-400 text-[10px] mt-1 font-bold">✓ Placed</Text>}
@@ -1617,32 +1753,76 @@ export default function AdminDashboard() {
                 })}
               </View>
 
-              <View className="bg-neutral-800 rounded-xl overflow-hidden mb-6 w-full" style={{ height: 400 }}>
+              {/* Step 1 Toolbar */}
+              <View className="flex-row space-x-2 mb-2">
+                <TouchableOpacity 
+                  className={`flex-1 py-3 rounded-xl items-center border-2 ${!step1PanMode ? 'bg-blue-600 border-blue-400' : 'bg-neutral-800 border-neutral-700'}`}
+                  onPress={() => setStep1PanMode(false)}
+                >
+                  <Text className="text-white font-bold">📍 Place Pin</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  className={`flex-1 py-3 rounded-xl items-center border-2 ${step1PanMode ? 'bg-amber-600 border-amber-400' : 'bg-neutral-800 border-neutral-700'}`}
+                  onPress={() => setStep1PanMode(true)}
+                >
+                  <Text className="text-white font-bold">✋ Pan</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View className="flex-row justify-end space-x-2 mb-4">
+                <Text className="text-white my-auto font-bold mr-2">Zoom:</Text>
+                <TouchableOpacity 
+                  className="bg-neutral-700 p-2 rounded-lg"
+                  onPress={() => {
+                    setStep1Zoom(z => Math.max(1, z - 0.5));
+                    setStep1PanOffset({x: 0, y: 0});
+                  }}
+                >
+                  <MaterialCommunityIcons name="minus" size={24} color="white" />
+                </TouchableOpacity>
+                <Text className="text-white my-auto font-bold">{Math.round(step1Zoom * 100)}%</Text>
+                <TouchableOpacity 
+                  className="bg-neutral-700 p-2 rounded-lg"
+                  onPress={() => {
+                    setStep1Zoom(z => Math.min(5, z + 0.5));
+                    setStep1PanOffset({x: 0, y: 0});
+                  }}
+                >
+                  <MaterialCommunityIcons name="plus" size={24} color="white" />
+                </TouchableOpacity>
+              </View>
+
+              <View 
+                className="bg-neutral-800 rounded-xl overflow-hidden mb-6 w-full relative" 
+                style={{ height: 400 }}
+                onLayout={(e) => setImgLayout({w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height)})}
+              >
                 {selectedBuilding?.masterPlanUrl && (
-                  <TouchableOpacity 
-                    activeOpacity={1}
-                    className="flex-1"
-                    onLayout={(e) => setImgLayout({w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height)})}
-                    onPress={(e) => {
-                      const rawX = Platform.OS === 'web' && (e.nativeEvent as any).offsetX !== undefined ? (e.nativeEvent as any).offsetX : e.nativeEvent.locationX;
-                      const rawY = Platform.OS === 'web' && (e.nativeEvent as any).offsetY !== undefined ? (e.nativeEvent as any).offsetY : e.nativeEvent.locationY;
-                      const bounds = getRenderedImageBounds();
-                      const x = (rawX - bounds.offsetX) / bounds.renderW;
-                      const y = (rawY - bounds.offsetY) / bounds.renderH;
-                      const isNewPlacement = !calibPoints[activeCalibIdx];
-                      const newPoints = [...calibPoints];
-                      newPoints[activeCalibIdx] = {x, y};
-                      setCalibPoints(newPoints);
-                      if (isNewPlacement && activeCalibIdx < (selectedBuilding?.polygon?.length || 4) - 1) {
-                        setActiveCalibIdx(activeCalibIdx + 1);
-                      }
-                    }}
+                  <View 
+                    className="w-full h-full justify-center items-center"
+                    onStartShouldSetResponder={() => true}
+                    onResponderGrant={(e) => handleTouchStart(e, step1Zoom, step1PanOffset, step1PanMode, handleStep1Paint)}
+                    onResponderMove={(e) => handleTouchMove(e, step1Zoom, setStep1Zoom, setStep1PanOffset, step1PanMode, handleStep1Paint)}
                   >
-                    <Image 
-                      source={{ uri: selectedBuilding.masterPlanUrl }} 
-                      className="w-full h-full" 
-                      resizeMode="contain" 
-                    />
+                    <View 
+                      style={{
+                        position: 'absolute',
+                        left: 0,
+                        top: 0,
+                        width: imgLayout.w,
+                        height: 400,
+                        transform: [
+                          { translateX: step1PanOffset.x },
+                          { translateY: step1PanOffset.y },
+                          { scale: step1Zoom }
+                        ]
+                      }}
+                    >
+                      <Image 
+                          source={{ uri: selectedBuilding.masterPlanUrl }} 
+                          className="w-full h-full" 
+                          resizeMode="contain" 
+                        />
                     {calibPoints.map((p, i) => {
                       if (!p) return null;
                       const labelStr = selectedBuilding?.polygon?.[i]?.label;
@@ -1659,7 +1839,7 @@ export default function AdminDashboard() {
                           style={{ left: px - 20, top: py - 40, width: 40, height: 40, zIndex: activeCalibIdx === i ? 10 : 1 }}
                           onPress={(e) => {
                             e.stopPropagation();
-                            setActiveCalibIdx(i);
+                            setActiveCalibIdx(activeCalibIdx === i ? -1 : i);
                           }}
                         >
                           {activeCalibIdx === i ? (
@@ -1680,7 +1860,7 @@ export default function AdminDashboard() {
                             </>
                           )}
                           {activeCalibIdx === i && (
-                            <View className="absolute bg-neutral-900/90 rounded-full border border-neutral-600 shadow-xl z-50 flex-row items-center justify-center" style={{ width: 80, height: 80, left: px > imgLayout.w - 100 ? -75 : 35, top: -20 }}>
+                            <View className="absolute bg-neutral-900/90 rounded-full border border-neutral-600 shadow-xl z-50 flex-row items-center justify-center" style={{ width: 80, height: 80, left: px > (imgLayout.w * step1Zoom) - 100 ? -75 : 35, top: -20 }}>
                               <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleNudgeCalib(i, 0, -1); }} className="absolute top-1 p-1 bg-neutral-700 rounded-full"><MaterialCommunityIcons name="chevron-up" size={20} color="white" /></TouchableOpacity>
                               <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleNudgeCalib(i, 0, 1); }} className="absolute bottom-1 p-1 bg-neutral-700 rounded-full"><MaterialCommunityIcons name="chevron-down" size={20} color="white" /></TouchableOpacity>
                               <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleNudgeCalib(i, -1, 0); }} className="absolute left-1 p-1 bg-neutral-700 rounded-full"><MaterialCommunityIcons name="chevron-left" size={20} color="white" /></TouchableOpacity>
@@ -1691,7 +1871,8 @@ export default function AdminDashboard() {
                         </TouchableOpacity>
                       )
                     })}
-                  </TouchableOpacity>
+                    </View>
+                  </View>
                 )}
               </View>
 
@@ -1722,12 +1903,12 @@ export default function AdminDashboard() {
               <Text className="text-neutral-400 text-sm mb-4">Select a brush type, then tap the map to paint grid cells (5x5m).</Text>
 
               {/* Toolbar */}
-              <View className="flex-row space-x-2 mb-4">
+              <View className="flex-row space-x-2 mb-2">
                 <TouchableOpacity 
                   className={`flex-1 py-3 rounded-xl items-center border-2 ${gridPaintMode === "safe" ? 'bg-blue-600 border-blue-400' : 'bg-neutral-800 border-neutral-700'}`}
                   onPress={() => setGridPaintMode("safe")}
                 >
-                  <Text className="text-white font-bold">🟦 Safe Zone</Text>
+                  <Text className="text-white font-bold">🟦 Safe Route</Text>
                 </TouchableOpacity>
                 <TouchableOpacity 
                   className={`flex-1 py-3 rounded-xl items-center border-2 ${gridPaintMode === "exit" ? 'bg-green-600 border-green-400' : 'bg-neutral-800 border-neutral-700'}`}
@@ -1741,49 +1922,73 @@ export default function AdminDashboard() {
                 >
                   <Text className="text-white font-bold">🧹 Erase</Text>
                 </TouchableOpacity>
+                <TouchableOpacity 
+                  className={`flex-1 py-3 rounded-xl items-center border-2 ${gridPaintMode === "pan" ? 'bg-amber-600 border-amber-400' : 'bg-neutral-800 border-neutral-700'}`}
+                  onPress={() => setGridPaintMode("pan")}
+                >
+                  <Text className="text-white font-bold">✋ Pan</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View className="flex-row justify-end space-x-2 mb-4">
+                <Text className="text-white my-auto font-bold mr-2">Zoom:</Text>
+                <TouchableOpacity 
+                  className="bg-neutral-700 p-2 rounded-lg"
+                  onPress={() => {
+                    setUserZoom(z => Math.max(1, z - 0.5));
+                    setMapPanOffset({x: 0, y: 0});
+                  }}
+                >
+                  <MaterialCommunityIcons name="minus" size={24} color="white" />
+                </TouchableOpacity>
+                <Text className="text-white my-auto font-bold">{Math.round(userZoom * 100)}%</Text>
+                <TouchableOpacity 
+                  className="bg-neutral-700 p-2 rounded-lg"
+                  onPress={() => {
+                    setUserZoom(z => Math.min(5, z + 0.5));
+                    setMapPanOffset({x: 0, y: 0});
+                  }}
+                >
+                  <MaterialCommunityIcons name="plus" size={24} color="white" />
+                </TouchableOpacity>
               </View>
               
               <View 
-                className="bg-neutral-800 rounded-xl mb-4 w-full justify-center items-center relative" 
+                className="bg-neutral-800 rounded-xl mb-4 w-full justify-center items-center relative overflow-hidden" 
                 style={{ height: getDynamicMapHeight() }}
                 onLayout={(e) => setImgLayout({w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height)})}
               >
                 {selectedBuilding?.masterPlanUrl && (
                   <View 
-                    style={{
-                      width: getMapTransform().maskW,
-                      height: getMapTransform().maskH,
-                      overflow: 'hidden',
-                      position: 'relative',
-                      backgroundColor: '#171717'
-                    }}
+                    className="w-full h-full justify-center items-center"
                     onStartShouldSetResponder={() => true}
-                    onResponderGrant={(e) => {
-                      const rawX = Platform.OS === 'web' && (e.nativeEvent as any).offsetX !== undefined ? (e.nativeEvent as any).offsetX : e.nativeEvent.locationX;
-                      const rawY = Platform.OS === 'web' && (e.nativeEvent as any).offsetY !== undefined ? (e.nativeEvent as any).offsetY : e.nativeEvent.locationY;
-                      handleGridInteraction(rawX, rawY);
-                    }}
-                    onResponderMove={(e) => {
-                      const rawX = Platform.OS === 'web' && (e.nativeEvent as any).offsetX !== undefined ? (e.nativeEvent as any).offsetX : e.nativeEvent.locationX;
-                      const rawY = Platform.OS === 'web' && (e.nativeEvent as any).offsetY !== undefined ? (e.nativeEvent as any).offsetY : e.nativeEvent.locationY;
-                      handleGridInteraction(rawX, rawY);
-                    }}
+                    onResponderGrant={(e) => handleTouchStart(e, userZoom, mapPanOffset, gridPaintMode === "pan", handleGridInteraction)}
+                    onResponderMove={(e) => handleTouchMove(e, userZoom, setUserZoom, setMapPanOffset, gridPaintMode === "pan", handleGridInteraction)}
                   >
                     <View 
                       style={{
-                        position: 'absolute',
-                        left: 0,
-                        top: 0,
-                        width: imgLayout.w,
-                        height: imgLayout.h,
-                        transform: [
-                          { translateX: getMapTransform().translateX },
-                          { translateY: getMapTransform().translateY },
-                          { scale: getMapTransform().scale }
-                        ]
+                        width: getMapTransform().maskW,
+                        height: getMapTransform().maskH,
+                        overflow: 'hidden',
+                        position: 'relative',
+                        backgroundColor: '#171717'
                       }}
                       pointerEvents="none"
                     >
+                      <View 
+                        style={{
+                          position: 'absolute',
+                          left: 0,
+                          top: 0,
+                          width: imgLayout.w,
+                          height: imgLayout.h,
+                          transform: [
+                            { translateX: getMapTransform().translateX },
+                            { translateY: getMapTransform().translateY },
+                            { scale: getMapTransform().scale }
+                          ]
+                        }}
+                      >
                       <Image 
                         source={{ uri: selectedBuilding.masterPlanUrl }} 
                         className="w-full h-full opacity-70" 
@@ -1847,8 +2052,9 @@ export default function AdminDashboard() {
                       }
                       return cells;
                     })()}
+                        </View>
+                      </View>
                     </View>
-                  </View>
                 )}
               </View>
 
@@ -1856,7 +2062,7 @@ export default function AdminDashboard() {
                 <Text className="text-blue-500 mr-3 text-2xl">💡</Text>
                 <View className="flex-1">
                   <Text className="text-blue-400 font-bold mb-1 uppercase tracking-wider text-xs">Grid Strategy</Text>
-                  <Text className="text-blue-300 text-xs">Paint <Text className="font-bold text-white">Safe Zones</Text> along corridors and rooms to define where users can walk. Mark <Text className="font-bold text-white">Exits</Text> at the doors. The system automatically calculates the shortest path through painted zones.</Text>
+                  <Text className="text-blue-300 text-xs">Paint <Text className="font-bold text-white">Safe Routes</Text> along corridors and rooms to define where users can walk. Mark <Text className="font-bold text-white">Exits</Text> at the doors. The system automatically calculates the shortest path through painted routes.</Text>
                 </View>
               </View>
 
