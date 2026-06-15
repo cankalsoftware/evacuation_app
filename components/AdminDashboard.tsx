@@ -603,7 +603,42 @@ export default function AdminDashboard() {
     setCalibPoints(newPoints);
   };
 
+  const performAutoZoom = () => {
+    if (imgLayout.w > 1 && calibPoints.filter(Boolean).length >= 4) {
+      const validPoints = calibPoints.filter(Boolean);
+      const bounds = getRenderedImageBounds();
+      const isLegacyPixels = validPoints[0].x > 2;
+      
+      const xs = validPoints.map((c: any) => isLegacyPixels ? c.x / Math.max(1, imgLayout.w) : c.x);
+      const ys = validPoints.map((c: any) => isLegacyPixels ? c.y / Math.max(1, imgLayout.h) : c.y);
+      
+      if (xs.length > 0 && ys.length > 0) {
+        const minCX = Math.min(...xs);
+        const maxCX = Math.max(...xs);
+        const minCY = Math.min(...ys);
+        const maxCY = Math.max(...ys);
 
+        const boxW_px = (maxCX - minCX) * bounds.renderW;
+        const boxH_px = (maxCY - minCY) * bounds.renderH;
+
+        if (boxW_px > 0 && boxH_px > 0) {
+          const targetW = imgLayout.w * 0.9;
+          const targetH = imgLayout.h * 0.9;
+
+          const baseScale = Math.min(targetW / boxW_px, targetH / boxH_px);
+          
+          const boxCenterX = bounds.offsetX + ((minCX + maxCX) / 2) * bounds.renderW;
+          const boxCenterY = bounds.offsetY + ((minCY + maxCY) / 2) * bounds.renderH;
+
+          setStep1Zoom(baseScale);
+          setStep1PanOffset({
+            x: -(boxCenterX - imgLayout.w / 2),
+            y: -(boxCenterY - imgLayout.h / 2)
+          });
+        }
+      }
+    }
+  };
 
   const handleMapPress = (e: any) => {
     if (e.nativeEvent.coordinate) {
@@ -1897,7 +1932,10 @@ export default function AdminDashboard() {
                 </TouchableOpacity>
                 <TouchableOpacity
                   className={`flex-1 py-3 rounded-lg items-center ${mapEditorStep === 2 ? 'bg-neutral-700 shadow' : ''}`}
-                  onPress={() => setMapEditorStep(2)}
+                  onPress={() => {
+                    performAutoZoom();
+                    setMapEditorStep(2);
+                  }}
                 >
                   <Text className={`font-bold ${mapEditorStep === 2 ? 'text-white' : 'text-neutral-400'}`}>Step 2: Safe Routes</Text>
                 </TouchableOpacity>
@@ -2083,6 +2121,9 @@ export default function AdminDashboard() {
                             return;
                           }
                           await updateBuildingCalibration({ clerkId: user?.id || "", buildingId: selectedBuilding._id, calibrationPoints: calibPoints });
+                          
+                          performAutoZoom();
+
                           setMapEditorStep(2);
                           showToast("Image calibrated successfully!");
                         } catch (e) { showToast("Error saving calibration", "error"); }
