@@ -332,8 +332,8 @@ export default function AdminDashboard() {
 
   const getMapTransform = () => {
     let scale = 1;
-    let translateX = 0;
-    let translateY = 0;
+    let translateX = mapPanOffset.x;
+    let translateY = mapPanOffset.y;
     let maskW = imgLayout.w;
     let maskH = imgLayout.h;
     let boxCenterX;
@@ -352,25 +352,22 @@ export default function AdminDashboard() {
       const boxH_px = (maxCY - minCY) * bounds.renderH;
 
       if (boxW_px > 0 && boxH_px > 0) {
-        const idealMaskW = boxW_px / 0.95;
-        const idealMaskH = boxH_px / 0.95;
+        // Fit building box into 90% of screen (5% margin each side)
+        const targetW = imgLayout.w * 0.9;
+        const targetH = imgLayout.h * 0.9;
 
-        const containerW = imgLayout.w;
-        const containerH = imgLayout.h;
-
-        const baseScale = Math.min(containerW / idealMaskW, containerH / idealMaskH);
+        const baseScale = Math.min(targetW / boxW_px, targetH / boxH_px);
         scale = baseScale * userZoom;
-
-        maskW = idealMaskW * scale;
-        maskH = idealMaskH * scale;
 
         boxCenterX = bounds.offsetX + ((minCX + maxCX) / 2) * bounds.renderW;
         boxCenterY = bounds.offsetY + ((minCY + maxCY) / 2) * bounds.renderH;
 
-        translateX = maskW / 2 - imgLayout.w / 2 - (boxCenterX - imgLayout.w / 2) * scale + mapPanOffset.x;
-        translateY = maskH / 2 - imgLayout.h / 2 - (boxCenterY - imgLayout.h / 2) * scale + mapPanOffset.y;
+        // Shift so that boxCenter lands exactly at the center of the full mask
+        translateX = mapPanOffset.x - (boxCenterX - imgLayout.w / 2) * scale;
+        translateY = mapPanOffset.y - (boxCenterY - imgLayout.h / 2) * scale;
       }
     }
+
     return { scale, translateX, translateY, maskW, maskH, boxCenterX, boxCenterY };
   };
 
@@ -396,15 +393,13 @@ export default function AdminDashboard() {
   };
 
   const handleGridInteraction = (screenX: number, screenY: number) => {
-    const { scale, maskW, maskH, boxCenterX, boxCenterY } = getMapTransform();
-
     let rawX = screenX;
     let rawY = screenY;
 
-    if (boxCenterX !== undefined && boxCenterY !== undefined) {
-      rawX = boxCenterX + (screenX - imgLayout.w / 2 - mapPanOffset.x) / scale;
-      rawY = boxCenterY + (screenY - imgLayout.h / 2 - mapPanOffset.y) / scale;
-    }
+    const unzoomedX = imgLayout.w / 2 + (screenX - imgLayout.w / 2 - step1PanOffset.x) / step1Zoom;
+    const unzoomedY = imgLayout.h / 2 + (screenY - imgLayout.h / 2 - step1PanOffset.y) / step1Zoom;
+    rawX = unzoomedX;
+    rawY = unzoomedY;
 
     const gps = mapImageToGPS(rawX, rawY);
     const { rows, cols, minLat, maxLat, minLon, maxLon } = getGridDimensions();
@@ -1800,9 +1795,9 @@ export default function AdminDashboard() {
                                 width: imgLayout.w,
                                 height: imgLayout.h,
                                 transform: [
+                                  { scale: mapTransform.scale },
                                   { translateX: mapTransform.translateX },
-                                  { translateY: mapTransform.translateY },
-                                  { scale: mapTransform.scale }
+                                  { translateY: mapTransform.translateY }
                                 ]
                               }}
                             >
@@ -1998,9 +1993,9 @@ export default function AdminDashboard() {
                             width: imgLayout.w,
                             height: imgLayout.h,
                             transform: [
+                              { scale: step1Zoom },
                               { translateX: step1PanOffset.x },
-                              { translateY: step1PanOffset.y },
-                              { scale: step1Zoom }
+                              { translateY: step1PanOffset.y }
                             ]
                           }}
                         >
@@ -2134,18 +2129,16 @@ export default function AdminDashboard() {
                     <TouchableOpacity
                       className="bg-neutral-700 p-2 rounded-lg"
                       onPress={() => {
-                        setUserZoom(z => Math.max(1, z - 0.5));
-                        setMapPanOffset({ x: 0, y: 0 });
+                        setStep1Zoom(z => Math.max(1, z - 0.5));
                       }}
                     >
                       <MaterialCommunityIcons name="minus" size={24} color="white" />
                     </TouchableOpacity>
-                    <Text className="text-white my-auto font-bold">{Math.round(userZoom * 100)}%</Text>
+                    <Text className="text-white my-auto font-bold">{Math.round(step1Zoom * 100)}%</Text>
                     <TouchableOpacity
                       className="bg-neutral-700 p-2 rounded-lg"
                       onPress={() => {
-                        setUserZoom(z => Math.min(5, z + 0.5));
-                        setMapPanOffset({ x: 0, y: 0 });
+                        setStep1Zoom(z => Math.min(5, z + 0.5));
                       }}
                     >
                       <MaterialCommunityIcons name="plus" size={24} color="white" />
@@ -2154,23 +2147,22 @@ export default function AdminDashboard() {
 
                   <View
                     className="bg-neutral-800 rounded-xl mb-4 w-full justify-center items-center relative overflow-hidden"
-                    style={{ height: getDynamicMapHeight() }}
+                    style={{ height: getDynamicMapHeight() * 1.3 }}
                     onLayout={(e) => setImgLayout({ w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height) })}
                   >
                     {selectedBuilding?.masterPlanUrl && (
                       <View
                         className="w-full h-full justify-center items-center"
                         onStartShouldSetResponder={() => true}
-                        onResponderGrant={(e) => handleTouchStart(e, userZoom, mapPanOffset, gridPaintMode === "pan", handleGridInteraction)}
-                        onResponderMove={(e) => handleTouchMove(e, userZoom, setUserZoom, setMapPanOffset, gridPaintMode === "pan", handleGridInteraction)}
+                        onResponderGrant={(e) => handleTouchStart(e, step1Zoom, step1PanOffset, gridPaintMode === "pan", handleGridInteraction)}
+                        onResponderMove={(e) => handleTouchMove(e, step1Zoom, setStep1Zoom, setStep1PanOffset, gridPaintMode === "pan", handleGridInteraction)}
                       >
                         <View
                           style={{
-                            width: getMapTransform().maskW,
-                            height: getMapTransform().maskH,
+                            width: imgLayout.w,
+                            height: imgLayout.h,
                             overflow: 'hidden',
                             position: 'relative',
-                            backgroundColor: '#171717',
                             pointerEvents: 'none'
                           }}
                         >
@@ -2182,9 +2174,9 @@ export default function AdminDashboard() {
                               width: imgLayout.w,
                               height: imgLayout.h,
                               transform: [
-                                { translateX: getMapTransform().translateX },
-                                { translateY: getMapTransform().translateY },
-                                { scale: getMapTransform().scale }
+                                { scale: step1Zoom },
+                                { translateX: step1PanOffset.x },
+                                { translateY: step1PanOffset.y }
                               ]
                             }}
                           >
