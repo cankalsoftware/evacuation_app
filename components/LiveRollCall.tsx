@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { View, ScrollView, Platform } from "react-native";
+import { Audio } from "expo-av";
 import { Text, TouchableOpacity } from "./ResponsiveUI";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
@@ -7,8 +8,72 @@ import { api } from "../convex/_generated/api";
 export default function LiveRollCall({ incidentId, clerkId, onLocateUser, buildingPolygon }: { incidentId: any, clerkId: string, onLocateUser: (lat: number, lon: number, name: string) => void, buildingPolygon?: any[] }) {
   const evacData = useQuery(api.portal.getEvacuationData, { clerkId, incidentId }) || { inside: [], outside: [] };
   const moveToOutside = useMutation(api.portal.moveToOutside);
-  
   const [countdown, setCountdown] = useState(5);
+  const [isMuted, setIsMuted] = useState(false);
+  const sirenSoundRef = useRef<Audio.Sound | null>(null);
+
+  const panicUsers = evacData.inside.filter((r: any) => r.status === 'PANIC');
+  const inBuildingUsers = evacData.inside.filter((r: any) => r.status === 'IN_BUILDING');
+  const safeUsers = evacData.outside;
+
+  useEffect(() => {
+    if (panicUsers.length === 0 && isMuted) {
+      setIsMuted(false);
+    }
+  }, [panicUsers.length, isMuted]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const manageSiren = async () => {
+      try {
+        if (panicUsers.length > 0 && !isMuted) {
+          if (!sirenSoundRef.current) {
+            const { sound } = await Audio.Sound.createAsync(
+              require('../assets/siren.wav'),
+              { isLooping: true, volume: 1.0 }
+            );
+            if (isMounted) {
+              sirenSoundRef.current = sound;
+              await sound.playAsync();
+            } else {
+              await sound.unloadAsync();
+            }
+          } else {
+            const status = await sirenSoundRef.current.getStatusAsync();
+            if (status.isLoaded && !status.isPlaying) {
+              await sirenSoundRef.current.playAsync();
+            }
+          }
+        } else {
+          if (sirenSoundRef.current) {
+            await sirenSoundRef.current.stopAsync();
+            await sirenSoundRef.current.unloadAsync();
+            sirenSoundRef.current = null;
+          }
+        }
+      } catch (e) {
+        console.log("Admin Dashboard Siren Error:", e);
+      }
+    };
+
+    manageSiren();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [panicUsers.length, isMuted]);
+
+  useEffect(() => {
+    return () => {
+      if (sirenSoundRef.current) {
+        sirenSoundRef.current.stopAsync().then(() => {
+          sirenSoundRef.current?.unloadAsync();
+          sirenSoundRef.current = null;
+        });
+      }
+    };
+  }, []);
 
   const isInsidePolygon = (lat: number, lon: number, poly: any[]) => {
     let isInside = false;
@@ -74,9 +139,6 @@ export default function LiveRollCall({ incidentId, clerkId, onLocateUser, buildi
     return () => clearInterval(timer);
   }, [buildingPolygon, evacData.inside, clerkId, moveToOutside]);
 
-  const panicUsers = evacData.inside.filter((r: any) => r.status === 'PANIC');
-  const inBuildingUsers = evacData.inside.filter((r: any) => r.status === 'IN_BUILDING');
-  const safeUsers = evacData.outside;
 
   const totalIn = panicUsers.length + inBuildingUsers.length;
   const totalOut = safeUsers.length;
@@ -120,20 +182,43 @@ export default function LiveRollCall({ incidentId, clerkId, onLocateUser, buildi
       </View>
       {r.status !== 'SAFE' && r.lastLat && r.lastLon && (
         <TouchableOpacity 
-          className="shrink-0 bg-blue-600/20 border border-blue-500/50 px-3 py-1 rounded"
+          className="shrink-0 bg-blue-600/30 border border-blue-500/80 px-4 py-3 md:px-6 md:py-4 rounded-xl ml-2 shadow-[0_0_10px_rgba(59,130,246,0.3)]"
           onPress={() => onLocateUser(r.lastLat, r.lastLon, r.userName)}
         >
-          <Text className="text-blue-400 text-xs font-bold">Locate</Text>
+          <Text className="text-blue-300 text-base md:text-lg font-black uppercase tracking-wider">📍 Locate</Text>
         </TouchableOpacity>
       )}
     </View>
   );
 
   return (
-    <View className="mt-4 bg-neutral-900 border border-neutral-700 rounded-xl p-4">
-      <View className="mb-3">
-        <Text className="text-white font-bold text-lg">Live Locations</Text>
+    <View className="mt-4 bg-neutral-800/50 rounded-xl p-4 border border-neutral-700/50">
+      <View className="flex-row justify-between items-center mb-4">
+        <Text className="text-white font-bold text-lg">Live Roll Call</Text>
+        <TouchableOpacity onPress={() => handleExportCSV([...panicUsers, ...inBuildingUsers, ...safeUsers], "Live Roll Call")}>
+          <Text className="text-blue-400 text-sm font-bold">Export CSV</Text>
+        </TouchableOpacity>
       </View>
+
+      {panicUsers.length > 0 && (
+        <View className="bg-red-600 p-4 rounded-xl mb-4 border-2 border-red-400 shadow-[0_0_20px_rgba(220,38,38,0.8)] animate-pulse">
+          <Text className="text-white font-black text-2xl text-center mb-1">🚨 EMERGENCY: SOS ACTIVE 🚨</Text>
+          <Text className="text-white font-bold text-center text-lg mb-3">A user is in distress. Locate them immediately!</Text>
+          
+          {!isMuted ? (
+            <TouchableOpacity 
+              className="bg-black/40 py-3 px-6 rounded-xl self-center border border-white/20"
+              onPress={() => setIsMuted(true)}
+            >
+              <Text className="text-white font-bold text-base text-center">🔕 Mute Siren for this incident</Text>
+            </TouchableOpacity>
+          ) : (
+            <View className="bg-black/20 py-2 px-6 rounded-xl self-center border border-red-400/50">
+              <Text className="text-red-200/80 italic text-sm text-center">Siren muted. Stay vigilant.</Text>
+            </View>
+          )}
+        </View>
+      )}
 
       {/* Totals Banner - Now acts as CSV Export Buttons */}
       <View className="flex-row bg-neutral-950 rounded-lg overflow-hidden mb-4 border border-neutral-800">

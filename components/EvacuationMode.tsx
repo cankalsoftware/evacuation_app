@@ -541,11 +541,11 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
   const fontSOS = Math.min(targetHeight, targetWidth / 2);
   const fontCancelSOS = Math.min(targetHeight, targetWidth / 5.5);
   const activeSOSFont = Math.max(20, evacStatus === 'PANIC' ? fontCancelSOS : fontSOS);
-  const fontSafe = Math.max(20, Math.min(targetHeight, targetWidth / 5));
+  const fontSafe = Math.max(20, Math.min(targetHeight, targetWidth / 9.5));
 
   const outBtnHeight = Math.min(height * 0.25, 192); // max-h-48 is 192px
   const outBtnWidth = width * 0.9; // w-11/12 is ~91%
-  const outFontSafe = Math.max(30, Math.min(outBtnHeight * 0.55, (outBtnWidth * 0.85) / 5));
+  const outFontSafe = Math.max(24, Math.min(outBtnHeight * 0.55, (outBtnWidth * 0.85) / 9.5));
 
   if (evacStatus === "SAFE") {
     return (

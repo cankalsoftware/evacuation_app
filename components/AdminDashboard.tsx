@@ -1801,7 +1801,9 @@ export default function AdminDashboard() {
 
             return (
               <View className="flex-1">
-                <Text className="text-red-400 mb-4 font-bold text-center">Tracking: {target?.label}</Text>
+                <View className="bg-red-600 py-3 px-4 rounded-xl mb-4 shadow-[0_0_10px_rgba(220,38,38,0.5)]">
+                  <Text className="text-white font-black text-xl md:text-2xl text-center uppercase tracking-wider">🚨 Tracking: {target?.label} 🚨</Text>
+                </View>
 
                 {!isInside ? (
                   <View className="bg-neutral-800 rounded-xl mb-6 w-full items-center justify-center border border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.4)]" style={{ height: '70%' }}>
