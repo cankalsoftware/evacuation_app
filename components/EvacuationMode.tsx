@@ -208,7 +208,9 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
   };
 
   const userImgPos = (drLocation && autoBuilding) ? interpolateLocation(drLocation.lat, drLocation.lon) : null;
-  const mapExits = autoBuilding?.safeNodes?.filter((n: any) => n.isExit) || [];
+  const mapExits = (autoBuilding?.gridPaths && autoBuilding.gridPaths.some((p: any) => p.isExit))
+    ? autoBuilding.gridPaths.filter((n: any) => n.isExit)
+    : (autoBuilding?.safeNodes?.filter((n: any) => n.isExit) || []);
 
   const isOutsideBuilding = useMemo(() => {
     if (!drLocation || !autoBuilding?.polygon || autoBuilding.polygon.length < 4) return false;
@@ -529,6 +531,22 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
 
   const isDrill = activeIncident?.isDrill;
 
+  // Adaptive Font Size Calculations
+  const bottomBtnHeight = (height * 0.20) - 16;
+  const bottomBtnWidth = (width - 48) / 2;
+  // Use a safer target height factor to prevent ascent/descent clipping at massive font sizes
+  const targetHeight = bottomBtnHeight * 0.55; 
+  const targetWidth = bottomBtnWidth * 0.85;
+
+  const fontSOS = Math.min(targetHeight, targetWidth / 2);
+  const fontCancelSOS = Math.min(targetHeight, targetWidth / 5.5);
+  const activeSOSFont = Math.max(20, evacStatus === 'PANIC' ? fontCancelSOS : fontSOS);
+  const fontSafe = Math.max(20, Math.min(targetHeight, targetWidth / 5));
+
+  const outBtnHeight = Math.min(height * 0.25, 192); // max-h-48 is 192px
+  const outBtnWidth = width * 0.9; // w-11/12 is ~91%
+  const outFontSafe = Math.max(30, Math.min(outBtnHeight * 0.55, (outBtnWidth * 0.85) / 5));
+
   if (evacStatus === "SAFE") {
     return (
       <View className="flex-1 bg-green-900 justify-center items-center p-6">
@@ -560,9 +578,18 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
         </Text>
         <TouchableOpacity
           onPress={markAsSafe}
-          className="bg-green-600 px-12 py-6 rounded-full border-4 border-green-400 shadow-[0_0_60px_rgba(34,197,94,0.6)] mb-8"
+          className="bg-green-600 w-11/12 h-1/4 max-h-48 rounded-full border-4 border-green-400 shadow-[0_0_60px_rgba(34,197,94,0.6)] mb-8 justify-center items-center overflow-hidden"
         >
-          <Text className="text-white font-black text-3xl">I AM SAFE</Text>
+          <View className="flex-1 w-[90%] justify-center items-center">
+            <Text 
+              adjustsFontSizeToFit 
+              numberOfLines={1} 
+              className="text-white font-black text-center"
+              style={{ fontSize: outFontSafe, lineHeight: outFontSafe * 1.1, textAlignVertical: 'center' }}
+            >
+              I AM SAFE
+            </Text>
+          </View>
         </TouchableOpacity>
       </View>
     );
@@ -595,14 +622,14 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
 
         const bw = Math.max(0.001, maxX - minX);
         const bh = Math.max(0.001, maxY - minY);
-        const padding = 0.10; // 10% padding
+        const padding = 0.05; // 5% margin on all around
+        const fitFraction = 1 - 2 * padding;
 
-        // Target bounded area we want to fit inside the layout
-        const targetW = bw * (1 + padding * 2);
-        const targetH = bh * (1 + padding * 2);
-
-        // Scale so the target bounds perfectly fit within BOTH layout width and height
-        renderW = Math.min(layoutW / targetW, (layoutH * aspect) / targetH);
+        // Scale so the building bounding box perfectly fits within BOTH layout width and height with the given margin
+        renderW = Math.min(
+          (layoutW * fitFraction) / bw,
+          (layoutH * fitFraction * aspect) / bh
+        );
         renderH = renderW / aspect;
 
         // Center the building exactly in the middle of the Map View container
@@ -611,7 +638,15 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
         offsetX = (layoutW / 2) - (centerX * renderW);
         offsetY = (layoutH / 2) - (centerY * renderH);
 
-        return { renderW, renderH, offsetX, offsetY };
+        const marginX = layoutW * padding;
+        const marginY = layoutH * padding;
+        
+        const clipLeft = offsetX + minX * renderW - marginX;
+        const clipTop = offsetY + minY * renderH - marginY;
+        const clipWidth = bw * renderW + marginX * 2;
+        const clipHeight = bh * renderH + marginY * 2;
+
+        return { renderW, renderH, offsetX, offsetY, clipLeft, clipTop, clipWidth, clipHeight };
       }
     }
 
@@ -627,15 +662,20 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
       offsetX = (layoutW - renderW) / 2;
       offsetY = 0;
     }
-    return { renderW, renderH, offsetX, offsetY };
+    return { renderW, renderH, offsetX, offsetY, clipLeft: 0, clipTop: 0, clipWidth: layoutW, clipHeight: layoutH };
   };
+
+  const fontHeader = Math.floor(Math.min(width * 0.08, height * 0.05));
+  const fontTitle = Math.floor(Math.min(width * 0.1, height * 0.06));
+  const fontSub = Math.floor(Math.min(width * 0.05, height * 0.025));
+  const fontSteps = Math.floor(Math.min(width * 0.04, height * 0.02));
 
   return (
     <View className={`flex-1 w-full ${evacStatus === 'PANIC' ? 'bg-red-900 animate-pulse' : 'bg-black'}`}>
 
       {/* Header (10%) */}
       <View style={{ height: '10%' }} className={`justify-center items-center border-b ${isDrill ? 'bg-amber-900 border-amber-800' : 'bg-neutral-900 border-neutral-800'}`}>
-        <Text className={`text-2xl font-extrabold uppercase tracking-widest text-center ${isDrill ? 'text-amber-400' : 'text-red-500'}`}>
+        <Text style={{ fontSize: fontHeader }} className={`font-extrabold uppercase tracking-widest text-center ${isDrill ? 'text-amber-400' : 'text-red-500'}`}>
           {isDrill ? 'TEST DRILL' : 'EVACUATE'}
         </Text>
       </View>
@@ -648,17 +688,31 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
       >
         {activePlanUrl ? (
           <>
-            <Image
-              source={{ uri: activePlanUrl }}
-              style={{
-                position: 'absolute',
-                width: getImageBounds().renderW,
-                height: getImageBounds().renderH,
-                left: getImageBounds().offsetX,
-                top: getImageBounds().offsetY,
-                opacity: 0.8
-              }}
-            />
+            {(() => {
+              const bounds = getImageBounds();
+              return (
+                <View style={{
+                  position: 'absolute',
+                  left: bounds.clipLeft,
+                  top: bounds.clipTop,
+                  width: bounds.clipWidth,
+                  height: bounds.clipHeight,
+                  overflow: 'hidden'
+                }}>
+                  <Image
+                    source={{ uri: activePlanUrl }}
+                    style={{
+                      position: 'absolute',
+                      width: bounds.renderW,
+                      height: bounds.renderH,
+                      left: bounds.offsetX - bounds.clipLeft,
+                      top: bounds.offsetY - bounds.clipTop,
+                      opacity: 0.8
+                    }}
+                  />
+                </View>
+              );
+            })()}
             {/* Exit Nodes */}
             {(() => {
               const { renderW, renderH, offsetX, offsetY } = getImageBounds();
@@ -732,29 +786,47 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
 
           {/* Status Message (20%) */}
           <View style={{ height: '20%' }} className={`justify-center items-center px-4 ${bgColor}`}>
-            <Text className={`text-3xl font-black uppercase text-center ${statusTitleColor}`} style={Platform.OS === 'web' ? { textShadow: '1px 1px 4px rgba(0,0,0,0.8)' } as any : { textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 4 }}>
+            <Text className={`font-black uppercase text-center ${statusTitleColor}`} style={[Platform.OS === 'web' ? { textShadow: '1px 1px 4px rgba(0,0,0,0.8)' } as any : { textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 4 }, { fontSize: fontTitle }]}>
               {statusTitle}
             </Text>
-            <Text className={`text-center mt-1 text-xl font-bold ${statusSubColor}`} style={Platform.OS === 'web' ? { textShadow: '1px 1px 2px rgba(0,0,0,0.8)' } as any : { textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 }}>
+            <Text className={`text-center mt-1 font-bold ${statusSubColor}`} style={[Platform.OS === 'web' ? { textShadow: '1px 1px 2px rgba(0,0,0,0.8)' } as any : { textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 }, { fontSize: fontSub }]}>
               {statusSub}
             </Text>
-            <Text className="text-neutral-400 mt-2 font-bold">{steps} steps tracked</Text>
+            <Text style={{ fontSize: fontSteps }} className="text-neutral-400 mt-2 font-bold">{steps} steps tracked</Text>
           </View>
 
           {/* Buttons (20%) */}
           <View style={{ height: '20%' }} className={`flex-row items-center justify-center px-4 pb-4 gap-4 ${bgColor}`}>
             <TouchableOpacity
-              className={`flex-1 h-full rounded-3xl border-2 shadow-lg justify-center items-center ${evacStatus === 'PANIC' ? 'bg-white border-red-500 shadow-red-600/50' : 'bg-red-600 border-red-500 shadow-red-600/50'}`}
+              className={`flex-1 h-full rounded-3xl border-2 shadow-lg justify-center items-center overflow-hidden ${evacStatus === 'PANIC' ? 'bg-white border-red-500 shadow-red-600/50' : 'bg-red-600 border-red-500 shadow-red-600/50'}`}
               onPress={togglePanic}
             >
-              <Text className={`font-black text-xl text-center ${evacStatus === 'PANIC' ? 'text-red-600' : 'text-white'}`}>{evacStatus === 'PANIC' ? 'CANCEL SOS' : 'SOS'}</Text>
+              <View className="flex-1 w-[90%] justify-center items-center">
+                <Text 
+                  adjustsFontSizeToFit 
+                  numberOfLines={1} 
+                  className={`font-black text-center ${evacStatus === 'PANIC' ? 'text-red-600' : 'text-white'}`}
+                  style={{ fontSize: activeSOSFont, lineHeight: activeSOSFont * 1.1, textAlignVertical: 'center' }}
+                >
+                  {evacStatus === 'PANIC' ? 'CANCEL SOS' : 'SOS'}
+                </Text>
+              </View>
             </TouchableOpacity>
 
             <TouchableOpacity
-              className="flex-1 h-full bg-green-600 rounded-3xl border-2 border-green-500 shadow-lg shadow-green-600/50 justify-center items-center"
+              className="flex-1 h-full bg-green-600 rounded-3xl border-2 border-green-500 shadow-lg shadow-green-600/50 justify-center items-center overflow-hidden"
               onPress={markAsSafe}
             >
-              <Text className="font-black text-xl text-white text-center">I AM SAFE</Text>
+              <View className="flex-1 w-[90%] justify-center items-center">
+                <Text 
+                  adjustsFontSizeToFit 
+                  numberOfLines={1} 
+                  className="font-black text-white text-center"
+                  style={{ fontSize: fontSafe, lineHeight: fontSafe * 1.1, textAlignVertical: 'center' }}
+                >
+                  I AM SAFE
+                </Text>
+              </View>
             </TouchableOpacity>
           </View>
         </>
