@@ -188,8 +188,8 @@ export default function AdminDashboard() {
     const heightMeters = getDistanceInMeters(minLat, minLon, maxLat, minLon);
     const widthMeters = getDistanceInMeters(minLat, minLon, minLat, maxLon);
 
-    const rows = Math.max(1, Math.ceil(heightMeters / 5));
-    const cols = Math.max(1, Math.ceil(widthMeters / 5));
+    const rows = Math.max(1, Math.ceil(heightMeters / 10));
+    const cols = Math.max(1, Math.ceil(widthMeters / 10));
 
     return { rows, cols, minLat, maxLat, minLon, maxLon };
   };
@@ -405,10 +405,13 @@ export default function AdminDashboard() {
 
     const gps = mapImageToGPS(rawX, rawY);
     const { rows, cols, minLat, maxLat, minLon, maxLon } = getGridDimensions();
-    const row = Math.floor((maxLat - gps.lat) / (maxLat - minLat) * rows);
-    const col = Math.floor((gps.lon - minLon) / (maxLon - minLon) * cols);
+    let row = Math.floor((maxLat - gps.lat) / (maxLat - minLat) * rows);
+    let col = Math.floor((gps.lon - minLon) / (maxLon - minLon) * cols);
 
-    if (row >= 0 && row < rows && col >= 0 && col < cols) {
+    row = Math.max(0, Math.min(rows - 1, row));
+    col = Math.max(0, Math.min(cols - 1, col));
+
+    if (row >= 0 && col >= 0) {
       setGridPaths(prev => {
         const existingIdx = prev.findIndex(p => p.row === row && p.col === col);
         if (gridPaintMode === "erase") {
@@ -634,8 +637,8 @@ export default function AdminDashboard() {
 
           setStep1Zoom(baseScale);
           setStep1PanOffset({
-            x: -(boxCenterX - imgLayout.w / 2),
-            y: -(boxCenterY - imgLayout.h / 2)
+            x: -(boxCenterX - imgLayout.w / 2) * baseScale,
+            y: -(boxCenterY - imgLayout.h / 2) * baseScale
           });
         }
       }
@@ -930,7 +933,7 @@ export default function AdminDashboard() {
                   <View className="flex-row items-center flex-1">
                     <Text className="text-white font-bold text-xl mr-2 shrink" numberOfLines={1}>{building.name}</Text>
                     <TouchableOpacity
-                      className="bg-neutral-700/50 p-1.5 rounded-full"
+                      className="bg-neutral-700/50 p-3 rounded-full"
                       onPress={() => {
                         const defaultLabels = ["Top Left", "Bottom Left", "Bottom Right", "Top Right"];
                         const populatedPolygon = (building.polygon || []).map((p: any, i: number) => ({
@@ -945,7 +948,7 @@ export default function AdminDashboard() {
                         setEditBAddress(building.address === "No Address Provided" ? "" : building.address);
                       }}
                     >
-                      <Text className="text-sm">⚙️</Text>
+                      <Text className="text-2xl">⚙️</Text>
                     </TouchableOpacity>
                   </View>
 
@@ -1047,7 +1050,7 @@ export default function AdminDashboard() {
                       <View className="flex-row items-center flex-1">
                         <Text className="text-2xl font-black text-white tracking-wide mr-3 shrink">{siteName}</Text>
                         <TouchableOpacity
-                          className="bg-neutral-700/50 p-2 rounded-full"
+                          className="bg-neutral-700/50 p-3 rounded-full"
                           onPress={() => {
                             setManageSiteName(siteName);
                             setSiteDesc(siteDetail?.description || "");
@@ -1056,7 +1059,7 @@ export default function AdminDashboard() {
                             setSiteEmergencyPhone(siteDetail?.emergencyServicesPhone || "");
                           }}
                         >
-                          <Text className="text-lg">⚙️</Text>
+                          <Text className="text-2xl">⚙️</Text>
                         </TouchableOpacity>
                       </View>
 
@@ -2137,7 +2140,7 @@ export default function AdminDashboard() {
                 </ScrollView>
               ) : (
                 <ScrollView className="flex-1" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 0 }}>
-                  <Text className="text-neutral-400 text-lg mb-4">Select a brush type, then tap the map to paint grid cells (5x5m).</Text>
+                  <Text className="text-neutral-400 text-lg mb-4">Select a brush type, then tap the map to paint grid cells (10x10m).</Text>
 
                   {/* Toolbar */}
                   <View className="flex-row space-x-2 mb-2">
@@ -2234,7 +2237,32 @@ export default function AdminDashboard() {
                               const { rows, cols, minLat, maxLat, minLon, maxLon } = getGridDimensions();
                               const bounds = getRenderedImageBounds();
                               
-                              return gridPaths.map(p => {
+                              const gridLines = [];
+                              if (rows > 0 && cols > 0 && selectedBuilding?.imageCalibrationPoints?.length >= 4) {
+                                const tl = mapGPSToImage(maxLat, minLon);
+                                const br = mapGPSToImage(minLat, maxLon);
+                                if (tl && br) {
+                                  const isLegacy = selectedBuilding.imageCalibrationPoints[0].x > 2;
+                                  const tlX = isLegacy ? tl.x : bounds.offsetX + tl.x * bounds.renderW;
+                                  const brX = isLegacy ? br.x : bounds.offsetX + br.x * bounds.renderW;
+                                  const tlY = isLegacy ? tl.y : bounds.offsetY + tl.y * bounds.renderH;
+                                  const brY = isLegacy ? br.y : bounds.offsetY + br.y * bounds.renderH;
+                                  
+                                  for (let c = 0; c <= cols; c++) {
+                                    const lx = tlX + (c / cols) * (brX - tlX);
+                                    gridLines.push(<View key={`v-${c}`} style={{ position: 'absolute', left: lx, top: tlY, width: 1, height: brY - tlY, backgroundColor: 'rgba(255,255,255,0.2)', pointerEvents: 'none' }} />);
+                                  }
+                                  for (let r = 0; r <= rows; r++) {
+                                    const ly = tlY + (r / rows) * (brY - tlY);
+                                    gridLines.push(<View key={`h-${r}`} style={{ position: 'absolute', left: tlX, top: ly, width: brX - tlX, height: 1, backgroundColor: 'rgba(255,255,255,0.2)', pointerEvents: 'none' }} />);
+                                  }
+                                }
+                              }
+                              
+                              return (
+                                <>
+                                  {gridLines}
+                                  {gridPaths.map(p => {
                                 const latCenter = maxLat - ((p.row + 0.5) * (maxLat - minLat) / rows);
                                 const lonCenter = minLon + ((p.col + 0.5) * (maxLon - minLon) / cols);
                                 const pu = mapGPSToImage(latCenter, lonCenter);
@@ -2275,8 +2303,10 @@ export default function AdminDashboard() {
                                     {p.isExit && <Text style={{ pointerEvents: 'none' }} className="text-white text-[8px] font-bold">E</Text>}
                                   </View>
                                 );
-                              });
-                            })()}
+                              })}
+                            </>
+                          );
+                        })()}
                           </View>
                         </View>
                       </View>
