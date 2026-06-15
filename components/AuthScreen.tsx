@@ -1,7 +1,9 @@
 import { showToast } from "./Toast";
 import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Image } from "react-native";
+import { View, ActivityIndicator, Image } from "react-native";
 import { useSignIn, useSignUp } from "@clerk/clerk-expo";
+
+import { Text, TextInput, TouchableOpacity } from "./ResponsiveUI";
 
 export default function AuthScreen() {
   const { isLoaded: isSignUpLoaded, signUp, setActive: setSignUpActive } = useSignUp();

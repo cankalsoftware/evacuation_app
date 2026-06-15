@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, TouchableOpacity, ScrollView, Platform } from "react-native";
+import { View, ScrollView, Platform } from "react-native";
+import { Text, TouchableOpacity } from "./ResponsiveUI";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
 

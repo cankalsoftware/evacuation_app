@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, TouchableOpacity, TextInput, Modal, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform } from "react-native";
+import { View, Modal, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform } from "react-native";
+import { Text, TouchableOpacity, TextInput } from "./ResponsiveUI";
 import { useUser } from "@clerk/clerk-expo";
 import * as Location from "expo-location";
 import { useMutation } from "convex/react";

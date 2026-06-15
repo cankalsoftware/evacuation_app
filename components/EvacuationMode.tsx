@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useRef, useMemo } from "react";
-import { View, Text, TouchableOpacity, Image, useWindowDimensions, Animated, Platform } from "react-native";
+import { View, Image, useWindowDimensions, Animated, Platform } from "react-native";
+import { Text, TouchableOpacity, MaterialCommunityIcons } from "./ResponsiveUI";
 import * as Location from "expo-location";
 import * as Speech from "expo-speech";
 import { Pedometer } from 'expo-sensors';
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useUser } from "@clerk/clerk-expo";
 import { useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { View, Text, TouchableOpacity, Modal, Image, ActivityIndicator, Alert } from "react-native";
+import { View, Modal, Image, ActivityIndicator, Alert } from "react-native";
+import { Text, TouchableOpacity } from "./ResponsiveUI";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import { useMutation } from "convex/react";

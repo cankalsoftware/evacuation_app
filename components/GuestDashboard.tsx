@@ -1,6 +1,7 @@
 import { showToast } from "./Toast";
 import React, { useState, useEffect } from "react";
-import { View, Text, TouchableOpacity, ActivityIndicator, TextInput, useWindowDimensions, Alert, Platform, Modal, Image } from "react-native";
+import { View, ActivityIndicator, useWindowDimensions, Alert, Platform, Modal, Image } from "react-native";
+import { Text, TouchableOpacity, TextInput } from "./ResponsiveUI";
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "../convex/_generated/api";

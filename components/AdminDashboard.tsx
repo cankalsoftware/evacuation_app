@@ -1,14 +1,16 @@
 import { showToast } from "./Toast";
 import React from "react";
-import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Modal, TextInput, Platform, Image, Alert, useWindowDimensions } from "react-native";
+import { View, ScrollView, ActivityIndicator, Modal, Platform, Image, Alert, useWindowDimensions } from "react-native";
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import LiveRollCall from "./LiveRollCall";
+
+// Import Responsive Wrappers
+import { Text, TouchableOpacity, TextInput, MaterialCommunityIcons } from "./ResponsiveUI";
 
 let MapView: any = null;
 let Marker: any = null;
@@ -1761,7 +1763,7 @@ export default function AdminDashboard() {
 
       {/* Unified Map Editor Modal */}
       <Modal visible={isMapEditorOpen} animationType="slide">
-        <View className="flex-1 bg-neutral-900 pt-16 px-4">
+        <View className="flex-1 bg-neutral-900 pt-6 px-4">
           <View className="flex-row justify-between items-center mb-4">
             <Text className="text-xl font-bold text-white">{isLocatingUser ? "Locate Trapped User" : "Manage Map Layout"}</Text>
             <TouchableOpacity onPress={() => {
@@ -1928,7 +1930,7 @@ export default function AdminDashboard() {
                   className={`flex-1 py-3 rounded-lg items-center ${mapEditorStep === 1 ? 'bg-neutral-700 shadow' : ''}`}
                   onPress={() => setMapEditorStep(1)}
                 >
-                  <Text className={`font-bold ${mapEditorStep === 1 ? 'text-white' : 'text-neutral-400'}`}>Step 1: Calibrate</Text>
+                  <Text className={`font-bold text-lg ${mapEditorStep === 1 ? 'text-white' : 'text-neutral-400'}`}>Step 1: Calibrate</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   className={`flex-1 py-3 rounded-lg items-center ${mapEditorStep === 2 ? 'bg-neutral-700 shadow' : ''}`}
@@ -1937,13 +1939,13 @@ export default function AdminDashboard() {
                     setMapEditorStep(2);
                   }}
                 >
-                  <Text className={`font-bold ${mapEditorStep === 2 ? 'text-white' : 'text-neutral-400'}`}>Step 2: Safe Routes</Text>
+                  <Text className={`font-bold text-lg ${mapEditorStep === 2 ? 'text-white' : 'text-neutral-400'}`}>Step 2: Safe Routes</Text>
                 </TouchableOpacity>
               </View>
 
               {mapEditorStep === 1 ? (
-                <ScrollView className="flex-1" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
-                  <Text className="text-neutral-400 text-sm mb-4">Select a GPS pin from the list below, then tap its matching corner on the floor plan.</Text>
+                <ScrollView className="flex-1" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 0 }}>
+                  <Text className="text-neutral-400 text-lg mb-4">Select a GPS pin from the list below, then tap its matching corner on the floor plan.</Text>
 
                   <View className="flex-row flex-wrap mb-4 justify-center">
                     {selectedBuilding?.polygon?.map((p: any, i: number) => {
@@ -1953,7 +1955,7 @@ export default function AdminDashboard() {
                           className={`px-3 py-2 rounded-lg border mr-2 mb-2 ${activeCalibIdx === i ? 'bg-blue-600 border-blue-400' : 'bg-neutral-800 border-neutral-600'}`}
                           onPress={() => setActiveCalibIdx(activeCalibIdx === i ? -1 : i)}
                         >
-                          <Text className="text-white font-bold text-xs">{p.label || `P${i + 1}`}</Text>
+                          <Text className="text-white font-bold text-base">{p.label || `P${i + 1}`}</Text>
                           {calibPoints[i] && <Text className="text-green-400 text-[10px] mt-1 font-bold">✓ Placed</Text>}
                         </TouchableOpacity>
                       )
@@ -1966,13 +1968,13 @@ export default function AdminDashboard() {
                       className={`flex-1 py-3 rounded-xl items-center border-2 ${!step1PanMode ? 'bg-blue-600 border-blue-400' : 'bg-neutral-800 border-neutral-700'}`}
                       onPress={() => setStep1PanMode(false)}
                     >
-                      <Text className="text-white font-bold">📍 Place Pin</Text>
+                      <Text className="text-white font-bold text-lg">📍 Place Pin</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       className={`flex-1 py-3 rounded-xl items-center border-2 ${step1PanMode ? 'bg-amber-600 border-amber-400' : 'bg-neutral-800 border-neutral-700'}`}
                       onPress={() => setStep1PanMode(true)}
                     >
-                      <Text className="text-white font-bold">✋ Pan</Text>
+                      <Text className="text-white font-bold text-lg">✋ Pan</Text>
                     </TouchableOpacity>
                   </View>
 
@@ -2108,9 +2110,9 @@ export default function AdminDashboard() {
                     )}
                   </View>
 
-                  <View className="flex-row justify-between mb-4">
+                  <View className="flex-row justify-between mb-0">
                     <TouchableOpacity className="bg-neutral-700 px-6 py-3 rounded-xl flex-1 mr-2 items-center" onPress={() => { setCalibPoints([]); setActiveCalibIdx(0); }}>
-                      <Text className="text-white font-bold">Clear Points</Text>
+                      <Text className="text-white font-bold text-lg">Clear Points</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       className={`px-6 py-3 rounded-xl flex-1 ml-2 items-center bg-green-600`}
@@ -2129,13 +2131,13 @@ export default function AdminDashboard() {
                         } catch (e) { showToast("Error saving calibration", "error"); }
                       }}
                     >
-                      <Text className="text-white font-bold">Next: Safe Routes ➔</Text>
+                      <Text className="text-white font-bold text-lg">Next: Safe Routes ➔</Text>
                     </TouchableOpacity>
                   </View>
                 </ScrollView>
               ) : (
-                <ScrollView className="flex-1" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
-                  <Text className="text-neutral-400 text-sm mb-4">Select a brush type, then tap the map to paint grid cells (5x5m).</Text>
+                <ScrollView className="flex-1" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 0 }}>
+                  <Text className="text-neutral-400 text-lg mb-4">Select a brush type, then tap the map to paint grid cells (5x5m).</Text>
 
                   {/* Toolbar */}
                   <View className="flex-row space-x-2 mb-2">
@@ -2143,19 +2145,19 @@ export default function AdminDashboard() {
                       className={`flex-1 py-3 rounded-xl items-center border-2 ${gridPaintMode === "safe" ? 'bg-blue-600 border-blue-400' : 'bg-neutral-800 border-neutral-700'}`}
                       onPress={() => setGridPaintMode("safe")}
                     >
-                      <Text className="text-white font-bold">🟦 Safe Route</Text>
+                      <Text className="text-white font-bold text-lg">🟦 Safe Route</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       className={`flex-1 py-3 rounded-xl items-center border-2 ${gridPaintMode === "exit" ? 'bg-green-600 border-green-400' : 'bg-neutral-800 border-neutral-700'}`}
                       onPress={() => setGridPaintMode("exit")}
                     >
-                      <Text className="text-white font-bold">🚪 Exit</Text>
+                      <Text className="text-white font-bold text-lg">🚪 Exit</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       className={`flex-1 py-3 rounded-xl items-center border-2 ${gridPaintMode === "erase" ? 'bg-red-600 border-red-400' : 'bg-neutral-800 border-neutral-700'}`}
                       onPress={() => setGridPaintMode("erase")}
                     >
-                      <Text className="text-white font-bold">🧹 Erase</Text>
+                      <Text className="text-white font-bold text-lg">🧹 Erase</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       className={`flex-1 py-3 rounded-xl items-center border-2 ${gridPaintMode === "pan" ? 'bg-amber-600 border-amber-400' : 'bg-neutral-800 border-neutral-700'}`}
@@ -2284,12 +2286,12 @@ export default function AdminDashboard() {
                   <View className="bg-blue-900/30 p-4 rounded-xl border border-blue-600/50 mb-6 flex-row">
                     <Text className="text-blue-500 mr-3 text-2xl">💡</Text>
                     <View className="flex-1">
-                      <Text className="text-blue-400 font-bold mb-1 uppercase tracking-wider text-xs">Grid Strategy</Text>
-                      <Text className="text-blue-300 text-xs">Paint <Text className="font-bold text-white">Safe Routes</Text> along corridors and rooms to define where users can walk. Mark <Text className="font-bold text-white">Exits</Text> at the doors. The system automatically calculates the shortest path through painted routes.</Text>
+                      <Text className="text-blue-400 font-bold mb-1 uppercase tracking-wider text-lg">Grid Strategy</Text>
+                      <Text className="text-blue-300 text-base">Paint <Text className="font-bold text-white text-base">Safe Routes</Text> along corridors and rooms to define where users can walk. Mark <Text className="font-bold text-white text-base">Exits</Text> at the doors. The system automatically calculates the shortest path through painted routes.</Text>
                     </View>
                   </View>
 
-                  <View className="flex-row justify-between mb-4">
+                  <View className="flex-row justify-between mb-0">
                     <TouchableOpacity className="flex-1 bg-neutral-700 py-3 rounded-xl items-center mr-2" onPress={() => setGridPaths([])}>
                       <Text className="text-white font-bold">Clear Grid</Text>
                     </TouchableOpacity>
