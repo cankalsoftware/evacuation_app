@@ -1,5 +1,5 @@
 import { showToast } from "./Toast";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { View, ActivityIndicator, Image } from "react-native";
 import { useSignIn, useSignUp } from "@clerk/clerk-expo";
 
