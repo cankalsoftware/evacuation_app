@@ -1,5 +1,5 @@
 import React from "react";
-import { Text as RNText, TouchableOpacity as RNTouchableOpacity, TextInput as RNTextInput, useWindowDimensions, TextProps, TouchableOpacityProps, TextInputProps } from "react-native";
+import { Text as RNText, TouchableOpacity as RNTouchableOpacity, TextInput as RNTextInput, useWindowDimensions, TextProps, TouchableOpacityProps, TextInputProps, Linking, View } from "react-native";
 import { MaterialCommunityIcons as OriginalIcon } from "@expo/vector-icons";
 
 export const Text = React.forwardRef<RNText, TextProps & { className?: string }>((props, ref) => {
@@ -60,4 +60,29 @@ export const MaterialCommunityIcons = (props: React.ComponentProps<typeof Origin
   const { width } = useWindowDimensions();
   const scale = Math.min(Math.max(width / 400, 1), 1.6);
   return <OriginalIcon {...props} size={((props.size as number) || 24) * scale} />;
+};
+
+export const FooterLinks = () => {
+  return (
+    <View className="items-center px-4">
+      <View className="flex-row flex-wrap justify-center mb-4">
+        <TouchableOpacity onPress={() => Linking.openURL('https://www.firevision.uk/privacy')} className="mx-2 my-2">
+          <Text className="text-neutral-500 text-xs underline">Privacy Policy</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => Linking.openURL('https://www.firevision.uk/terms')} className="mx-2 my-2">
+          <Text className="text-neutral-500 text-xs underline">Terms of Service</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => Linking.openURL('https://www.firevision.uk/cookies')} className="mx-2 my-2">
+          <Text className="text-neutral-500 text-xs underline">Cookie Policy</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => Linking.openURL('https://www.firevision.uk/acceptable-use')} className="mx-2 my-2">
+          <Text className="text-neutral-500 text-xs underline">Acceptable Use</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => Linking.openURL('https://www.firevision.uk/contact')} className="mx-2 my-2">
+          <Text className="text-neutral-500 text-xs underline">Contact Us</Text>
+        </TouchableOpacity>
+      </View>
+      <Text className="text-neutral-600 text-[10px]">© {new Date().getFullYear()} FireVision. All rights reserved.</Text>
+    </View>
+  );
 };

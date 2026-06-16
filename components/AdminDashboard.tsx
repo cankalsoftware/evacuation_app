@@ -12,7 +12,7 @@ import * as Notifications from "expo-notifications";
 import LiveRollCall from "./LiveRollCall";
 
 // Import Responsive Wrappers
-import { Text, TouchableOpacity, TextInput, MaterialCommunityIcons } from "./ResponsiveUI";
+import { Text, TouchableOpacity, TextInput, MaterialCommunityIcons, FooterLinks } from "./ResponsiveUI";
 
 let MapView: any = null;
 let Marker: any = null;
@@ -1104,6 +1104,8 @@ export default function AdminDashboard() {
               <Text className="text-neutral-500">Sign Out</Text>
             </TouchableOpacity>
           )}
+
+          <FooterLinks />
         </ScrollView>
       </View>
     );

@@ -1,7 +1,7 @@
 import { showToast } from "./Toast";
 import React, { useState, useEffect } from "react";
-import { View, ActivityIndicator, useWindowDimensions, Alert, Platform, Modal, Image } from "react-native";
-import { Text, TouchableOpacity, TextInput } from "./ResponsiveUI";
+import { View, ActivityIndicator, useWindowDimensions, Alert, Platform, Modal, Image, ScrollView } from "react-native";
+import { Text, TouchableOpacity, TextInput, FooterLinks } from "./ResponsiveUI";
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "../convex/_generated/api";
@@ -306,7 +306,7 @@ export default function GuestDashboard() {
     }
   };
 
-  const paddingTop = 40;
+  const paddingTop = Math.max(20, height * 0.04);
   const headerHeight = height * 0.2;
   const usableHeaderHeight = Math.max(headerHeight - paddingTop, 60);
   const headerButtonHeight = usableHeaderHeight * 0.33; // 1/3 of header height
@@ -408,9 +408,9 @@ export default function GuestDashboard() {
         </View>
       )}
 
-      {/* HEADER (20%) */}
-      <View style={{ flex: 1, paddingTop: hasPermissions ? paddingTop : 10 }} className="px-6 justify-center">
-        <View className="flex-row w-full h-full">
+      {/* HEADER */}
+      <View style={{ paddingTop: hasPermissions ? paddingTop : 10 }} className="px-6 justify-center w-full pb-4">
+        <View className="flex-row w-full items-center">
           
           {/* LEFT 2/3: 3 Lines of Text */}
           <View style={{ flex: 2 }} className="justify-center pr-2">
@@ -442,8 +442,20 @@ export default function GuestDashboard() {
         </View>
       </View>
 
-      {/* BODY (60%) */}
-      <View style={{ flex: 3 }} className="justify-center items-center w-full">
+      {/* BODY / PANIC BUTTON */}
+      <View className="flex-1 justify-center items-center w-full relative min-h-[300px]">
+        {/* NOTICES BANNER positioned absolutely above panic button if exists */}
+        {recentAnnouncements && recentAnnouncements.length > 0 && (
+          <View className="absolute top-4 bg-amber-900/30 border border-amber-500/50 rounded-2xl p-4 w-[90%] max-w-2xl z-10">
+            <View className="flex-row items-center mb-1">
+              <Text className="text-amber-500 mr-2">📢</Text>
+              <Text className="text-amber-500 font-bold tracking-widest uppercase text-xs">Active Notice</Text>
+            </View>
+            <Text className="text-white font-bold text-lg mb-1">{recentAnnouncements[0].title}</Text>
+            <Text className="text-neutral-300 text-sm">{recentAnnouncements[0].message}</Text>
+          </View>
+        )}
+
         <TouchableOpacity 
           style={{ width: panicButtonSize, height: panicButtonSize, borderRadius: panicButtonSize / 2 }}
           className={`items-center justify-center shadow-[0_0_80px_rgba(220,38,38,0.6)] border-8 ${!hasPermissions ? 'bg-red-900 border-red-800 opacity-50' : 'bg-red-600 border-red-500'}`}
@@ -465,23 +477,11 @@ export default function GuestDashboard() {
         </TouchableOpacity>
       </View>
 
-      {/* FOOTER (20%) */}
-      <View style={{ flex: 1 }} className="px-6 pb-12 justify-end w-full items-center">
-        
-        {/* NOTICES BANNER */}
-        {recentAnnouncements && recentAnnouncements.length > 0 && (
-          <View className="bg-amber-900/30 border border-amber-500/50 rounded-2xl p-4 mb-4 w-full max-w-2xl">
-            <View className="flex-row items-center mb-1">
-              <Text className="text-amber-500 mr-2">📢</Text>
-              <Text className="text-amber-500 font-bold tracking-widest uppercase text-xs">Active Notice</Text>
-            </View>
-            <Text className="text-white font-bold text-lg mb-1">{recentAnnouncements[0].title}</Text>
-            <Text className="text-neutral-300 text-sm">{recentAnnouncements[0].message}</Text>
-          </View>
-        )}
-
+      {/* BOTTOM ACTION AREA */}
+      <View className="px-6 w-full items-center pb-8 pt-4">
+        {/* ADD MAP / SCAN PLAN */}
         <TouchableOpacity 
-          className={`w-full max-w-2xl ${!hasPermissions ? 'bg-amber-900 border-amber-800 opacity-50' : isScanned ? 'bg-green-600 border-green-500' : isUploading || isAnalyzing ? 'bg-blue-600 border-blue-500' : 'bg-amber-500 border-amber-400'} border-4 rounded-3xl p-6 items-center flex-row justify-center shadow-lg`}
+          className={`w-full max-w-2xl ${!hasPermissions ? 'bg-amber-900 border-amber-800 opacity-50' : isScanned ? 'bg-green-600 border-green-500' : isUploading || isAnalyzing ? 'bg-blue-600 border-blue-500' : 'bg-amber-500 border-amber-400'} border-4 rounded-3xl py-4 px-6 items-center flex-row justify-center shadow-lg`}
           onPress={() => {
             if (!hasPermissions) {
               showToast("Permissions required to scan map", "error");
@@ -495,11 +495,16 @@ export default function GuestDashboard() {
           }}
           disabled={!hasPermissions || isUploading || isAnalyzing}
         >
-          {isUploading || isAnalyzing ? <ActivityIndicator color="white" size="large" className="mr-4" /> : <Text className="text-4xl mr-4">{isScanned ? "🗺️" : "📸"}</Text>}
-          <Text className="text-white font-extrabold text-2xl text-center flex-1">
+          {isUploading || isAnalyzing ? <ActivityIndicator color="white" size="large" className="mr-3" /> : <Text className="text-3xl mr-3">{isScanned ? "🗺️" : "📸"}</Text>}
+          <Text className="text-white font-extrabold text-xl text-center flex-1">
             {isUploading ? "Uploading..." : isAnalyzing ? "AI Analyzing..." : autoBuilding ? `Auto-Connected:\n${autoBuilding.name}` : isScanned ? "View Verified Plan" : "Scan Evacuation Plan"}
           </Text>
         </TouchableOpacity>
+
+        {/* FOOTER */}
+        <View className="justify-center items-center w-full pt-10">
+          <FooterLinks />
+        </View>
       </View>
 
       {/* Profile Settings Modal */}
