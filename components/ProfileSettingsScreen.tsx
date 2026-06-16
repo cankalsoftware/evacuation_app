@@ -3,6 +3,7 @@ import { View, Modal, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platf
 import { Text, TouchableOpacity, TextInput } from "./ResponsiveUI";
 import { useUser } from "@clerk/clerk-expo";
 import * as Location from "expo-location";
+import * as Notifications from "expo-notifications";
 import { useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
 
@@ -16,9 +17,11 @@ export default function ProfileSettingsScreen({ visible, onClose, dashboardData 
   const { user } = useUser();
   const [name, setName] = useState(dashboardData?.name || "");
   const [phone, setPhone] = useState(dashboardData?.phone || "");
+  const [agreedToTandC, setAgreedToTandC] = useState(dashboardData?.agreedToTandC || false);
   const [saving, setSaving] = useState(false);
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
   const [refreshingLocation, setRefreshingLocation] = useState(false);
+  const [hasPermissions, setHasPermissions] = useState(true);
 
   const updateProfile = useMutation(api.portal.updateProfile);
 
@@ -26,6 +29,10 @@ export default function ProfileSettingsScreen({ visible, onClose, dashboardData 
     if (visible) {
       setName(dashboardData?.name || "");
       setPhone(dashboardData?.phone || "");
+      setAgreedToTandC(dashboardData?.agreedToTandC || false);
+      
+      setHasPermissions(dashboardData?.permissionsGranted === true);
+
       fetchLocation();
     }
   }, [visible, dashboardData]);
@@ -34,9 +41,13 @@ export default function ProfileSettingsScreen({ visible, onClose, dashboardData 
     setRefreshingLocation(true);
     try {
       let { status } = await Location.getForegroundPermissionsAsync();
-      if (status === 'granted') {
+      const dbGranted = dashboardData?.permissionsGranted === true;
+      
+      if (dbGranted && status === 'granted') {
         let loc = await Location.getCurrentPositionAsync({});
         setLocation(loc);
+      } else {
+        setLocation(null);
       }
     } catch (e) {
       console.log("Error fetching location", e);
@@ -47,9 +58,22 @@ export default function ProfileSettingsScreen({ visible, onClose, dashboardData 
 
   const handleSave = async () => {
     if (!user?.id) return;
+    
+    if (!dashboardData?.agreedToTandC && !agreedToTandC) {
+       alert("You must agree to the Terms and Conditions to proceed.");
+       return;
+    }
+    
     setSaving(true);
     try {
-      await updateProfile({ clerkId: user.id, name: name.trim(), phone: phone.trim() });
+
+      await updateProfile({ 
+        clerkId: user.id, 
+        name: name.trim(), 
+        phone: phone.trim(),
+        agreedToTandC,
+        permissionsGranted: hasPermissions,
+      });
       onClose();
     } catch (err) {
       console.error(err);
@@ -67,11 +91,17 @@ export default function ProfileSettingsScreen({ visible, onClose, dashboardData 
         <ScrollView className="flex-1 bg-neutral-900">
           <View className="px-6 pt-12 pb-12">
         <View className="flex-row justify-between items-center mb-8">
-          <Text className="text-3xl font-extrabold text-white">Profile Settings</Text>
+          <Text className="text-3xl font-extrabold text-white">{!dashboardData?.agreedToTandC ? "Welcome to FireVision" : "Profile Settings"}</Text>
           <TouchableOpacity onPress={onClose} className="bg-neutral-800 w-10 h-10 rounded-full border border-neutral-700 items-center justify-center">
             <Text className="text-white text-lg font-bold">✕</Text>
           </TouchableOpacity>
         </View>
+
+        {!dashboardData?.agreedToTandC && (
+          <Text className="text-neutral-300 mb-6 leading-relaxed">
+            Please complete your profile and review our Terms and Conditions to access the Evacuation features.
+          </Text>
+        )}
 
         <View className="space-y-6 mb-8">
           <View>
@@ -104,26 +134,35 @@ export default function ProfileSettingsScreen({ visible, onClose, dashboardData 
             />
           </View>
 
-          <TouchableOpacity 
-            onPress={handleSave} 
-            disabled={saving}
-            className="bg-red-600 py-4 rounded-xl items-center mt-4 shadow-lg border-2 border-red-500"
-          >
-            {saving ? <ActivityIndicator color="white" /> : <Text className="text-white font-extrabold text-lg uppercase tracking-wider">Save Profile</Text>}
-          </TouchableOpacity>
-        </View>
-
-        <View className="bg-neutral-800 p-6 rounded-3xl border border-neutral-700">
-          <Text className="text-xl font-bold text-white mb-6">Location Services</Text>
+        <View className="bg-neutral-800 p-6 rounded-3xl border border-neutral-700 mb-6">
+          <Text className="text-xl font-bold text-white mb-6">Device Permissions</Text>
           
-          <View className="flex-row items-center mb-2">
-            <View className="w-6 h-6 bg-green-500 rounded border border-green-400 items-center justify-center mr-3">
-              <Text className="text-white font-bold text-xs">✓</Text>
+          <TouchableOpacity 
+            className="flex-row items-center mb-6"
+            onPress={async () => {
+              if (hasPermissions) {
+                setHasPermissions(false);
+              } else {
+                setHasPermissions(true);
+                try {
+                  const { status } = await Location.requestForegroundPermissionsAsync();
+                  if (status === 'granted') {
+                    const { status: pStatus } = await Notifications.requestPermissionsAsync();
+                  } else {
+                    alert("Location permission denied by OS. Please enable it in your device settings.");
+                  }
+                } catch (e) {
+                  console.warn(e);
+                }
+              }
+            }}
+          >
+            <View className={`w-6 h-6 rounded border items-center justify-center mr-3 ${hasPermissions ? 'bg-blue-600 border-blue-500' : 'bg-neutral-900 border-neutral-700'}`}>
+              {hasPermissions && <Text className="text-white font-bold text-xs">✓</Text>}
             </View>
-            <Text className="text-white text-base font-bold">Location Tracking Enabled</Text>
-          </View>
-          <TouchableOpacity onPress={() => console.log("Terms pressed")}>
-            <Text className="text-red-400 text-sm ml-9 mb-6 underline">View Terms & Conditions</Text>
+            <Text className="text-neutral-300 flex-1">
+              Grant Location & Notification Permissions (Required for full access)
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity 
@@ -158,6 +197,29 @@ export default function ProfileSettingsScreen({ visible, onClose, dashboardData 
             <Text className="text-white font-bold">Force Refresh Location</Text>
           </TouchableOpacity>
         </View>
+
+          <TouchableOpacity 
+            className="flex-row items-center mb-4 mt-2"
+            onPress={() => setAgreedToTandC(!agreedToTandC)}
+          >
+            <View className={`w-6 h-6 rounded border items-center justify-center mr-3 ${agreedToTandC ? 'bg-blue-600 border-blue-500' : 'bg-neutral-900 border-neutral-700'}`}>
+              {agreedToTandC && <Text className="text-white font-bold text-xs">✓</Text>}
+            </View>
+            <Text className="flex-1 text-neutral-300">
+              I confirm and agree to the Terms and Conditions.
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            onPress={handleSave} 
+            disabled={saving}
+            className={`py-4 rounded-xl items-center mt-4 shadow-lg border-2 ${!dashboardData?.agreedToTandC && !agreedToTandC ? 'bg-neutral-700 border-neutral-600 opacity-50' : 'bg-red-600 border-red-500'}`}
+          >
+            {saving ? <ActivityIndicator color="white" /> : <Text className="text-white font-extrabold text-lg uppercase tracking-wider">{!dashboardData?.agreedToTandC ? "Complete Setup" : "Save Profile"}</Text>}
+          </TouchableOpacity>
+        </View>
+
+
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

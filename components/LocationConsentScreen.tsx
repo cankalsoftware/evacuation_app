@@ -25,9 +25,7 @@ export default function LocationConsentScreen() {
       const { status } = await Location.requestForegroundPermissionsAsync();
       
       if (status !== "granted") {
-        setError("Location permission is absolutely required for evacuation routing.");
-        setLoading(false);
-        return;
+        // We no longer block if Location is denied. Just proceed.
       }
 
       // Request Push Notification Permission (Phase 13)
@@ -48,12 +46,9 @@ export default function LocationConsentScreen() {
         }
         if (finalStatus !== 'granted') {
           if (Platform.OS === 'web') {
-            console.warn("Push notification permission denied (expected in some Web/Incognito environments). Continuing without push.");
-          } else {
-            setError("Push notification permission is required to warn you of an emergency drill or fire.");
-            setLoading(false);
-            return;
+            console.warn("Push notification permission denied.");
           }
+          // We no longer block if Push is denied. Just proceed.
         }
 
         // Get Expo Push Token
@@ -98,11 +93,21 @@ export default function LocationConsentScreen() {
         {error ? <Text className="text-red-400 text-center mb-4">{error}</Text> : null}
 
         <TouchableOpacity 
-          className="w-full bg-red-600 rounded-xl py-4 items-center"
+          className="w-full bg-red-600 rounded-xl py-4 items-center mb-4"
           onPress={requestPermission}
           disabled={loading}
         >
           {loading ? <ActivityIndicator color="white" /> : <Text className="text-white font-bold text-lg">Allow Permissions</Text>}
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          className="w-full py-4 items-center"
+          onPress={() => {
+            if (userId) grantConsent({ clerkId: userId });
+          }}
+          disabled={loading}
+        >
+          <Text className="text-neutral-400 font-bold text-sm">Skip for now</Text>
         </TouchableOpacity>
       </View>
     </View>

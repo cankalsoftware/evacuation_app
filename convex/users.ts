@@ -64,7 +64,10 @@ export const updateAdminProfile = mutation({
     businessName: v.string(),
     businessAddress: v.string(),
     employerCount: v.string(),
-    agreedToSubscription: v.boolean(),
+    postCode: v.string(),
+    country: v.string(),
+    agreedToTandC: v.boolean(),
+    permissionsGranted: v.boolean(),
   },
   handler: async (ctx, args) => {
     const existingUser = await ctx.db
@@ -80,7 +83,10 @@ export const updateAdminProfile = mutation({
       businessName: args.businessName,
       businessAddress: args.businessAddress,
       employerCount: args.employerCount,
-      agreedToSubscription: args.agreedToSubscription,
+      postCode: args.postCode,
+      country: args.country,
+      agreedToTandC: args.agreedToTandC,
+      permissionsGranted: args.permissionsGranted,
       approvalStatus: existingUser.approvalStatus || "pending",
     });
   },

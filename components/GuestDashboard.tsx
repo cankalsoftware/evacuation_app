@@ -41,6 +41,7 @@ export default function GuestDashboard() {
   const { signOut } = useAuth();
   const { user } = useUser();
   const { width, height } = useWindowDimensions();
+  const [hasPermissions, setHasPermissions] = useState(true);
   const [isViewingProfile, setIsViewingProfile] = useState(false);
   const [isViewingPlan, setIsViewingPlan] = useState(false);
   const [isScanned, setIsScanned] = useState(false);
@@ -129,12 +130,21 @@ export default function GuestDashboard() {
       setLockedIncident(activeIncident);
       setLockedBuilding(autoBuilding);
     } else if (activeIncident && !activeIncident.isActive && isEvacuating) {
-      // Optional: if the admin resolves it while guest is evacuating, we could auto-dismiss or show a toast.
-      // For safety, we let them dismiss it manually or we can dismiss it. 
-      // setIsEvacuating(false);
       showToast("The evacuation has been resolved by the administrator.", "success");
     }
   }, [activeIncident, autoBuilding]);
+
+  useEffect(() => {
+    setHasPermissions(dashboardData?.permissionsGranted === true);
+  }, [isViewingProfile, dashboardData]);
+
+  useEffect(() => {
+    if (dashboardData !== undefined && dashboardData !== null) {
+      if (!dashboardData.agreedToTandC) {
+        setIsViewingProfile(true);
+      }
+    }
+  }, [dashboardData]);
   
   const updateProfile = useMutation(api.portal.updateProfile);
   const generateUploadUrl = useMutation(api.portal.generateUploadUrl);
@@ -315,18 +325,25 @@ export default function GuestDashboard() {
   useEffect(() => {
     let sub: Location.LocationSubscription | null = null;
     (async () => {
+      if (!hasPermissions) {
+        setCurrentLocation(null);
+        return;
+      }
+      
       let { status } = await Location.getForegroundPermissionsAsync();
       if (status !== 'granted') return;
       
-      // Get initial fast position
-      let loc = await Location.getCurrentPositionAsync({});
-      setCurrentLocation(loc);
+      try {
+        let loc = await Location.getCurrentPositionAsync({});
+        setCurrentLocation(loc);
 
-      // Continously watch for DevTools overrides or movement
-      sub = await Location.watchPositionAsync(
-        { accuracy: Location.Accuracy.High, timeInterval: 3000, distanceInterval: 1 },
-        (newLoc) => setCurrentLocation(newLoc)
-      );
+        sub = await Location.watchPositionAsync(
+          { accuracy: Location.Accuracy.High, timeInterval: 3000, distanceInterval: 1 },
+          (newLoc) => setCurrentLocation(newLoc)
+        );
+      } catch (e) {
+        console.warn("Location fetch blocked or failed:", e);
+      }
     })();
 
     return () => {
@@ -334,7 +351,7 @@ export default function GuestDashboard() {
         sub.remove();
       }
     };
-  }, []);
+  }, [hasPermissions]);
 
   // Validate the previous scan against current location, or use autoBuilding
   useEffect(() => {
@@ -384,8 +401,15 @@ export default function GuestDashboard() {
   return (
     <View className="flex-1 bg-neutral-900">
       
+      {/* Top Warning Banner */}
+      {!hasPermissions && (
+        <View className="bg-red-900/80 p-3 mt-8 mx-6 rounded-lg border border-red-500">
+          <Text className="text-white text-center text-xs font-bold">You must approve location and notification permissions in settings.</Text>
+        </View>
+      )}
+
       {/* HEADER (20%) */}
-      <View style={{ flex: 1, paddingTop }} className="px-6 justify-center">
+      <View style={{ flex: 1, paddingTop: hasPermissions ? paddingTop : 10 }} className="px-6 justify-center">
         <View className="flex-row w-full h-full">
           
           {/* LEFT 2/3: 3 Lines of Text */}
@@ -401,7 +425,7 @@ export default function GuestDashboard() {
           <View style={{ flex: 1 }} className="flex-row space-x-2 items-center justify-end">
             <TouchableOpacity 
               style={{ height: headerButtonHeight, width: headerButtonHeight, borderRadius: headerButtonHeight / 2 }}
-              className="bg-neutral-800 border border-neutral-700 items-center justify-center mr-1"
+              className={`border items-center justify-center mr-1 ${!hasPermissions ? 'bg-red-600 border-red-400 shadow-[0_0_15px_rgba(220,38,38,0.8)]' : 'bg-neutral-800 border-neutral-700'}`}
               onPress={() => setIsViewingProfile(true)}
             >
               <Text style={{ fontSize: headerButtonHeight * 0.4 }} className="text-white">⚙️</Text>
@@ -422,14 +446,19 @@ export default function GuestDashboard() {
       <View style={{ flex: 3 }} className="justify-center items-center w-full">
         <TouchableOpacity 
           style={{ width: panicButtonSize, height: panicButtonSize, borderRadius: panicButtonSize / 2 }}
-          className="bg-red-600 items-center justify-center shadow-[0_0_80px_rgba(220,38,38,0.6)] border-8 border-red-500"
+          className={`items-center justify-center shadow-[0_0_80px_rgba(220,38,38,0.6)] border-8 ${!hasPermissions ? 'bg-red-900 border-red-800 opacity-50' : 'bg-red-600 border-red-500'}`}
           onPress={() => {
+            if (!hasPermissions) {
+              showToast("Permissions required to use the Panic Button", "error");
+              return;
+            }
             if (!activePlanUrl) {
               showToast("Please scan a plan or enter a building before evacuating.", "error");
               return;
             }
             setIsEvacuating(true);
           }}
+          disabled={!hasPermissions}
         >
           <Text style={{ fontSize: panicButtonSize * 0.3 }} className="mb-2">🚨</Text>
           <Text style={{ fontSize: panicButtonSize * 0.15 }} className="text-white font-black uppercase tracking-widest">Panic</Text>
@@ -452,15 +481,19 @@ export default function GuestDashboard() {
         )}
 
         <TouchableOpacity 
-          className={`w-full max-w-2xl ${isScanned ? 'bg-green-600 border-green-500' : isUploading || isAnalyzing ? 'bg-blue-600 border-blue-500' : 'bg-amber-500 border-amber-400'} border-4 rounded-3xl p-6 items-center flex-row justify-center shadow-lg`}
+          className={`w-full max-w-2xl ${!hasPermissions ? 'bg-amber-900 border-amber-800 opacity-50' : isScanned ? 'bg-green-600 border-green-500' : isUploading || isAnalyzing ? 'bg-blue-600 border-blue-500' : 'bg-amber-500 border-amber-400'} border-4 rounded-3xl p-6 items-center flex-row justify-center shadow-lg`}
           onPress={() => {
+            if (!hasPermissions) {
+              showToast("Permissions required to scan map", "error");
+              return;
+            }
             if (isScanned) {
               setIsViewingPlan(true);
             } else {
               handleScanPlan();
             }
           }}
-          disabled={isUploading || isAnalyzing}
+          disabled={!hasPermissions || isUploading || isAnalyzing}
         >
           {isUploading || isAnalyzing ? <ActivityIndicator color="white" size="large" className="mr-4" /> : <Text className="text-4xl mr-4">{isScanned ? "🗺️" : "📸"}</Text>}
           <Text className="text-white font-extrabold text-2xl text-center flex-1">

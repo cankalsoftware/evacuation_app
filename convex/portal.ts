@@ -45,7 +45,10 @@ export const getDashboardData = query({
         businessName: user.businessName,
         businessAddress: user.businessAddress,
         employerCount: user.employerCount,
-        agreedToSubscription: user.agreedToSubscription,
+        postCode: user.postCode,
+        country: user.country,
+        agreedToTandC: user.agreedToTandC,
+        permissionsGranted: user.permissionsGranted,
         buildings,
         sites,
       };
@@ -60,6 +63,8 @@ export const getDashboardData = query({
       role: "guest",
       name: user.name,
       phone: user.phone,
+      agreedToTandC: user.agreedToTandC,
+      permissionsGranted: user.permissionsGranted,
       scannedPlanId: plan?.storageId,
       scannedPlanLat: plan?.latitude,
       scannedPlanLon: plan?.longitude,
@@ -124,6 +129,8 @@ export const updateProfile = mutation({
     clerkId: v.string(),
     name: v.optional(v.string()),
     phone: v.optional(v.string()),
+    agreedToTandC: v.optional(v.boolean()),
+    permissionsGranted: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const user = await ctx.db
@@ -136,6 +143,8 @@ export const updateProfile = mutation({
     const patchData: any = {};
     if (args.name !== undefined) patchData.name = args.name;
     if (args.phone !== undefined) patchData.phone = args.phone;
+    if (args.agreedToTandC !== undefined) patchData.agreedToTandC = args.agreedToTandC;
+    if (args.permissionsGranted !== undefined) patchData.permissionsGranted = args.permissionsGranted;
 
     await ctx.db.patch(user._id, patchData);
   },

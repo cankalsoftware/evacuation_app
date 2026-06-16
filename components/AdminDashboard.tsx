@@ -7,6 +7,8 @@ import { api } from "../convex/_generated/api";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
+import * as Location from "expo-location";
+import * as Notifications from "expo-notifications";
 import LiveRollCall from "./LiveRollCall";
 
 // Import Responsive Wrappers
@@ -144,9 +146,52 @@ export default function AdminDashboard() {
   const [setupBusinessName, setSetupBusinessName] = React.useState("");
   const [setupBusinessAddress, setSetupBusinessAddress] = React.useState("");
   const [setupEmployerCount, setSetupEmployerCount] = React.useState("1-10");
-  const [setupAgreed, setSetupAgreed] = React.useState(false);
+  const [setupPostCode, setSetupPostCode] = React.useState("");
+  const [setupCountry, setSetupCountry] = React.useState("");
+  const [setupAgreedToTandC, setSetupAgreedToTandC] = React.useState(false);
   const [isSavingSetup, setIsSavingSetup] = React.useState(false);
   const [showValidation, setShowValidation] = React.useState(false);
+  
+  const [hasPermissions, setHasPermissions] = React.useState(true);
+  const [location, setLocation] = React.useState<Location.LocationObject | null>(null);
+  const [refreshingLocation, setRefreshingLocation] = React.useState(false);
+
+  const fetchLocation = async () => {
+    setRefreshingLocation(true);
+    try {
+      let { status } = await Location.getForegroundPermissionsAsync();
+      const dbGranted = dashboardData?.permissionsGranted === true;
+      
+      if (dbGranted && status === 'granted') {
+        let loc = await Location.getCurrentPositionAsync({});
+        setLocation(loc);
+      } else {
+        setLocation(null);
+      }
+    } catch (e) {
+      console.log("Error fetching location", e);
+    } finally {
+      setRefreshingLocation(false);
+    }
+  };
+
+  React.useEffect(() => {
+    setHasPermissions(dashboardData?.permissionsGranted === true);
+  }, [showSettings, dashboardData]);
+
+  React.useEffect(() => {
+    if (showSettings && dashboardData) {
+      setSetupName(dashboardData.name || "");
+      setSetupPhone(dashboardData.phone || "");
+      setSetupBusinessName(dashboardData.businessName || "");
+      setSetupBusinessAddress(dashboardData.businessAddress || "");
+      setSetupEmployerCount(dashboardData.employerCount || "1-10");
+      setSetupPostCode(dashboardData.postCode || "");
+      setSetupCountry(dashboardData.country || "");
+      setSetupAgreedToTandC(dashboardData.agreedToTandC || false);
+      fetchLocation();
+    }
+  }, [showSettings, dashboardData]);
   const updateAdminProfile = useMutation(api.users.updateAdminProfile);
   const deleteIncidents = useMutation(api.portal.deleteIncidents);
 
@@ -819,7 +864,7 @@ export default function AdminDashboard() {
               className={`bg-neutral-900 border ${showValidation && !(setupName || dashboardData.name) ? 'border-red-500' : 'border-neutral-700'} text-white p-4 rounded-xl mb-4`}
               placeholder="John Doe"
               placeholderTextColor="#666"
-              value={setupName || dashboardData.name || ""}
+              value={setupName}
               onChangeText={setSetupName}
             />
 
@@ -836,14 +881,13 @@ export default function AdminDashboard() {
               placeholder="+1 234 567 8900"
               placeholderTextColor="#666"
               keyboardType="phone-pad"
-              value={setupPhone || dashboardData.phone || ""}
+              value={setupPhone}
               onChangeText={setSetupPhone}
             />
 
-            {needsSetup && (
-              <View>
-                <View className="h-[1px] bg-neutral-700 my-4" />
-                <Text className="text-white font-bold text-lg mb-4">Business Details</Text>
+            <View>
+              <View className="h-[1px] bg-neutral-700 my-4" />
+              <Text className="text-white font-bold text-lg mb-4">Business Details</Text>
 
                 <Text className="text-white font-bold mb-2">Business Name</Text>
                 <TextInput
@@ -861,6 +905,24 @@ export default function AdminDashboard() {
                   placeholderTextColor="#666"
                   value={setupBusinessAddress}
                   onChangeText={setSetupBusinessAddress}
+                />
+
+                <Text className="text-white font-bold mb-2">Registered Post or Zip Code</Text>
+                <TextInput
+                  className={`bg-neutral-900 border ${showValidation && !setupPostCode ? 'border-red-500' : 'border-neutral-700'} text-white p-4 rounded-xl mb-4`}
+                  placeholder="AB12 3CD"
+                  placeholderTextColor="#666"
+                  value={setupPostCode}
+                  onChangeText={setSetupPostCode}
+                />
+
+                <Text className="text-white font-bold mb-2">Country</Text>
+                <TextInput
+                  className={`bg-neutral-900 border ${showValidation && !setupCountry ? 'border-red-500' : 'border-neutral-700'} text-white p-4 rounded-xl mb-4`}
+                  placeholder="United Kingdom"
+                  placeholderTextColor="#666"
+                  value={setupCountry}
+                  onChangeText={setSetupCountry}
                 />
 
                 <Text className="text-white font-bold mb-2">Employer Count</Text>
@@ -882,28 +944,90 @@ export default function AdminDashboard() {
                   </Text>
                 </View>
 
+                <View className="mb-4">
+                  <Text className="text-white font-bold mb-2">Device Permissions</Text>
+                  <TouchableOpacity 
+                    className="flex-row items-center mb-2"
+                    onPress={async () => {
+                      if (hasPermissions) {
+                        setHasPermissions(false);
+                      } else {
+                        setHasPermissions(true);
+                        try {
+                          const { status } = await Location.requestForegroundPermissionsAsync();
+                          if (status === 'granted') {
+                            const { status: pStatus } = await Notifications.requestPermissionsAsync();
+                          } else {
+                            alert("Location permission denied by OS. Please enable it in your device settings.");
+                          }
+                        } catch (e) {
+                          console.warn(e);
+                        }
+                      }
+                    }}
+                  >
+                    <View className={`w-6 h-6 rounded border items-center justify-center mr-3 ${hasPermissions ? 'bg-blue-600 border-blue-500' : 'bg-neutral-900 border-neutral-700'}`}>
+                      {hasPermissions && <Text className="text-white font-bold text-xs">✓</Text>}
+                    </View>
+                    <Text className="text-neutral-300 flex-1">
+                      Grant Location & Notification Permissions (Required for full access)
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    onPress={fetchLocation}
+                    disabled={refreshingLocation}
+                    className="bg-neutral-900 p-4 rounded-xl border border-neutral-700 mb-6 flex-row items-center"
+                  >
+                    {refreshingLocation ? (
+                      <ActivityIndicator color="white" size="large" className="mr-4" />
+                    ) : (
+                      <Text className="text-3xl mr-4">📍</Text>
+                    )}
+                    <View>
+                      <Text className="text-neutral-400 text-xs uppercase mb-1 font-bold">Current Coordinates</Text>
+                      {location ? (
+                         <Text className="text-white font-mono text-xs">
+                           Lat: {location.coords.latitude.toFixed(6)}{"\n"}
+                           Lon: {location.coords.longitude.toFixed(6)}
+                         </Text>
+                      ) : (
+                         <Text className="text-neutral-500 italic text-xs">Waiting for GPS lock...</Text>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    onPress={fetchLocation}
+                    disabled={refreshingLocation}
+                    className="flex-row justify-center items-center py-3 bg-neutral-700 rounded-xl border border-neutral-600"
+                  >
+                    {refreshingLocation ? <ActivityIndicator color="white" className="mr-2" /> : <Text className="mr-2 text-xl">🛰️</Text>}
+                    <Text className="text-white font-bold">Force Refresh Location</Text>
+                  </TouchableOpacity>
+                </View>
+
                 <TouchableOpacity 
                   className="flex-row items-center mb-8"
-                  onPress={() => setSetupAgreed(!setupAgreed)}
+                  onPress={() => setSetupAgreedToTandC(!setupAgreedToTandC)}
                 >
-                  <View className={`w-6 h-6 rounded border items-center justify-center mr-3 ${setupAgreed ? 'bg-blue-600 border-blue-500' : (showValidation && !setupAgreed ? 'bg-red-900/50 border-red-500' : 'bg-neutral-900 border-neutral-700')}`}>
-                    {setupAgreed && <Text className="text-white font-bold text-xs">✓</Text>}
+                  <View className={`w-6 h-6 rounded border items-center justify-center mr-3 ${setupAgreedToTandC ? 'bg-blue-600 border-blue-500' : (showValidation && !setupAgreedToTandC ? 'bg-red-900/50 border-red-500' : 'bg-neutral-900 border-neutral-700')}`}>
+                    {setupAgreedToTandC && <Text className="text-white font-bold text-xs">✓</Text>}
                   </View>
-                  <Text className={`flex-1 ${showValidation && !setupAgreed ? 'text-red-400' : 'text-neutral-300'}`}>
+                  <Text className={`flex-1 ${showValidation && !setupAgreedToTandC ? 'text-red-400' : 'text-neutral-300'}`}>
                     I confirm and agree to the terms and conditions.
                   </Text>
                 </TouchableOpacity>
               </View>
-            )}
 
             <TouchableOpacity
               className={`bg-blue-600 py-4 rounded-xl items-center mb-6 ${isSavingSetup ? 'opacity-50' : ''}`}
               disabled={isSavingSetup}
               onPress={async () => {
-                const effectiveName = setupName || dashboardData.name;
-                const effectivePhone = setupPhone || dashboardData.phone;
+                const effectiveName = setupName;
+                const effectivePhone = setupPhone;
                 
-                if (!effectiveName || !effectivePhone || (needsSetup && (!setupBusinessName || !setupBusinessAddress || !setupAgreed))) {
+                if (!effectiveName || !effectivePhone || !setupBusinessName || !setupBusinessAddress || !setupPostCode || !setupCountry || !setupAgreedToTandC) {
                   setShowValidation(true);
                   showToast("Please fill in all required fields", "error");
                   return;
@@ -931,21 +1055,20 @@ export default function AdminDashboard() {
 
                 setIsSavingSetup(true);
                 try {
+                  const { status: locStatus } = await Location.getForegroundPermissionsAsync();
+                  const { status: pushStatus } = await Notifications.getPermissionsAsync();
+                  
                   await updateAdminProfile({
                     clerkId: user?.id || "",
-                    name: setupName || dashboardData.name || "",
-                    phone: setupPhone || dashboardData.phone || "",
-                    ...(needsSetup ? {
-                      businessName: setupBusinessName,
-                      businessAddress: setupBusinessAddress,
-                      employerCount: setupEmployerCount,
-                      agreedToSubscription: setupAgreed,
-                    } : {
-                      businessName: dashboardData.businessName || "N/A",
-                      businessAddress: dashboardData.businessAddress || "N/A",
-                      employerCount: dashboardData.employerCount || "1-10",
-                      agreedToSubscription: dashboardData.agreedToSubscription || true,
-                    })
+                    name: setupName || "",
+                    phone: setupPhone || "",
+                    permissionsGranted: hasPermissions,
+                    businessName: setupBusinessName || "",
+                    businessAddress: setupBusinessAddress || "",
+                    employerCount: setupEmployerCount || "1-10",
+                    postCode: setupPostCode || "",
+                    country: setupCountry || "",
+                    agreedToTandC: setupAgreedToTandC,
                   });
                   setShowSettings(false);
                 } catch (e) {
@@ -988,15 +1111,22 @@ export default function AdminDashboard() {
 
   return (
     <View className="flex-1 bg-neutral-900 pt-6">
+      {/* Top Warning Banner */}
+      {!hasPermissions && (
+        <View className="bg-red-900/80 p-3 mt-2 mx-6 rounded-lg border border-red-500">
+          <Text className="text-white text-center text-xs font-bold">You must approve location and notification permissions in settings.</Text>
+        </View>
+      )}
+
       {/* Header */}
-      <View className="px-6 flex-row justify-between items-center mb-6">
+      <View className="px-6 flex-row justify-between items-center my-6">
         <View className="flex-1 mr-4">
           <Text className="text-2xl font-extrabold text-white">Admin Console</Text>
           <Text className="text-red-400 font-bold text-xs mt-1" numberOfLines={1} ellipsizeMode="tail">{dashboardData.name || user?.primaryEmailAddress?.emailAddress}</Text>
         </View>
         <View className="flex-row items-center shrink-0">
           <TouchableOpacity
-            className="bg-neutral-800 p-3 rounded-full border border-neutral-700 mr-2"
+            className={`p-3 rounded-full border mr-2 ${!hasPermissions ? 'bg-red-600 border-red-400 shadow-[0_0_15px_rgba(220,38,38,0.8)]' : 'bg-neutral-800 border-neutral-700'}`}
             onPress={() => setShowSettings(true)}
           >
             <Text className="text-white">⚙️</Text>
@@ -1015,8 +1145,9 @@ export default function AdminDashboard() {
         {/* Quick Actions */}
         <View className="flex-row space-x-4 mb-8">
           <TouchableOpacity
-            className="flex-1 bg-neutral-800 border border-neutral-700 p-4 rounded-2xl items-center mr-2"
-            onPress={() => setIsRegistering(true)}
+            className={`flex-1 border p-4 rounded-2xl items-center mr-2 ${!hasPermissions ? 'bg-neutral-800/50 border-neutral-700 opacity-50' : 'bg-neutral-800 border-neutral-700'}`}
+            onPress={() => hasPermissions ? setIsRegistering(true) : showToast("Permissions required to add locations", "error")}
+            disabled={!hasPermissions}
           >
             <Text className="text-2xl mb-1">🗺️</Text>
             <Text className="text-white font-bold text-center text-xs">Add Location</Text>
@@ -1035,7 +1166,11 @@ export default function AdminDashboard() {
             return (
               <View className="bg-neutral-800 border border-neutral-700 p-6 rounded-2xl items-center mb-8">
                 <Text className="text-neutral-400 text-center">You have not registered any buildings yet.</Text>
-                <TouchableOpacity className="mt-4 bg-white/10 px-4 py-2 rounded-lg" onPress={() => setIsRegistering(true)}>
+                <TouchableOpacity 
+                  className={`mt-4 px-4 py-2 rounded-lg ${!hasPermissions ? 'bg-white/5 opacity-50' : 'bg-white/10'}`} 
+                  onPress={() => hasPermissions ? setIsRegistering(true) : showToast("Permissions required", "error")}
+                  disabled={!hasPermissions}
+                >
                   <Text className="text-white font-bold">Register Building</Text>
                 </TouchableOpacity>
               </View>

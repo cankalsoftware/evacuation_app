@@ -17,7 +17,10 @@ export default defineSchema({
     businessName: v.optional(v.string()),
     businessAddress: v.optional(v.string()),
     employerCount: v.optional(v.string()),
-    agreedToSubscription: v.optional(v.boolean()),
+    postCode: v.optional(v.string()),
+    country: v.optional(v.string()),
+    agreedToTandC: v.optional(v.boolean()),
+    permissionsGranted: v.optional(v.boolean()),
     approvalStatus: v.optional(v.union(v.literal("pending"), v.literal("approved"), v.literal("rejected"))),
   }).index("by_clerkId", ["clerkId"]),
 
