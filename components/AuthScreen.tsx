@@ -18,6 +18,20 @@ export default function AuthScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [selectedRole, setSelectedRole] = useState<"guest" | "admin">("guest");
+  
+  const [countdown, setCountdown] = useState(0);
+  const [resendCount, setResendCount] = useState(0);
+  const [showResendWarning, setShowResendWarning] = useState(false);
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (pendingVerification && countdown > 0) {
+      timer = setInterval(() => {
+        setCountdown((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [pendingVerification, countdown]);
 
   if (!isSignUpLoaded || !isSignInLoaded) return null;
 
@@ -80,6 +94,9 @@ export default function AuthScreen() {
           strategy: "reset_password_email_code",
           identifier: emailAddress,
         });
+        setCountdown(60);
+        setResendCount(0);
+        setShowResendWarning(false);
         setPendingVerification(true);
       } else if (isLoginMode) {
         // LOGIN FLOW (Password)
@@ -101,11 +118,26 @@ export default function AuthScreen() {
           return;
         }
 
+        if (selectedRole === 'admin') {
+          const email = emailAddress.toLowerCase().trim();
+          const domain = email.split('@')[1];
+          const publicDomains = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com', 'aol.com', 'protonmail.com'];
+          
+          if (!domain || publicDomains.includes(domain)) {
+            setError("Admins must register with a corporate email address. Public domains are not allowed.");
+            setLoading(false);
+            return;
+          }
+        }
+
         await signUp.create({
           emailAddress,
           password: password,
         });
         await signUp.prepareEmailAddressVerification({ strategy: "email_code" });
+        setCountdown(60);
+        setResendCount(0);
+        setShowResendWarning(false);
         setPendingVerification(true);
       }
     } catch (err: any) {
@@ -156,6 +188,33 @@ export default function AuthScreen() {
     } catch (err: any) {
       console.error(err);
       handleAuthError(err, "Invalid code.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendCode = async () => {
+    if (countdown > 0) return;
+    
+    if (resendCount >= 2) {
+      setShowResendWarning(true);
+    }
+    
+    setLoading(true);
+    setError("");
+    try {
+      if (isForgotPasswordMode) {
+        await signIn.create({
+          strategy: "reset_password_email_code",
+          identifier: emailAddress,
+        });
+      } else {
+        await signUp.prepareEmailAddressVerification({ strategy: "email_code" });
+      }
+      setCountdown(60);
+      setResendCount(prev => prev + 1);
+    } catch (err: any) {
+      handleAuthError(err, "Failed to resend code.");
     } finally {
       setLoading(false);
     }
@@ -333,8 +392,26 @@ export default function AuthScreen() {
               {loading ? <ActivityIndicator color="white" /> : <Text className="text-white font-bold text-lg">{isForgotPasswordMode ? "Reset Password & Login" : "Verify & Login"}</Text>}
             </TouchableOpacity>
 
-            <TouchableOpacity className="mt-4" onPress={() => setPendingVerification(false)}>
-              <Text className="text-neutral-400 text-center">Back</Text>
+            {showResendWarning && (
+              <View className="mt-4 p-3 bg-red-900/30 border border-red-500 rounded-xl">
+                <Text className="text-red-400 text-center text-xs">
+                  Please check your junk email and domain credentials. If you still don't receive the code, wait 60 seconds and try again.
+                </Text>
+              </View>
+            )}
+
+            <TouchableOpacity 
+              className={`mt-6 ${countdown > 0 || loading ? 'opacity-50' : ''}`} 
+              onPress={handleResendCode}
+              disabled={countdown > 0 || loading}
+            >
+              <Text className="text-neutral-300 text-center font-bold">
+                {countdown > 0 ? `Resend Code in ${countdown}s` : "Didn't receive code? Resend"}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity className="mt-6" onPress={() => setPendingVerification(false)}>
+              <Text className="text-neutral-500 text-center">Back to Login</Text>
             </TouchableOpacity>
           </>
         )}

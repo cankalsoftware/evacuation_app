@@ -12,6 +12,13 @@ export default defineSchema({
     createdAt: v.number(),
     expoPushToken: v.optional(v.string()), // Added for Phase 13 native push notifications
     activeBuildingId: v.optional(v.id("buildings")), // Phase 15: Background Check-in Tracking
+
+    // Phase 20: Admin Onboarding Fields
+    businessName: v.optional(v.string()),
+    businessAddress: v.optional(v.string()),
+    employerCount: v.optional(v.string()),
+    agreedToSubscription: v.optional(v.boolean()),
+    approvalStatus: v.optional(v.union(v.literal("pending"), v.literal("approved"), v.literal("rejected"))),
   }).index("by_clerkId", ["clerkId"]),
 
   plans: defineTable({

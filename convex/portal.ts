@@ -40,6 +40,12 @@ export const getDashboardData = query({
         role: "admin",
         name: user.name,
         phone: user.phone,
+        email: user.email,
+        approvalStatus: user.approvalStatus || "pending",
+        businessName: user.businessName,
+        businessAddress: user.businessAddress,
+        employerCount: user.employerCount,
+        agreedToSubscription: user.agreedToSubscription,
         buildings,
         sites,
       };

@@ -141,7 +141,12 @@ export default function AdminDashboard() {
   const [showSettings, setShowSettings] = React.useState(false);
   const [setupName, setSetupName] = React.useState("");
   const [setupPhone, setSetupPhone] = React.useState("");
+  const [setupBusinessName, setSetupBusinessName] = React.useState("");
+  const [setupBusinessAddress, setSetupBusinessAddress] = React.useState("");
+  const [setupEmployerCount, setSetupEmployerCount] = React.useState("1-10");
+  const [setupAgreed, setSetupAgreed] = React.useState(false);
   const [isSavingSetup, setIsSavingSetup] = React.useState(false);
+  const [showValidation, setShowValidation] = React.useState(false);
   const updateAdminProfile = useMutation(api.users.updateAdminProfile);
   const deleteIncidents = useMutation(api.portal.deleteIncidents);
 
@@ -762,10 +767,34 @@ export default function AdminDashboard() {
     );
   }
 
-  const needsSetup = !dashboardData.name || !dashboardData.phone;
+  const clerkEmail = user?.primaryEmailAddress?.emailAddress || "";
+  const needsSetup = !dashboardData.name || !dashboardData.phone || !dashboardData.businessName;
+  
+  if (dashboardData.approvalStatus === "pending") {
+    return (
+      <View className="flex-1 bg-neutral-900 justify-center items-center p-6">
+        <View className="w-full mb-8">
+            <Image
+              source={require('../FireVision.png')}
+              style={{ width: '100%', height: 100 }}
+              resizeMode="contain"
+            />
+        </View>
+        <Text className="text-6xl mb-6">⏳</Text>
+        <Text className="text-white text-3xl font-extrabold text-center mb-4">Pending Approval</Text>
+        <Text className="text-neutral-300 text-center text-lg mb-8">
+          Registration Successful. Firevision will confirm your details and contact you to activate your admin account.
+        </Text>
+        <TouchableOpacity className="bg-neutral-800 border border-neutral-700 py-3 px-8 rounded-xl" onPress={() => signOut()}>
+          <Text className="text-white font-bold text-lg">Sign Out</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   if (needsSetup || showSettings) {
     return (
-      <View className="flex-1 bg-neutral-900 pt-6 px-6">
+      <View className="flex-1 bg-neutral-900 pt-6 px-4 md:px-6">
         <View className="flex-row justify-between items-center mb-8">
           <Text className="text-3xl font-extrabold text-white">
             {needsSetup ? "Admin Setup" : "Admin Settings"}
@@ -777,53 +806,157 @@ export default function AdminDashboard() {
           )}
         </View>
 
-        <Text className="text-neutral-400 mb-6">
-          {needsSetup
-            ? "Welcome to FireVision Admin! Please provide your emergency contact details before continuing."
-            : "Update your emergency contact information below."}
-        </Text>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+          <Text className="text-neutral-400 mb-6">
+            {needsSetup
+              ? "Welcome to FireVision Admin! Please provide your business and contact details before continuing."
+              : "Update your emergency contact information below."}
+          </Text>
 
-        <View className="bg-neutral-800 p-6 rounded-3xl border border-neutral-700">
-          <Text className="text-white font-bold mb-2">Full Name</Text>
-          <TextInput
-            className="bg-neutral-900 border border-neutral-700 text-white p-4 rounded-xl mb-6"
-            placeholder="John Doe"
-            placeholderTextColor="#666"
-            value={setupName || dashboardData.name || ""}
-            onChangeText={setSetupName}
-          />
+          <View className="bg-neutral-800 p-6 rounded-3xl border border-neutral-700">
+            <Text className="text-white font-bold mb-2">Admin Name</Text>
+            <TextInput
+              className={`bg-neutral-900 border ${showValidation && !(setupName || dashboardData.name) ? 'border-red-500' : 'border-neutral-700'} text-white p-4 rounded-xl mb-4`}
+              placeholder="John Doe"
+              placeholderTextColor="#666"
+              value={setupName || dashboardData.name || ""}
+              onChangeText={setSetupName}
+            />
 
-          <Text className="text-white font-bold mb-2">Emergency Phone Number</Text>
-          <TextInput
-            className="bg-neutral-900 border border-neutral-700 text-white p-4 rounded-xl mb-8"
-            placeholder="+1 234 567 8900"
-            placeholderTextColor="#666"
-            keyboardType="phone-pad"
-            value={setupPhone || dashboardData.phone || ""}
-            onChangeText={setSetupPhone}
-          />
+            <Text className="text-white font-bold mb-2">Admin Email</Text>
+            <TextInput
+              className="bg-neutral-900 border border-neutral-700 text-neutral-400 p-4 rounded-xl mb-4 opacity-70"
+              value={clerkEmail}
+              editable={false}
+            />
 
-          <TouchableOpacity
-            className={`bg-red-600 py-4 rounded-xl items-center mb-6 ${isSavingSetup ? 'opacity-50' : ''}`}
-            disabled={isSavingSetup || (!setupName && !dashboardData.name) || (!setupPhone && !dashboardData.phone)}
-            onPress={async () => {
-              setIsSavingSetup(true);
-              try {
-                await updateAdminProfile({
-                  clerkId: user?.id || "",
-                  name: setupName || dashboardData.name || "",
-                  phone: setupPhone || dashboardData.phone || "",
-                });
-                setShowSettings(false);
-              } catch (e) {
-                showToast("Error saving profile", "error");
-              } finally {
-                setIsSavingSetup(false);
-              }
-            }}
-          >
-            {isSavingSetup ? <ActivityIndicator color="white" /> : <Text className="text-white font-bold text-lg">Save Details</Text>}
-          </TouchableOpacity>
+            <Text className="text-white font-bold mb-2">Admin Telephone</Text>
+            <TextInput
+              className={`bg-neutral-900 border ${showValidation && !(setupPhone || dashboardData.phone) ? 'border-red-500' : 'border-neutral-700'} text-white p-4 rounded-xl mb-4`}
+              placeholder="+1 234 567 8900"
+              placeholderTextColor="#666"
+              keyboardType="phone-pad"
+              value={setupPhone || dashboardData.phone || ""}
+              onChangeText={setSetupPhone}
+            />
+
+            {needsSetup && (
+              <View>
+                <View className="h-[1px] bg-neutral-700 my-4" />
+                <Text className="text-white font-bold text-lg mb-4">Business Details</Text>
+
+                <Text className="text-white font-bold mb-2">Business Name</Text>
+                <TextInput
+                  className={`bg-neutral-900 border ${showValidation && !setupBusinessName ? 'border-red-500' : 'border-neutral-700'} text-white p-4 rounded-xl mb-4`}
+                  placeholder="Acme Corp"
+                  placeholderTextColor="#666"
+                  value={setupBusinessName}
+                  onChangeText={setSetupBusinessName}
+                />
+
+                <Text className="text-white font-bold mb-2">Business Address</Text>
+                <TextInput
+                  className={`bg-neutral-900 border ${showValidation && !setupBusinessAddress ? 'border-red-500' : 'border-neutral-700'} text-white p-4 rounded-xl mb-4`}
+                  placeholder="123 Corporate Way, City, Postcode"
+                  placeholderTextColor="#666"
+                  value={setupBusinessAddress}
+                  onChangeText={setSetupBusinessAddress}
+                />
+
+                <Text className="text-white font-bold mb-2">Employer Count</Text>
+                <View className="flex-row flex-wrap mb-6">
+                  {['1-10', '10-50', '50-100', '100+'].map(count => (
+                    <TouchableOpacity
+                      key={count}
+                      className={`px-4 py-2 rounded-lg border mr-2 mb-2 ${setupEmployerCount === count ? 'bg-blue-600 border-blue-500' : 'bg-neutral-900 border-neutral-700'}`}
+                      onPress={() => setSetupEmployerCount(count)}
+                    >
+                      <Text className="text-white font-bold">{count}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <View className="bg-neutral-900 p-4 rounded-xl mb-4 border border-neutral-700">
+                  <Text className="text-neutral-400 text-sm">
+                    Note: I agree to pay a subscription fee once my account is approved. (Currently in Test Mode, subscription details will be announced on firevision.uk in the near future).
+                  </Text>
+                </View>
+
+                <TouchableOpacity 
+                  className="flex-row items-center mb-8"
+                  onPress={() => setSetupAgreed(!setupAgreed)}
+                >
+                  <View className={`w-6 h-6 rounded border items-center justify-center mr-3 ${setupAgreed ? 'bg-blue-600 border-blue-500' : (showValidation && !setupAgreed ? 'bg-red-900/50 border-red-500' : 'bg-neutral-900 border-neutral-700')}`}>
+                    {setupAgreed && <Text className="text-white font-bold text-xs">✓</Text>}
+                  </View>
+                  <Text className={`flex-1 ${showValidation && !setupAgreed ? 'text-red-400' : 'text-neutral-300'}`}>
+                    I confirm and agree to the terms and conditions.
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            <TouchableOpacity
+              className={`bg-blue-600 py-4 rounded-xl items-center mb-6 ${isSavingSetup ? 'opacity-50' : ''}`}
+              disabled={isSavingSetup}
+              onPress={async () => {
+                const effectiveName = setupName || dashboardData.name;
+                const effectivePhone = setupPhone || dashboardData.phone;
+                
+                if (!effectiveName || !effectivePhone || (needsSetup && (!setupBusinessName || !setupBusinessAddress || !setupAgreed))) {
+                  setShowValidation(true);
+                  showToast("Please fill in all required fields", "error");
+                  return;
+                }
+
+                if (needsSetup) {
+                  const email = clerkEmail.toLowerCase();
+                  const domain = email.split('@')[1];
+                  const publicDomains = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com', 'aol.com', 'protonmail.com'];
+                  
+                  if (!domain || publicDomains.includes(domain)) {
+                    showToast("Public email domains are not allowed. Please register with a corporate domain.", "error");
+                    return;
+                  }
+                  
+                  const bNameRaw = setupBusinessName.toLowerCase().replace(/[^a-z0-9]/g, '');
+                  const domainName = domain ? domain.split('.')[0] : '';
+                  const minRequiredLength = Math.max(3, Math.floor(bNameRaw.length / 2));
+                  
+                  if (!bNameRaw || !domainName || (!domainName.includes(bNameRaw.substring(0, minRequiredLength)) && !bNameRaw.includes(domainName.substring(0, minRequiredLength)))) {
+                    alert("Your email domain does not appear to match your business name. Please register with a matching corporate email, or contact info@firevision.uk with your details for manual approval.");
+                    return;
+                  }
+                }
+
+                setIsSavingSetup(true);
+                try {
+                  await updateAdminProfile({
+                    clerkId: user?.id || "",
+                    name: setupName || dashboardData.name || "",
+                    phone: setupPhone || dashboardData.phone || "",
+                    ...(needsSetup ? {
+                      businessName: setupBusinessName,
+                      businessAddress: setupBusinessAddress,
+                      employerCount: setupEmployerCount,
+                      agreedToSubscription: setupAgreed,
+                    } : {
+                      businessName: dashboardData.businessName || "N/A",
+                      businessAddress: dashboardData.businessAddress || "N/A",
+                      employerCount: dashboardData.employerCount || "1-10",
+                      agreedToSubscription: dashboardData.agreedToSubscription || true,
+                    })
+                  });
+                  setShowSettings(false);
+                } catch (e) {
+                  showToast("Error saving profile", "error");
+                } finally {
+                  setIsSavingSetup(false);
+                }
+              }}
+            >
+              {isSavingSetup ? <ActivityIndicator color="white" /> : <Text className="text-white font-bold text-lg">{needsSetup ? "Submit for Approval" : "Save Details"}</Text>}
+            </TouchableOpacity>
 
           {!needsSetup && (
             <TouchableOpacity
@@ -843,11 +976,12 @@ export default function AdminDashboard() {
           )}
         </View>
 
-        {needsSetup && (
-          <TouchableOpacity className="mt-8 self-center" onPress={() => signOut()}>
-            <Text className="text-neutral-500">Sign Out</Text>
-          </TouchableOpacity>
-        )}
+          {needsSetup && (
+            <TouchableOpacity className="mt-8 self-center" onPress={() => signOut()}>
+              <Text className="text-neutral-500">Sign Out</Text>
+            </TouchableOpacity>
+          )}
+        </ScrollView>
       </View>
     );
   }
