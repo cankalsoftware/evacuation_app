@@ -9,7 +9,12 @@
       "distribution": "internal"
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_c3RpcnJpbmctbXVsZS04Ny5jbGVyay5hY2NvdW50cy5kZXYk",
+        "EXPO_PUBLIC_CONVEX_URL": "https://careful-bullfrog-161.eu-west-1.convex.cloud",
+        "EXPO_PUBLIC_CONVEX_SITE_URL": "https://careful-bullfrog-161.eu-west-1.convex.site"
+      }
     },
     "production": {
       "autoIncrement": true

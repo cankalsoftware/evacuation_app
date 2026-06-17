@@ -163,3 +163,22 @@ This tells Expo to create a standalone `.apk` file instead of a Store bundle. On
 
 **Q: Once the build finishes and I download the `.aab` or `.apk` file, does Expo save it somewhere? Can I access it later?**
 **A:** **Yes, absolutely!** Every single build you ever run is permanently saved on your Expo web dashboard. If you go to [expo.dev](https://expo.dev) and click on your project, you will see a "Builds" tab on the left side. You can view all of your past builds, read the success/error logs, and download the `.aab` or `.apk` files again at any time!
+
+### 6. App Icons & Environment Variables
+**Q: How do I change the default Expo app icon to my custom FireVision logo?**
+**A:** Setting the App Icon is super easy! If you look inside your `assets/` folder, you will see default placeholder images (`icon.png`, `android-icon-foreground.png`, `splash.png`). 
+1. Make sure your custom `FireVision.png` logo is exactly a **1024x1024 pixel** square.
+2. Simply delete the default images in the `assets/` folder, and replace them with your custom logo, ensuring you keep the exact same filenames (e.g., name your new logo `icon.png`).
+3. The next time you run an `eas build`, Expo will automatically package your new gorgeous logo into the app!
+
+**Q: Why did my standalone `.apk` app instantly crash on my phone, but work on my computer?**
+**A:** When you run `eas build`, Expo sends your code to their cloud computers to build the APK. However, your `.env.local` file (which holds your API keys) is purposely hidden from GitHub and the cloud for security. Because the cloud computers couldn't see your API keys, the APK was compiled completely empty. When you opened it on your phone, the authentication system crashed because it had no key.
+**The Fix:** You must inject your public environment variables directly into the `eas.json` file under the specific build profile (e.g., `"preview": { "env": { "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "..." } }`) so the cloud compiler can package them into the app.
+
+**Q: Are the environment variables in `eas.json` hidden from hackers? Can someone hijack the app?**
+**A:** **No, they are public, but it is 100% secure!** Any key that starts with `EXPO_PUBLIC_` is designed by definition to be a "Public Key." When the app compiles, these keys are permanently embedded into the app code shipped to users' phones. 
+This is not a security flaw—this is exactly how modern apps work. 
+- Your Convex URL simply tells the app *where* the database is.
+- Your Clerk Publishable Key only allows the app to render the login form. 
+Neither of these keys gives hackers access to your database or user data. Hackers would still need a secure, authenticated JWT (login token) to read or write any data to your Convex database. 
+*(Warning: You should NEVER put "Secret Keys" like a `CLERK_SECRET_KEY` or Stripe Secret Key into `eas.json` or your frontend app).*

@@ -319,8 +319,8 @@ export default function GuestDashboard() {
 
   // From a UI/UX perspective, the panic button should be the largest circle that safely fits 
   // inside the 60% Body view without ever overlapping. 
-  // We cap it at 80% of width, or 45% of total screen height, up to 450px max.
-  const panicButtonSize = Math.min(width * 0.8, height * 0.45, 450); 
+  // We cap it at 80% of width, or 45% of total screen height, up to 800px max.
+  const panicButtonSize = Math.min(width * 0.8, height * 0.45, 800); 
 
   useEffect(() => {
     let sub: Location.LocationSubscription | null = null;
@@ -458,7 +458,7 @@ export default function GuestDashboard() {
 
         <TouchableOpacity 
           style={{ width: panicButtonSize, height: panicButtonSize, borderRadius: panicButtonSize / 2 }}
-          className={`items-center justify-center shadow-[0_0_80px_rgba(220,38,38,0.6)] border-8 ${!hasPermissions ? 'bg-red-900 border-red-800 opacity-50' : 'bg-red-600 border-red-500'}`}
+          className={`items-center justify-center shadow-[0_0_80px_rgba(220,38,38,0.6)] bg-white ${!hasPermissions ? 'opacity-50' : ''}`}
           onPress={() => {
             if (!hasPermissions) {
               showToast("Permissions required to use the Panic Button", "error");
@@ -472,8 +472,10 @@ export default function GuestDashboard() {
           }}
           disabled={!hasPermissions}
         >
-          <Text style={{ fontSize: panicButtonSize * 0.3 }} className="mb-2">🚨</Text>
-          <Text style={{ fontSize: panicButtonSize * 0.15 }} className="text-white font-black uppercase tracking-widest">Panic</Text>
+          <Image 
+            source={require('../assets/icon.png')} 
+            style={{ width: '100%', height: '100%', borderRadius: panicButtonSize / 2, resizeMode: 'cover' }}
+          />
         </TouchableOpacity>
       </View>
 
