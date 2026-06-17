@@ -150,3 +150,16 @@ You will need to configure your `eas.json` file for a "preview" build, and then 
 eas build -p android --profile preview
 ```
 This tells Expo to create a standalone `.apk` file instead of a Store bundle. Once the build finishes, Expo gives you a direct download link. You can download that `.apk` file, upload it to your `firevision.uk` server, and create a "Download Android App" button!
+
+### 5. Expo & EAS Installation Quirks
+**Q: When I ran `npm install -g eas-cli`, I got a massive wall of red warnings saying packages are deprecated (like `uuid`, `glob`, etc.). Did it fail?**
+**A:** **No, it did not fail!** You can completely ignore those warnings. `eas-cli` relies on hundreds of smaller packages built by other developers. Over time, those smaller tools get marked as "deprecated," and NPM aggressively warns you about them. As long as the command finishes with a message like `added 516 packages in 45s`, the installation was 100% successful.
+
+**Q: When running `eas build:configure`, it asked to create an EAS project for `temp_app`. Why did it say `temp_app`?**
+**A:** EAS automatically reads the `name` and `slug` fields from your `app.json` file. If those fields are set to `temp_app` (leftover from project creation), EAS will try to register that name on their servers. If this happens, cancel the command (Ctrl+C), open `app.json`, update the `name`, `slug`, and add an `android.package` identifier (e.g., `uk.firevision.evacuation`), and then re-run the configuration.
+
+**Q: During `eas build:configure`, it asked me which platform and I selected "Android". Do I still need to type `--platform android` when I run `eas build`?**
+**A:** **Yes!** The `eas build:configure` command ONLY creates a local settings file (`eas.json`) on your computer. It does not actually build anything. When it is time to actually trigger the massive cloud computers to compile your app, you must explicitly tell it which platform to build right then by running `eas build --platform android`.
+
+**Q: Once the build finishes and I download the `.aab` or `.apk` file, does Expo save it somewhere? Can I access it later?**
+**A:** **Yes, absolutely!** Every single build you ever run is permanently saved on your Expo web dashboard. If you go to [expo.dev](https://expo.dev) and click on your project, you will see a "Builds" tab on the left side. You can view all of your past builds, read the success/error logs, and download the `.aab` or `.apk` files again at any time!
