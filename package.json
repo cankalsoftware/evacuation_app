@@ -26,9 +26,7 @@
     "react-native-maps": "^1.27.2",
     "react-native-passkey": "^3.4.0",
     "react-native-reanimated": "4.3.1",
-    "react-native-web": "^0.21.2",
-    "react-native-worklets": "0.8.3",
-    "react-native-worklets-core": "^1.6.3"
+    "react-native-web": "^0.21.2"
   },
   "devDependencies": {
     "@types/node": "^25.9.2",
