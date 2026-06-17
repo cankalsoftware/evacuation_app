@@ -101,3 +101,40 @@ Go through the menu on the left side of the Play Console and complete:
 
 ## Step 10: Rollout!
 Once all the checks are green and your Store Listing is approved, you can promote your Internal Test to **Production**. Google will review the app (this can take 1 to 7 days for a brand new account). Once approved, your app will be live on the Google Play Store!
+
+---
+
+## ❓ Frequently Asked Questions (Q&A)
+
+### 1. Accounts & Registration
+**Q: Should I use my personal or FireVision Google account to register with Google Play?**
+**A:** You should **definitely use the official FireVision Google account** (e.g., `admin@firevision.uk` or an official company Gmail). 
+- **Why?** If you use a personal account, the app will display your personal name as the Developer on the App Store. Using a company account ensures "FireVision" or "Cankal Software LTD" owns the asset, making it professional and easier to manage with team members in the future.
+
+### 2. Platforms & Builds
+**Q: On the Expo deployment, what does `--platform all` mean?**
+**A:** When running a build command (like `eas build --platform all`), "all" tells Expo to build **both** the Android app and the iOS (Apple) app at the exact same time. If you only want to build the Android version, you would use `eas build --platform android`.
+
+**Q: Does this process allow me to create an app for iPhones? Or is that a different process?**
+**A:** The codebase we've built works perfectly for both Android and iPhones! However, the *deployment* process is different. To publish to iPhones, you need an **Apple Developer Account** ($99/year). Once you have that, you will run `eas build --platform ios`, which generates an `.ipa` file instead of an `.aab` file, and you upload it to Apple App Store Connect instead of the Google Play Console.
+
+### 3. App Updates
+**Q: After I deploy to Google Play, will I be able to update the app versions while I improve it in the coming months?**
+**A:** **Yes, absolutely!** You are never locked in. Whenever we add new features, we just change the version number in your `app.json` (e.g., from `1.0.0` to `1.0.1`), run the `eas build` command again, and upload the new file to Google Play. Users will then get an "Update" button in the Play Store.
+
+### 4. Direct Downloads & Web Hosting
+**Q: Can I link the app directly on the firevision.uk website instead of using Google Play? Can users download it from my server for free?**
+**A:** **Yes, for Android, you can do this completely for free!** This is called "sideloading." You can host the installation file on your website, and users can click a link to download and install it without ever touching the Google Play Store.
+*(Note: Apple/iOS strictly prohibits this. iPhones can only install apps through the official Apple App Store).*
+
+**Q: How do I create a file that I can download and install directly on an Android phone from my website?**
+**A:** To install directly on a phone from a website, you need an **`.apk`** file, *not* an `.aab` file. 
+- **`.aab` (Android App Bundle):** Strictly for the Google Play Store. Phones cannot install this directly.
+- **`.apk` (Android Package Kit):** The universal installation file that Android phones can download and run directly.
+
+**How to generate the downloadable `.apk` file for your website:**
+You will need to configure your `eas.json` file for a "preview" build, and then run:
+```bash
+eas build -p android --profile preview
+```
+This tells Expo to create a standalone `.apk` file instead of a Store bundle. Once the build finishes, Expo gives you a direct download link. You can download that `.apk` file, upload it to your `firevision.uk` server, and create a "Download Android App" button!
