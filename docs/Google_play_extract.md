@@ -107,9 +107,21 @@ Once all the checks are green and your Store Listing is approved, you can promot
 ## ❓ Frequently Asked Questions (Q&A)
 
 ### 1. Accounts & Registration
-**Q: Should I use my personal or FireVision Google account to register with Google Play?**
-**A:** You should **definitely use the official FireVision Google account** (e.g., `admin@firevision.uk` or an official company Gmail). 
-- **Why?** If you use a personal account, the app will display your personal name as the Developer on the App Store. Using a company account ensures "FireVision" or "Cankal Software LTD" owns the asset, making it professional and easier to manage with team members in the future.
+**Q: Should I use my personal or FireVision Google account to register with Google Play? Should it be a "Personal" or "Organization" account?**
+**A:** You **must use an official company Google account** (e.g., an admin email for Cankal Software), and you should absolutely register it as an **Organization account**. 
+- **Why an Organization?** Google recently introduced strict rules for "Personal" accounts. If you register as Personal, Google forces you to find 20 real people to test your app for 14 straight days before they let you publish it. **Organization accounts bypass this rule.** As long as Cankal Software is a registered business (and you have a D-U-N-S number), you can publish immediately.
+- **Can one business account hold multiple apps?** **Yes!** You pay the $25 fee exactly *once*. Under your developer account, you can publish unlimited apps (FireVision, and any future apps you build). 
+- **What if my official Gov.uk registered name is too long?** When registering an Organization, Google requires your **Legal Entity Name** to match your documents exactly (e.g., "Cankal software and IT consultancy Ltd."). However, Google Play provides a separate field called **"Developer Name"**. This is the public name that users actually see on the App Store. You can set this public Developer Name to simply **"CankalSoftware"** for brand recognition!
+- **When applying for a D-U-N-S number, should I select General, Apple, or Google?** The 9-digit D-U-N-S number you receive is **universal**. Once you get your DUNS number, you use that **exact same number** for both your Google Play registration *and* your future Apple Developer registration. 
+
+**Pro Tip: How to get your DUNS number faster and for free:**
+It is highly recommended to apply through the Apple Developer portal instead of the main D&B website, as Apple has a direct partnership that expedites the process.
+1. Log in to your Apple Developer account (you do not need to pay the $99 fee yet).
+2. Go to the hidden [Apple D-U-N-S Number Look up](https://developer.apple.com/enroll/duns-lookup/#!/search) page.
+3. Fill out your Organization Information exactly as it appears on your Gov.uk registration.
+4. If your company isn't found, check the box to **"Submit my information to Dun & Bradstreet"**.
+5. Within 5 to 14 days, you will receive an email with your 9-digit number, which you can immediately take to Google Play!
+- **Can I start as Personal and change to Organization later?** Yes, but it is a highly painful, manual process. You have to contact Google Play Support to migrate the account, or create a brand new Organization account, pay the $25 fee a second time, and then manually transfer the app ownership from the Personal account to the Organization account. **Save yourself the headache and register as an Organization from day one.**
 
 ### 2. Platforms & Builds
 **Q: On the Expo deployment, what does `--platform all` mean?**
