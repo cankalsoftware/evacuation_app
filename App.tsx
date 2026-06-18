@@ -118,7 +118,6 @@ export default function App() {
         importance: Notifications.AndroidImportance.MAX,
         vibrationPattern: [0, 250, 250, 250],
         lightColor: '#FF231F7C',
-        sound: 'default', // Ideally a custom loud siren sound
         bypassDnd: true, // Crucial for Android DND override
       });
     }

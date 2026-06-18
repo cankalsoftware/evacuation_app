@@ -431,11 +431,11 @@ export default function GuestDashboard() {
               <Text style={{ fontSize: headerButtonHeight * 0.4 }} className="text-white">⚙️</Text>
             </TouchableOpacity>
             <TouchableOpacity 
-              style={{ height: headerButtonHeight, borderRadius: headerButtonHeight / 2, paddingHorizontal: headerButtonHeight * 0.4 }}
-              className="bg-neutral-800 border border-neutral-700 items-center justify-center"
+              style={{ height: headerButtonHeight, borderRadius: headerButtonHeight / 2, paddingHorizontal: 10 }}
+              className="bg-neutral-800 border border-neutral-700 items-center justify-center shrink flex-1 max-w-[100px]"
               onPress={() => signOut()}
             >
-              <Text style={{ fontSize: headerButtonHeight * 0.4 }} className="text-white font-bold">Sign Out</Text>
+              <Text adjustsFontSizeToFit numberOfLines={1} style={{ fontSize: headerButtonHeight * 0.4 }} className="text-white font-bold text-center">Sign Out</Text>
             </TouchableOpacity>
           </View>
           

@@ -107,7 +107,8 @@ export default function AuthScreen() {
         if (completeSignIn.status === "complete") {
           await setSignInActive({ session: completeSignIn.createdSessionId });
         } else {
-          setError("Failed to sign in. Please check your credentials.");
+          console.log("[DEV LOG] Sign in incomplete. Status:", completeSignIn.status);
+          setError(`Sign in requires further verification. Status: ${completeSignIn.status}`);
         }
       } else {
         // REGISTER FLOW
@@ -416,6 +417,7 @@ export default function AuthScreen() {
           </>
         )}
       </View>
+      <View nativeID="clerk-captcha" />
     </View>
   );
 }

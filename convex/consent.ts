@@ -19,6 +19,12 @@ export const grantConsent = mutation({
             consentedAt: Date.now()
          });
       }
+      
+      const user = await ctx.db.query("users").withIndex("by_clerkId", q => q.eq("clerkId", args.clerkId)).first();
+      if (user) {
+        await ctx.db.patch(user._id, { permissionsGranted: true });
+      }
+
       return existingConsent._id;
     }
 
@@ -28,6 +34,11 @@ export const grantConsent = mutation({
       hasConsented: true,
       consentedAt: Date.now(),
     });
+
+    const user = await ctx.db.query("users").withIndex("by_clerkId", q => q.eq("clerkId", args.clerkId)).first();
+    if (user) {
+      await ctx.db.patch(user._id, { permissionsGranted: true });
+    }
 
     return consentId;
   },

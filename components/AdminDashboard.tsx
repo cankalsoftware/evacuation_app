@@ -1134,10 +1134,10 @@ export default function AdminDashboard() {
             <Text className="text-white">⚙️</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            className="bg-neutral-800 p-3 rounded-full border border-neutral-700"
+            className="bg-neutral-800 px-3 py-2 rounded-full border border-neutral-700 shrink flex-1 max-w-[80px] items-center justify-center"
             onPress={() => signOut()}
           >
-            <Text className="text-white text-sm">Sign Out</Text>
+            <Text adjustsFontSizeToFit numberOfLines={1} className="text-white text-sm font-bold text-center">Sign Out</Text>
           </TouchableOpacity>
         </View>
       </View>

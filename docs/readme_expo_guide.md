@@ -56,13 +56,16 @@ eas build -p android --profile development
 *(If EAS asks if you want it to install `expo-dev-client` for you, always answer **Yes**!)*
 
 ### Step 2: Install and Run
-1. Download the finished APK and install it on your phone.
-2. Start your local server in "dev client" mode:
+1. Download the finished APK (from the Expo dashboard link) and install it on your Android phone.
+2. Open your PC terminal and start your local server in "dev client" mode:
    ```bash
    npx expo start --dev-client
    ```
-3. Open your newly installed app on your phone and scan the QR code.
-4. The app will connect. If there is a native crash, it will be caught and displayed immediately on your screen and in your VSCode terminal!
+3. A large QR code will appear in your VSCode terminal.
+4. **Do not run the newly installed development APK manually from your app drawer.** Instead, on your Android phone, open your default **Camera app** (or any QR scanner) and scan that terminal QR code. 
+5. Your phone will prompt you to open the link using the newly installed "Development Client" app (it might just be called "Evacuation App" with a dev icon).
+6. The app will open and connect to your local PC server. If there is a native crash, it will be caught and displayed immediately!
+7. if the QR code does not run the app after you start the --dev-client server, you can manually run the app by opening the development client app and then press 'd' to open the developer menu and select 'open fast refresh' and it should open the app
 
 ---
 
