@@ -1,3 +1,4 @@
+import "react-native-reanimated";
 import './global.css';
 import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator, Image, Text, useWindowDimensions } from 'react-native';

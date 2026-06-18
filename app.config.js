@@ -27,7 +27,7 @@ module.exports = {
       config: {
         googleMaps: {
           // Even a placeholder API key prevents a fatal native crash on Android startup.
-          apiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || "your_google_maps_api_key_here"
+          apiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || ""
         }
       }
     },
