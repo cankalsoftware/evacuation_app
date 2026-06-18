@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { View, ScrollView, Platform } from "react-native";
-import { Audio } from "expo-av";
-import { Text, TouchableOpacity } from "./ResponsiveUI";
+import { useAudioPlayer } from 'expo-audio';import { Text, TouchableOpacity } from "./ResponsiveUI";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
 
@@ -10,7 +9,8 @@ export default function LiveRollCall({ incidentId, clerkId, onLocateUser, buildi
   const moveToOutside = useMutation(api.portal.moveToOutside);
   const [countdown, setCountdown] = useState(5);
   const [isMuted, setIsMuted] = useState(false);
-  const sirenSoundRef = useRef<Audio.Sound | null>(null);
+  const sirenPlayer = useAudioPlayer(require('../assets/siren.wav'));
+  sirenPlayer.loop = true;
 
   const panicUsers = evacData.inside.filter((r: any) => r.status === 'PANIC');
   const inBuildingUsers = evacData.inside.filter((r: any) => r.status === 'IN_BUILDING');
@@ -28,29 +28,9 @@ export default function LiveRollCall({ incidentId, clerkId, onLocateUser, buildi
     const manageSiren = async () => {
       try {
         if (panicUsers.length > 0 && !isMuted) {
-          if (!sirenSoundRef.current) {
-            const { sound } = await Audio.Sound.createAsync(
-              require('../assets/siren.wav'),
-              { isLooping: true, volume: 1.0 }
-            );
-            if (isMounted) {
-              sirenSoundRef.current = sound;
-              await sound.playAsync();
-            } else {
-              await sound.unloadAsync();
-            }
-          } else {
-            const status = await sirenSoundRef.current.getStatusAsync();
-            if (status.isLoaded && !status.isPlaying) {
-              await sirenSoundRef.current.playAsync();
-            }
-          }
+          sirenPlayer.play();
         } else {
-          if (sirenSoundRef.current) {
-            await sirenSoundRef.current.stopAsync();
-            await sirenSoundRef.current.unloadAsync();
-            sirenSoundRef.current = null;
-          }
+          sirenPlayer.pause();
         }
       } catch (e) {
         console.log("Admin Dashboard Siren Error:", e);
@@ -66,14 +46,9 @@ export default function LiveRollCall({ incidentId, clerkId, onLocateUser, buildi
 
   useEffect(() => {
     return () => {
-      if (sirenSoundRef.current) {
-        sirenSoundRef.current.stopAsync().then(() => {
-          sirenSoundRef.current?.unloadAsync();
-          sirenSoundRef.current = null;
-        });
-      }
+      sirenPlayer.remove();
     };
-  }, []);
+  }, [sirenPlayer]);
 
   const isInsidePolygon = (lat: number, lon: number, poly: any[]) => {
     let isInside = false;

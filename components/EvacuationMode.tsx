@@ -7,8 +7,7 @@ import { Pedometer } from 'expo-sensors';
 import { useUser } from "@clerk/clerk-expo";
 import { useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
-import { Audio } from 'expo-av';
-
+import { useAudioPlayer } from 'expo-audio';
 // Basic Haversine distance
 function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371e3; // meters
@@ -158,7 +157,8 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
   const [imageAspectRatio, setImageAspectRatio] = useState<number | null>(null);
 
   const [evacStatus, setEvacStatus] = useState<"IN_BUILDING" | "PANIC" | "SAFE">("IN_BUILDING");
-  const [sirenSound, setSirenSound] = useState<Audio.Sound | null>(null);
+  const sirenPlayer = useAudioPlayer(require('../assets/siren.wav'));
+  sirenPlayer.loop = true;
 
   const hasReachedExitRef = useRef<boolean>(false);
 
@@ -412,28 +412,18 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
   // Audio Cleanup
   useEffect(() => {
     return () => {
-      if (sirenSound) {
-        sirenSound.unloadAsync();
-      }
+      sirenPlayer.remove();
     };
-  }, [sirenSound]);
+  }, [sirenPlayer]);
 
   const togglePanic = async () => {
     if (evacStatus === "PANIC") {
       setEvacStatus("IN_BUILDING");
-      if (sirenSound) {
-        await sirenSound.stopAsync();
-      }
+      sirenPlayer.pause();
     } else {
       setEvacStatus("PANIC");
       try {
-        // Play siren loop
-        const { sound } = await Audio.Sound.createAsync(
-          require('../assets/siren.wav'),
-          { isLooping: true, volume: 1.0 }
-        );
-        setSirenSound(sound);
-        await sound.playAsync();
+        sirenPlayer.play();
       } catch (e) {
         console.log("Could not play siren", e);
       }
@@ -454,9 +444,7 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
 
   const markAsSafe = async () => {
     setEvacStatus("SAFE");
-    if (sirenSound) {
-      await sirenSound.stopAsync();
-    }
+    sirenPlayer.pause();
     if (user?.id && activeIncident?._id) {
       await updateStatus({
         clerkId: user.id,
@@ -555,7 +543,7 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
         <Text className="text-green-300 text-center mb-8">Please remain at the assembly point until cleared by administration.</Text>
         <TouchableOpacity
           onPress={() => {
-            if (sirenSound) sirenSound.stopAsync();
+            sirenPlayer.pause();
             onClose();
           }}
           className="bg-white/20 px-8 py-4 rounded-xl border border-white/30"

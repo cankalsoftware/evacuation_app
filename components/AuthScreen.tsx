@@ -24,7 +24,7 @@ export default function AuthScreen() {
   const [showResendWarning, setShowResendWarning] = useState(false);
 
   useEffect(() => {
-    let timer: NodeJS.Timeout;
+    let timer: ReturnType<typeof setInterval>;
     if (pendingVerification && countdown > 0) {
       timer = setInterval(() => {
         setCountdown((prev) => prev - 1);
