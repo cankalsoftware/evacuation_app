@@ -1,6 +1,6 @@
 import { showToast } from "./Toast";
 import React from "react";
-import { View, ScrollView, ActivityIndicator, Modal, Platform, Image, Alert, useWindowDimensions } from "react-native";
+import { View, ScrollView, ActivityIndicator, Modal, Platform, Image, Alert, useWindowDimensions, Linking } from "react-native";
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "../convex/_generated/api";
@@ -994,7 +994,7 @@ export default function AdminDashboard() {
                     {setupAgreedToTandC && <Text className="text-white font-bold text-xs">✓</Text>}
                   </View>
                   <Text className={`flex-1 ${showValidation && !setupAgreedToTandC ? 'text-red-400' : 'text-neutral-300'}`}>
-                    I confirm and agree to the terms and conditions.
+                    I confirm and agree to the <Text className="underline" onPress={() => Linking.openURL('https://www.firevision.uk/terms')}>terms and conditions</Text>.
                   </Text>
                 </TouchableOpacity>
               </View>

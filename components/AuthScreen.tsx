@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { View, ActivityIndicator, Image, KeyboardAvoidingView, Platform, ScrollView, Keyboard } from "react-native";
 import { useSignIn, useSignUp } from "@clerk/clerk-expo";
 
-import { Text, TextInput, TouchableOpacity } from "./ResponsiveUI";
+import { Text, TextInput, TouchableOpacity, FooterLinks } from "./ResponsiveUI";
 
 export default function AuthScreen() {
   const { isLoaded: isSignUpLoaded, signUp, setActive: setSignUpActive } = useSignUp();
@@ -439,6 +439,9 @@ export default function AuthScreen() {
         )}
         </View>
         <View nativeID="clerk-captcha" />
+        <View className="mt-8 mb-4">
+          <FooterLinks />
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { View, Modal, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform } from "react-native";
+import { View, Modal, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform, Linking } from "react-native";
 import { Text, TouchableOpacity, TextInput, FooterLinks } from "./ResponsiveUI";
 import { useUser } from "@clerk/clerk-expo";
 import * as Location from "expo-location";
@@ -206,7 +206,7 @@ export default function ProfileSettingsScreen({ visible, onClose, dashboardData 
               {agreedToTandC && <Text className="text-white font-bold text-xs">✓</Text>}
             </View>
             <Text className="flex-1 text-neutral-300">
-              I confirm and agree to the Terms and Conditions.
+              I confirm and agree to the <Text className="underline" onPress={() => Linking.openURL('https://www.firevision.uk/terms')}>Terms and Conditions</Text>.
             </Text>
           </TouchableOpacity>
 
