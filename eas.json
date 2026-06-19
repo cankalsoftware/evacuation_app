@@ -6,7 +6,13 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_c3RpcnJpbmctbXVsZS04Ny5jbGVyay5hY2NvdW50cy5kZXYk",
+        "EXPO_PUBLIC_CONVEX_URL": "https://careful-bullfrog-161.eu-west-1.convex.cloud",
+        "EXPO_PUBLIC_CONVEX_SITE_URL": "https://careful-bullfrog-161.eu-west-1.convex.site",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyCILIncBo_7EUaqXpfUPIq1qU2VRIE_yfI"
+      }
     },
     "preview": {
       "distribution": "internal",
