@@ -28,9 +28,9 @@ export default function LocationConsentScreen() {
         // We no longer block if Location is denied. Just proceed.
       }
 
-      // Request Push Notification Permission (Phase 13)
+      // Request Push Notification Permission (Phase 13) - MOBILE ONLY
       let pushToken = "";
-      if (Device.isDevice) {
+      if (Platform.OS !== 'web' && Device.isDevice) {
         const { status: existingStatus } = await Notifications.getPermissionsAsync();
         let finalStatus = existingStatus;
         if (existingStatus !== 'granted') {
@@ -45,15 +45,11 @@ export default function LocationConsentScreen() {
           finalStatus = newStatus;
         }
         if (finalStatus !== 'granted') {
-          if (Platform.OS === 'web') {
-            console.warn("Push notification permission denied.");
-          }
           // We no longer block if Push is denied. Just proceed.
         }
 
         // Get Expo Push Token
         try {
-          // projectId usually from app.json, but expo-notifications auto-infers it in dev
           pushToken = (await Notifications.getExpoPushTokenAsync()).data;
         } catch (e) {
           console.log("Failed to get push token:", e);
