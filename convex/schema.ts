@@ -22,6 +22,7 @@ export default defineSchema({
     agreedToTandC: v.optional(v.boolean()),
     permissionsGranted: v.optional(v.boolean()),
     approvalStatus: v.optional(v.union(v.literal("pending"), v.literal("approved"), v.literal("rejected"))),
+    activationEmailSent: v.optional(v.boolean()),
   }).index("by_clerkId", ["clerkId"]),
 
   plans: defineTable({

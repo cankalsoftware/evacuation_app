@@ -1,6 +1,6 @@
 import { showToast } from "./Toast";
-import React, { useState, useEffect } from "react";
-import { View, ActivityIndicator, Image } from "react-native";
+import React, { useState, useEffect, useRef } from "react";
+import { View, ActivityIndicator, Image, KeyboardAvoidingView, Platform, ScrollView, Keyboard } from "react-native";
 import { useSignIn, useSignUp } from "@clerk/clerk-expo";
 
 import { Text, TextInput, TouchableOpacity } from "./ResponsiveUI";
@@ -22,6 +22,7 @@ export default function AuthScreen() {
   const [countdown, setCountdown] = useState(0);
   const [resendCount, setResendCount] = useState(0);
   const [showResendWarning, setShowResendWarning] = useState(false);
+  const passwordRef = useRef<any>(null);
 
   useEffect(() => {
     let timer: ReturnType<typeof setInterval>;
@@ -222,10 +223,18 @@ export default function AuthScreen() {
   };
 
   return (
-    <View className="flex-1 bg-neutral-900 items-center justify-center p-6">
-      <View className="w-full max-w-sm bg-neutral-800 p-8 rounded-3xl shadow-xl border border-neutral-700">
+    <KeyboardAvoidingView 
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      className="flex-1 w-full bg-neutral-900"
+    >
+      <ScrollView 
+        contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View className="w-full max-w-sm bg-neutral-800 p-8 rounded-3xl shadow-xl border border-neutral-700">
 
-        <View className="items-center mb-6 w-full">
+          <View className="items-center mb-6 w-full">
             <Image
               source={require('../FireVision.png')}
               style={{ width: '100%', height: 100, marginBottom: 16 }}
@@ -266,10 +275,20 @@ export default function AuthScreen() {
               value={emailAddress}
               onChangeText={setEmailAddress}
               editable={!loading}
+              returnKeyType="next"
+              onSubmitEditing={() => {
+                if (isForgotPasswordMode) {
+                  handleAuth();
+                } else {
+                  passwordRef.current?.focus();
+                }
+              }}
+              blurOnSubmit={isForgotPasswordMode}
             />
 
             {!isForgotPasswordMode && (
               <TextInput
+                ref={passwordRef}
                 className="bg-neutral-900 border border-neutral-700 text-white rounded-xl px-4 py-4 mb-4 text-lg"
                 autoCapitalize="none"
                 placeholder="Password"
@@ -278,6 +297,8 @@ export default function AuthScreen() {
                 value={password}
                 onChangeText={setPassword}
                 editable={!loading}
+                returnKeyType="done"
+                onSubmitEditing={handleAuth}
               />
             )}
 
@@ -416,8 +437,9 @@ export default function AuthScreen() {
             </TouchableOpacity>
           </>
         )}
-      </View>
-      <View nativeID="clerk-captcha" />
-    </View>
+        </View>
+        <View nativeID="clerk-captcha" />
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }

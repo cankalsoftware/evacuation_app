@@ -2,7 +2,7 @@ import { showToast } from "./Toast";
 import React from "react";
 import { View, ScrollView, ActivityIndicator, Modal, Platform, Image, Alert, useWindowDimensions } from "react-native";
 import { useAuth, useUser } from "@clerk/clerk-expo";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "../convex/_generated/api";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system";
@@ -89,6 +89,7 @@ export default function AdminDashboard() {
   const activeIncidents = useQuery(api.portal.getActiveIncidents, { clerkId: user?.id }) || [];
   const recentIncidents = useQuery(api.portal.getRecentIncidents, { clerkId: user?.id }) || [];
   const allIncidentsHistory = useQuery(api.portal.getAllIncidentsHistory, { clerkId: user?.id });
+  const notifyFireVisionNewAdmin = useAction(api.emails.notifyFireVisionNewAdmin);
 
   const [isRegistering, setIsRegistering] = React.useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = React.useState(false);
@@ -815,28 +816,6 @@ export default function AdminDashboard() {
   const clerkEmail = user?.primaryEmailAddress?.emailAddress || "";
   const needsSetup = !dashboardData.name || !dashboardData.phone || !dashboardData.businessName;
   
-  if (dashboardData.approvalStatus === "pending") {
-    return (
-      <View className="flex-1 bg-neutral-900 justify-center items-center p-6">
-        <View className="w-full mb-8">
-            <Image
-              source={require('../FireVision.png')}
-              style={{ width: '100%', height: 100 }}
-              resizeMode="contain"
-            />
-        </View>
-        <Text className="text-6xl mb-6">⏳</Text>
-        <Text className="text-white text-3xl font-extrabold text-center mb-4">Pending Approval</Text>
-        <Text className="text-neutral-300 text-center text-lg mb-8">
-          Registration Successful. Firevision will confirm your details and contact you to activate your admin account.
-        </Text>
-        <TouchableOpacity className="bg-neutral-800 border border-neutral-700 py-3 px-8 rounded-xl" onPress={() => signOut()}>
-          <Text className="text-white font-bold text-lg">Sign Out</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
   if (needsSetup || showSettings) {
     return (
       <View className="flex-1 bg-neutral-900 pt-6 px-4 md:px-6">
@@ -1070,6 +1049,21 @@ export default function AdminDashboard() {
                     country: setupCountry || "",
                     agreedToTandC: setupAgreedToTandC,
                   });
+                  
+                  if (needsSetup) {
+                    try {
+                      await notifyFireVisionNewAdmin({
+                        clerkId: user?.id || "",
+                        name: setupName || "",
+                        email: clerkEmail,
+                        businessName: setupBusinessName || "",
+                        phone: setupPhone || "",
+                      });
+                    } catch (err) {
+                      console.warn("Failed to notify FireVision", err);
+                    }
+                  }
+                  
                   setShowSettings(false);
                 } catch (e) {
                   showToast("Error saving profile", "error");
@@ -1107,6 +1101,28 @@ export default function AdminDashboard() {
 
           <FooterLinks />
         </ScrollView>
+      </View>
+    );
+  }
+
+  if (dashboardData.approvalStatus === "pending") {
+    return (
+      <View className="flex-1 bg-neutral-900 justify-center items-center p-6">
+        <View className="w-full mb-8">
+            <Image
+              source={require('../FireVision.png')}
+              style={{ width: '100%', height: 100 }}
+              resizeMode="contain"
+            />
+        </View>
+        <Text className="text-6xl mb-6">⏳</Text>
+        <Text className="text-white text-3xl font-extrabold text-center mb-4">Pending Approval</Text>
+        <Text className="text-neutral-300 text-center text-lg mb-8">
+          Registration Successful. Firevision will confirm your details and contact you to activate your admin account.
+        </Text>
+        <TouchableOpacity className="bg-neutral-800 border border-neutral-700 py-3 px-8 rounded-xl" onPress={() => signOut()}>
+          <Text className="text-white font-bold text-lg">Sign Out</Text>
+        </TouchableOpacity>
       </View>
     );
   }

@@ -457,7 +457,7 @@ export default function GuestDashboard() {
         )}
 
         <TouchableOpacity 
-          style={{ width: panicButtonSize, height: panicButtonSize, borderRadius: panicButtonSize / 2 }}
+          style={{ width: panicButtonSize, height: panicButtonSize, borderRadius: panicButtonSize * 0.22 }}
           className={`items-center justify-center shadow-[0_0_80px_rgba(220,38,38,0.6)] bg-white ${!hasPermissions ? 'opacity-50' : ''}`}
           onPress={() => {
             if (!hasPermissions) {
@@ -474,7 +474,7 @@ export default function GuestDashboard() {
         >
           <Image 
             source={require('../assets/icon.png')} 
-            style={{ width: '100%', height: '100%', borderRadius: panicButtonSize / 2, resizeMode: 'cover' }}
+            style={{ width: '100%', height: '100%', borderRadius: panicButtonSize * 0.22, resizeMode: 'cover' }}
           />
         </TouchableOpacity>
       </View>
