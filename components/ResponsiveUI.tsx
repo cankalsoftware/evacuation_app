@@ -20,7 +20,7 @@ export const Text = React.forwardRef<RNText, TextProps & { className?: string }>
   return <RNText ref={ref} {...props} style={[{ fontSize: baseSize * fontScale }, props.style]} />;
 });
 
-export const TouchableOpacity = React.forwardRef<React.ElementRef<typeof RNTouchableOpacity>, TouchableOpacityProps & { className?: string }>((props, ref) => {
+export const TouchableOpacity = React.forwardRef<React.ComponentRef<typeof RNTouchableOpacity>, TouchableOpacityProps & { className?: string }>((props, ref) => {
   const { width } = useWindowDimensions();
   const scale = Math.min(Math.max(width / 400, 1), 1.6);
   let p, px, py;

@@ -1,10 +1,11 @@
 import { showToast } from "./Toast";
 import React from "react";
-import { View, ScrollView, ActivityIndicator, Modal, Platform, Image, Alert, useWindowDimensions, Linking } from "react-native";
+import { View, ScrollView, ActivityIndicator, Modal, Platform, Image, Alert, useWindowDimensions, Linking, TouchableOpacity } from "react-native";
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "../convex/_generated/api";
 import * as ImagePicker from "expo-image-picker";
+import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import * as Location from "expo-location";
@@ -12,7 +13,7 @@ import * as Notifications from "expo-notifications";
 import LiveRollCall from "./LiveRollCall";
 
 // Import Responsive Wrappers
-import { Text, TouchableOpacity, TextInput, MaterialCommunityIcons, FooterLinks } from "./ResponsiveUI";
+import { Text, TextInput, MaterialCommunityIcons, FooterLinks } from "./ResponsiveUI";
 
 let MapView: any = null;
 let Marker: any = null;
@@ -103,6 +104,8 @@ export default function AdminDashboard() {
   const [isLocatingUser, setIsLocatingUser] = React.useState(false);
   const [mapEditorStep, setMapEditorStep] = React.useState<1 | 2>(1); // 1 = Calibration, 2 = Safe Routes
   const [gridPaintMode, setGridPaintMode] = React.useState<"safe" | "exit" | "erase" | "pan">("safe");
+  const [gridSizeMeters, setGridSizeMeters] = React.useState(1.2);
+  const scrollViewRef = React.useRef<ScrollView>(null);
   const [userZoom, setUserZoom] = React.useState(1);
   const [step1Zoom, setStep1Zoom] = React.useState(1);
   const [step1PanMode, setStep1PanMode] = React.useState(false);
@@ -330,8 +333,8 @@ export default function AdminDashboard() {
     const heightMeters = getDistanceInMeters(minLat, minLon, maxLat, minLon);
     const widthMeters = getDistanceInMeters(minLat, minLon, minLat, maxLon);
 
-    const rows = Math.max(1, Math.ceil(heightMeters / 10));
-    const cols = Math.max(1, Math.ceil(widthMeters / 10));
+    const rows = Math.max(1, Math.ceil(heightMeters / gridSizeMeters));
+    const cols = Math.max(1, Math.ceil(widthMeters / gridSizeMeters));
 
     return { rows, cols, minLat, maxLat, minLon, maxLon };
   };
@@ -779,8 +782,8 @@ export default function AdminDashboard() {
 
           setStep1Zoom(baseScale);
           setStep1PanOffset({
-            x: -(boxCenterX - imgLayout.w / 2) * baseScale,
-            y: -(boxCenterY - imgLayout.h / 2) * baseScale
+            x: -(boxCenterX - imgLayout.w / 2),
+            y: -(boxCenterY - imgLayout.h / 2)
           });
         }
       }
@@ -865,7 +868,7 @@ export default function AdminDashboard() {
   const pickOrTakeImage = (onImageSelected: (uri: string, mimeType?: string) => void) => {
     Alert.alert(
       "Upload Master Plan Image",
-      "Would you like to take a photo or pick from your gallery?",
+      "Would you like to take a new photo, or upload an existing file?",
       [
         {
           text: "Take Photo",
@@ -885,20 +888,48 @@ export default function AdminDashboard() {
           }
         },
         {
-          text: "Choose from Gallery",
-          onPress: async () => {
-            const libPerm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-            if (libPerm.granted === false) {
-              showToast("Library permission is required!", "error");
-              return;
-            }
-            const result = await ImagePicker.launchImageLibraryAsync({
-              mediaTypes: ['images'],
-              quality: 0.8,
-            });
-            if (!result.canceled && result.assets && result.assets.length > 0) {
-              onImageSelected(result.assets[0].uri, result.assets[0].mimeType);
-            }
+          text: "Upload Existing",
+          onPress: () => {
+            // Nested alert to bypass Android's 3-button limit
+            Alert.alert(
+              "Select Source",
+              "Where is your file located?",
+              [
+                {
+                  text: "Photo Gallery",
+                  onPress: async () => {
+                    const libPerm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                    if (libPerm.granted === false) {
+                      showToast("Library permission is required!", "error");
+                      return;
+                    }
+                    const result = await ImagePicker.launchImageLibraryAsync({
+                      mediaTypes: ['images'],
+                      quality: 0.8,
+                    });
+                    if (!result.canceled && result.assets && result.assets.length > 0) {
+                      onImageSelected(result.assets[0].uri, result.assets[0].mimeType);
+                    }
+                  }
+                },
+                {
+                  text: "Files / Cloud (Drive)",
+                  onPress: async () => {
+                    const result = await DocumentPicker.getDocumentAsync({
+                      type: ['image/*'],
+                      copyToCacheDirectory: true,
+                    });
+                    if (!result.canceled && result.assets && result.assets.length > 0) {
+                      onImageSelected(result.assets[0].uri, result.assets[0].mimeType);
+                    }
+                  }
+                },
+                {
+                  text: "Cancel",
+                  style: "cancel"
+                }
+              ]
+            );
           }
         },
         {
@@ -2559,21 +2590,23 @@ export default function AdminDashboard() {
           })() : (
             <>
               {/* Tabs */}
-              <View className="flex-row mb-6 bg-neutral-800 rounded-xl p-1">
+              <View className="flex-row border-b border-neutral-700 mb-4 pb-2">
                 <TouchableOpacity
-                  className={`flex-1 py-3 rounded-lg items-center ${mapEditorStep === 1 ? 'bg-neutral-700 shadow' : ''}`}
+                  className={`flex-1 py-2 rounded-t-lg mx-1 flex-row items-center justify-center ${mapEditorStep === 1 ? 'bg-blue-600' : 'bg-neutral-800'}`}
                   onPress={() => setMapEditorStep(1)}
+                  disabled={!selectedBuilding}
                 >
-                  <Text className={`font-bold text-lg ${mapEditorStep === 1 ? 'text-white' : 'text-neutral-400'}`}>Step 1: Calibrate</Text>
+                  <Text className={`font-bold text-center w-full px-1 ${mapEditorStep === 1 ? 'text-white' : 'text-neutral-400'}`} adjustsFontSizeToFit numberOfLines={1} minimumFontScale={0.5}>Step 1: Calibrate</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  className={`flex-1 py-3 rounded-lg items-center ${mapEditorStep === 2 ? 'bg-neutral-700 shadow' : ''}`}
+                  className={`flex-1 py-2 rounded-t-lg mx-1 flex-row items-center justify-center ${mapEditorStep === 2 ? 'bg-blue-600' : 'bg-neutral-800'}`}
                   onPress={() => {
                     performAutoZoom();
                     setMapEditorStep(2);
                   }}
+                  disabled={!selectedBuilding}
                 >
-                  <Text className={`font-bold text-lg ${mapEditorStep === 2 ? 'text-white' : 'text-neutral-400'}`}>Step 2: Safe Routes</Text>
+                  <Text className={`font-bold text-center w-full px-1 ${mapEditorStep === 2 ? 'text-white' : 'text-neutral-400'}`} adjustsFontSizeToFit numberOfLines={1} minimumFontScale={0.5}>Step 2: Safe Routes</Text>
                 </TouchableOpacity>
               </View>
 
@@ -2724,15 +2757,19 @@ export default function AdminDashboard() {
                                 {activeCalibIdx === i && (() => {
                                   const screenX = (px - imgLayout.w / 2) * step1Zoom + step1PanOffset.x + imgLayout.w / 2;
                                   const screenY = (py - imgLayout.h / 2) * step1Zoom + step1PanOffset.y + imgLayout.h / 2;
-                                  const dpadBaseLeft = screenX > imgLayout.w - 140 ? -115 : 75;
-                                  const dpadBaseTop = screenY < 100 ? 40 : (screenY > imgLayout.h - 100 ? -80 : -20);
+                                  const dpadBaseLeft = screenX > imgLayout.w - 140 ? -125 : 75;
+                                  const dpadBaseTop = screenY < 100 ? 40 : (screenY > imgLayout.h - 100 ? -90 : -25);
                                   return (
-                                    <View className="absolute bg-neutral-900/90 rounded-full border border-neutral-600 shadow-xl z-50 flex-row items-center justify-center" style={{ width: 80, height: 80, left: dpadBaseLeft, top: dpadBaseTop }}>
-                                      <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleNudgeCalib(i, 0, -1); }} className="absolute top-1 p-1 bg-neutral-700 rounded-full"><MaterialCommunityIcons name="chevron-up" size={20} color="white" /></TouchableOpacity>
-                                      <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleNudgeCalib(i, 0, 1); }} className="absolute bottom-1 p-1 bg-neutral-700 rounded-full"><MaterialCommunityIcons name="chevron-down" size={20} color="white" /></TouchableOpacity>
-                                      <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleNudgeCalib(i, -1, 0); }} className="absolute left-1 p-1 bg-neutral-700 rounded-full"><MaterialCommunityIcons name="chevron-left" size={20} color="white" /></TouchableOpacity>
-                                      <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleNudgeCalib(i, 1, 0); }} className="absolute right-1 p-1 bg-neutral-700 rounded-full"><MaterialCommunityIcons name="chevron-right" size={20} color="white" /></TouchableOpacity>
-                                      <View className="w-2 h-2 bg-neutral-500 rounded-full" />
+                                    <View className="absolute bg-neutral-900/90 rounded-full border border-neutral-600 shadow-xl z-50 flex-row items-center justify-center" style={{ width: 90, height: 90, left: dpadBaseLeft, top: dpadBaseTop }}>
+                                      <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleNudgeCalib(i, 0, -1); }} className="absolute top-1 p-2 bg-neutral-700 rounded-full"><MaterialCommunityIcons name="chevron-up" size={24} color="white" /></TouchableOpacity>
+                                      <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleNudgeCalib(i, 0, 1); }} className="absolute bottom-1 p-2 bg-neutral-700 rounded-full"><MaterialCommunityIcons name="chevron-down" size={24} color="white" /></TouchableOpacity>
+                                      <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleNudgeCalib(i, -1, 0); }} className="absolute left-1 p-2 bg-neutral-700 rounded-full"><MaterialCommunityIcons name="chevron-left" size={24} color="white" /></TouchableOpacity>
+                                      <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleNudgeCalib(i, 1, 0); }} className="absolute right-1 p-2 bg-neutral-700 rounded-full"><MaterialCommunityIcons name="chevron-right" size={24} color="white" /></TouchableOpacity>
+                                      
+                                      {/* Green Set Button */}
+                                      <TouchableOpacity onPress={(e) => { e.stopPropagation(); setActiveCalibIdx(-1); }} className="w-8 h-8 bg-green-500 rounded-full border border-white items-center justify-center">
+                                        <MaterialCommunityIcons name="check-bold" size={16} color="white" />
+                                      </TouchableOpacity>
                                     </View>
                                   );
                                 })()}
@@ -2771,7 +2808,7 @@ export default function AdminDashboard() {
                 </ScrollView>
               ) : (
                 <ScrollView className="flex-1" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
-                  <Text className="text-neutral-400 text-lg mb-4">Select a brush type, then tap the map to paint grid cells (10x10m).</Text>
+                  <Text className="text-neutral-400 text-lg mb-4">Select a brush type, then tap the map to paint grid cells.</Text>
 
                   {/* Toolbar */}
                   <View className="flex-row space-x-2 mb-2">
@@ -2873,7 +2910,7 @@ export default function AdminDashboard() {
                                 const tl = mapGPSToImage(maxLat, minLon);
                                 const br = mapGPSToImage(minLat, maxLon);
                                 if (tl && br) {
-                                  const isLegacy = selectedBuilding.imageCalibrationPoints[0].x > 2;
+                                  const isLegacy = selectedBuilding.imageCalibrationPoints[0]?.x > 2;
                                   const tlX = isLegacy ? tl.x : bounds.offsetX + tl.x * bounds.renderW;
                                   const brX = isLegacy ? br.x : bounds.offsetX + br.x * bounds.renderW;
                                   const tlY = isLegacy ? tl.y : bounds.offsetY + tl.y * bounds.renderH;
