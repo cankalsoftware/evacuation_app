@@ -23,6 +23,7 @@ export default defineSchema({
     permissionsGranted: v.optional(v.boolean()),
     approvalStatus: v.optional(v.union(v.literal("pending"), v.literal("approved"), v.literal("rejected"))),
     activationEmailSent: v.optional(v.boolean()),
+    activeDeviceId: v.optional(v.string()), // Phase 23: Single Device Login
   }).index("by_clerkId", ["clerkId"]),
 
   plans: defineTable({

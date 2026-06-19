@@ -6,6 +6,7 @@ export const syncUser = mutation({
     clerkId: v.string(),
     email: v.optional(v.string()),
     role: v.optional(v.string()),
+    activeDeviceId: v.optional(v.string()), // Phase 23
   },
   handler: async (ctx, args) => {
     // Check if user already exists
@@ -22,11 +23,13 @@ export const syncUser = mutation({
       // Update email or role if they changed
       if (
         (args.email && existingUser.email !== args.email) ||
-        (existingUser.role !== newRole)
+        (existingUser.role !== newRole) ||
+        (args.activeDeviceId && existingUser.activeDeviceId !== args.activeDeviceId)
       ) {
         await ctx.db.patch(existingUser._id, { 
           ...(args.email ? { email: args.email } : {}),
           role: newRole,
+          ...(args.activeDeviceId ? { activeDeviceId: args.activeDeviceId } : {}),
         });
       }
       return existingUser._id;
@@ -39,9 +42,21 @@ export const syncUser = mutation({
       email: args.email,
       role: verifiedRole,
       createdAt: Date.now(),
+      activeDeviceId: args.activeDeviceId,
     });
 
     return newUserId;
+  },
+});
+
+export const checkActiveDevice = query({
+  args: { clerkId: v.string() },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerkId", (q) => q.eq("clerkId", args.clerkId))
+      .first();
+    return user?.activeDeviceId || null;
   },
 });
 

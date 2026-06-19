@@ -1,7 +1,7 @@
 import "react-native-reanimated";
 import './global.css';
 import { StatusBar } from 'expo-status-bar';
-import { View, ActivityIndicator, Image, Text, useWindowDimensions } from 'react-native';
+import { View, ActivityIndicator, Image, Text, useWindowDimensions, TouchableOpacity } from 'react-native';
 import React, { useEffect, useState } from 'react';
 import { ClerkProvider, useAuth, useUser } from "@clerk/clerk-expo";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
@@ -10,6 +10,7 @@ import * as SecureStore from "expo-secure-store";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import { api } from "./convex/_generated/api";
+import { getOrCreateDeviceId } from "./utils/device";
 
 import AuthScreen from "./components/AuthScreen";
 import LocationConsentScreen from "./components/LocationConsentScreen";
@@ -47,14 +48,37 @@ Notifications.setNotificationHandler({
 });
 
 function RootNavigator() {
-  const { isLoaded, isSignedIn, userId } = useAuth();
+  const { isLoaded, isSignedIn, userId, signOut } = useAuth();
   const { user } = useUser();
   const syncUser = useMutation(api.users.syncUser);
   const [hasSynced, setHasSynced] = useState(false);
+  const [deviceId, setDeviceId] = useState<string | null>(null);
+  const [collisionWarning, setCollisionWarning] = useState(false);
 
   useEffect(() => {
-    if (isSignedIn && userId && user?.primaryEmailAddress?.emailAddress && !hasSynced) {
-      const { Platform } = require('react-native');
+    getOrCreateDeviceId().then(id => setDeviceId(id));
+  }, []);
+
+  const convexUser = useQuery(api.users.getUser, { clerkId: userId ?? undefined });
+
+  // Phase 23: Login Collision Interceptor
+  useEffect(() => {
+    if (isSignedIn && userId && user?.primaryEmailAddress?.emailAddress && !hasSynced && deviceId && convexUser !== undefined) {
+      // If the user already has an active device, and it's not this one, trigger the warning BEFORE syncing!
+      if (convexUser && convexUser.activeDeviceId && convexUser.activeDeviceId !== deviceId && !collisionWarning) {
+        setCollisionWarning(true);
+        return;
+      }
+
+      if (!collisionWarning) {
+        executeSync();
+      }
+    }
+  }, [isSignedIn, userId, user?.primaryEmailAddress?.emailAddress, hasSynced, syncUser, deviceId, convexUser, collisionWarning]);
+
+  const executeSync = () => {
+    if (!user?.primaryEmailAddress?.emailAddress || !userId || !deviceId) return;
+    const { Platform } = require('react-native');
       const getRolePromise = Platform.OS === 'web' 
         ? Promise.resolve(localStorage.getItem('requested_role'))
         : SecureStore.getItemAsync('requested_role');
@@ -66,11 +90,29 @@ function RootNavigator() {
         syncUser({ 
           clerkId: userId,
           email: user.primaryEmailAddress!.emailAddress,
-          role: role
+          role: role,
+          activeDeviceId: deviceId
         }).then(() => setHasSynced(true)).catch((err: any) => console.error("Sync failed:", err));
       }).catch((err: any) => console.error("SecureStore failed:", err));
+  };
+
+  // Auto-Kick Enforcer (Listen for changes AFTER we have synced)
+  useEffect(() => {
+    if (hasSynced && isSignedIn && convexUser && deviceId && convexUser.activeDeviceId) {
+      if (convexUser.activeDeviceId !== deviceId) {
+        console.warn("Device kicked! Active device changed.");
+        signOut();
+        setHasSynced(false); // Reset sync state
+        setCollisionWarning(false);
+        if (Platform.OS !== 'web') {
+           const { Alert } = require('react-native');
+           Alert.alert("Logged Out", "You were logged out because your account was accessed from another device.");
+        } else {
+           window.alert("You were logged out because your account was accessed from another device.");
+        }
+      }
     }
-  }, [isSignedIn, userId, user?.primaryEmailAddress?.emailAddress, hasSynced, syncUser]);
+  }, [hasSynced, isSignedIn, convexUser?.activeDeviceId, deviceId, signOut]);
 
   const hasConsented = useQuery(api.consent.getConsentStatus, 
     { clerkId: userId ?? undefined }
@@ -80,6 +122,42 @@ function RootNavigator() {
     return (
       <View className="flex-1 bg-neutral-900 items-center justify-center">
         <ActivityIndicator color="red" size="large" />
+      </View>
+    );
+  }
+
+  if (collisionWarning) {
+    return (
+      <View className="flex-1 bg-neutral-900 items-center justify-center p-6">
+        <View className="w-full max-w-sm bg-neutral-800 p-8 rounded-3xl shadow-xl border border-neutral-700 items-center">
+          <Text className="text-4xl mb-4">⚠️</Text>
+          <Text className="text-xl font-bold text-white mb-4 text-center">Multiple Devices Detected</Text>
+          <Text className="text-neutral-400 mb-8 text-center leading-relaxed">
+            You are currently logged in on another device. If you proceed, the other device will be automatically logged out.
+          </Text>
+          <View className="w-full flex-col space-y-3">
+             <View className="mb-3">
+               <TouchableOpacity 
+                 onPress={() => {
+                   executeSync();
+                   setCollisionWarning(false);
+                 }}
+                 className="bg-red-600 border border-neutral-700 rounded-xl py-4 items-center"
+               >
+                 <Text className="text-white font-bold text-center">Log Out Other Device & Continue</Text>
+               </TouchableOpacity>
+             </View>
+             <TouchableOpacity 
+               onPress={() => {
+                 signOut();
+                 setCollisionWarning(false);
+               }}
+               className="bg-neutral-800 border border-neutral-700 rounded-xl py-4 items-center"
+             >
+               <Text className="text-white font-bold text-center">Cancel Login</Text>
+             </TouchableOpacity>
+          </View>
+        </View>
       </View>
     );
   }
