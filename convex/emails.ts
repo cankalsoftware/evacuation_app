@@ -95,34 +95,17 @@ The FireVision Team
       console.log(`Activation email sent to ${args.email}`);
       
       // Mark the user as having received the email so we don't send it again
-      await ctx.runMutation(internal.emails.markActivationEmailSent, { userId: args.userId });
+      await ctx.runMutation(internal.users.markActivationEmailSent, { userId: args.userId });
     } catch (error) {
       console.error("Failed to send activation email", error);
     }
   },
 });
 
-export const markActivationEmailSent = internalMutation({
-  args: { userId: v.id("users") },
-  handler: async (ctx, args) => {
-    await ctx.db.patch(args.userId, { activationEmailSent: true });
-  },
-});
-
-import { internalQuery } from "./_generated/server";
-
-export const getPendingActivationAdmins = internalQuery({
-  args: {},
-  handler: async (ctx) => {
-    const users = await ctx.db.query("users").collect();
-    return users.filter(u => u.role === "admin" && u.approvalStatus === "approved" && u.activationEmailSent !== true && !!u.email);
-  },
-});
-
 export const processActivationEmailsCron = internalAction({
   args: {},
   handler: async (ctx) => {
-    const pendingAdmins = await ctx.runQuery(internal.emails.getPendingActivationAdmins);
+    const pendingAdmins = await ctx.runQuery(internal.users.getPendingActivationAdmins);
     for (const admin of pendingAdmins) {
       if (admin.email && admin.name) {
         await ctx.runAction(internal.emails.sendAdminActivationEmail, {

@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { mutation, query, internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 
 export const syncUser = mutation({
@@ -110,3 +110,19 @@ export const savePushToken = mutation({
     });
   },
 });
+
+export const markActivationEmailSent = internalMutation({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.userId, { activationEmailSent: true });
+  },
+});
+
+export const getPendingActivationAdmins = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const users = await ctx.db.query("users").collect();
+    return users.filter(u => u.role === "admin" && u.approvalStatus === "approved" && u.activationEmailSent !== true && !!u.email);
+  },
+});
+
