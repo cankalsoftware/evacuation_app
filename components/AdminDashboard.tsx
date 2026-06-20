@@ -103,12 +103,12 @@ export default function AdminDashboard() {
   const [isMapEditorOpen, setIsMapEditorOpen] = React.useState(false);
   const [isLocatingUser, setIsLocatingUser] = React.useState(false);
   const [mapEditorStep, setMapEditorStep] = React.useState<1 | 2>(1); // 1 = Calibration, 2 = Safe Routes
-  const [gridPaintMode, setGridPaintMode] = React.useState<"safe" | "exit" | "erase" | "pan">("safe");
+  const [gridPaintMode, setGridPaintMode] = React.useState<"safe" | "exit" | "erase" | "pan">("pan");
   const [gridSizeMeters, setGridSizeMeters] = React.useState(1.2);
   const scrollViewRef = React.useRef<ScrollView>(null);
   const [userZoom, setUserZoom] = React.useState(1);
   const [step1Zoom, setStep1Zoom] = React.useState(1);
-  const [step1PanMode, setStep1PanMode] = React.useState(false);
+  const [step1PanMode, setStep1PanMode] = React.useState(true);
 
   const [mapPanOffset, setMapPanOffset] = React.useState({ x: 0, y: 0 });
   const [step1PanOffset, setStep1PanOffset] = React.useState({ x: 0, y: 0 });
@@ -421,7 +421,7 @@ export default function AdminDashboard() {
     setZoom: (z: number) => void,
     setPan: (p: { x: number, y: number }) => void,
     isPanMode: boolean,
-    onPaint: (rawX: number, rawY: number) => void
+    onPaint?: (rawX: number, rawY: number) => void
   ) => {
     const touches = e.nativeEvent.touches;
     if (touches && touches.length >= 2) {
@@ -472,7 +472,9 @@ export default function AdminDashboard() {
       } else {
         const rawX = Platform.OS === 'web' && (e.nativeEvent as any).offsetX !== undefined ? (e.nativeEvent as any).offsetX : e.nativeEvent.locationX;
         const rawY = Platform.OS === 'web' && (e.nativeEvent as any).offsetY !== undefined ? (e.nativeEvent as any).offsetY : e.nativeEvent.locationY;
-        onPaint(rawX, rawY);
+        if (onPaint) {
+          onPaint(rawX, rawY);
+        }
       }
     }
   };
@@ -534,9 +536,6 @@ export default function AdminDashboard() {
     const newPoints = [...calibPoints];
     newPoints[activeCalibIdx] = { x, y };
     setCalibPoints(newPoints);
-    if (isNewPlacement && activeCalibIdx < (selectedBuilding?.polygon?.length || 4) - 1) {
-      setActiveCalibIdx(activeCalibIdx + 1);
-    }
   };
 
   const handleGridInteraction = (screenX: number, screenY: number) => {
@@ -2353,7 +2352,10 @@ export default function AdminDashboard() {
                       setCalibPoints(selectedBuilding.imageCalibrationPoints || []);
                       setGridPaths(selectedBuilding.gridPaths || []);
                       setMapEditorStep(1);
-                      setGridPaintMode("safe");
+                      setStep1PanMode(true);
+                      setGridPaintMode("pan");
+                      setStep1Zoom(1);
+                      setStep1PanOffset({ x: 0, y: 0 });
                       setIsMapEditorOpen(true);
                     }}
                   >
@@ -2593,7 +2595,12 @@ export default function AdminDashboard() {
               <View className="flex-row border-b border-neutral-700 mb-4 pb-2">
                 <TouchableOpacity
                   className={`flex-1 py-2 rounded-t-lg mx-1 flex-row items-center justify-center ${mapEditorStep === 1 ? 'bg-blue-600' : 'bg-neutral-800'}`}
-                  onPress={() => setMapEditorStep(1)}
+                  onPress={() => {
+                    setMapEditorStep(1);
+                    setStep1PanMode(true);
+                    setStep1Zoom(1);
+                    setStep1PanOffset({ x: 0, y: 0 });
+                  }}
                   disabled={!selectedBuilding}
                 >
                   <Text className={`font-bold text-center w-full px-1 ${mapEditorStep === 1 ? 'text-white' : 'text-neutral-400'}`} adjustsFontSizeToFit numberOfLines={1} minimumFontScale={0.5}>Step 1: Calibrate</Text>
@@ -2690,7 +2697,7 @@ export default function AdminDashboard() {
                         className="w-full h-full justify-center items-center"
                         onStartShouldSetResponder={() => true}
                         onResponderGrant={(e) => handleTouchStart(e, step1Zoom, step1PanOffset, step1PanMode, handleStep1Paint)}
-                        onResponderMove={(e) => handleTouchMove(e, step1Zoom, setStep1Zoom, setStep1PanOffset, step1PanMode, handleStep1Paint)}
+                        onResponderMove={(e) => handleTouchMove(e, step1Zoom, setStep1Zoom, setStep1PanOffset, step1PanMode, undefined)}
                       >
                         <View
                           style={{
@@ -2999,6 +3006,9 @@ export default function AdminDashboard() {
                         if (calibPoints.filter(Boolean).length !== selectedBuilding?.polygon?.length) {
                           showToast("Please complete Step 1 (Calibration) before saving.");
                           setMapEditorStep(1);
+                          setStep1PanMode(true);
+                          setStep1Zoom(1);
+                          setStep1PanOffset({ x: 0, y: 0 });
                           return;
                         }
                         if (!gridPaths.some(p => p.isExit)) {
