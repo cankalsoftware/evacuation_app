@@ -102,8 +102,9 @@ export default function AdminDashboard() {
 
   const [isMapEditorOpen, setIsMapEditorOpen] = React.useState(false);
   const [isLocatingUser, setIsLocatingUser] = React.useState(false);
-  const [mapEditorStep, setMapEditorStep] = React.useState<1 | 2>(1); // 1 = Calibration, 2 = Safe Routes
-  const [gridPaintMode, setGridPaintMode] = React.useState<"safe" | "exit" | "erase" | "pan">("pan");
+  const [mapEditorStep, setMapEditorStep] = React.useState<1 | 2>(1); // 1 = Calibration, 2 = Safe Routes  const [activeCalibIdx, setActiveCalibIdx] = useState(-1);
+  const [gridPaintMode, setGridPaintMode] = useState<"pan"|"exit"|"safe_route"|"erase">("pan");
+  const lastPaintedCellRef = useRef<{row: number, col: number} | null>(null);
   const [gridSizeMeters, setGridSizeMeters] = React.useState(1.2);
   const scrollViewRef = React.useRef<ScrollView>(null);
   const [userZoom, setUserZoom] = React.useState(1);
@@ -392,6 +393,7 @@ export default function AdminDashboard() {
       }
 
       if (!isPanMode && onPaint) {
+        lastPaintedCellRef.current = null; // Reset path tracking on new tap
         const mapRef = onPaint === handleStep1Paint ? step1MapRef : step2MapRef;
         let lx, ly;
         if (Platform.OS === 'web') {
@@ -576,33 +578,64 @@ export default function AdminDashboard() {
     col = Math.max(0, Math.min(cols - 1, col));
 
     if (row >= 0 && col >= 0) {
-      setGridPaths(prev => {
-        const existingIdx = prev.findIndex((p: any) => p.row === row && p.col === col);
-        if (gridPaintMode === "erase") {
-          if (existingIdx >= 0) {
-            const newPaths = [...prev];
-            newPaths.splice(existingIdx, 1);
-            return newPaths;
-          }
-        } else {
-          const newCell = {
-            row, col,
-            type: gridPaintMode,
-            lat: maxLat - ((row + 0.5) * cellLatSpan),
-            lon: minLon + ((col + 0.5) * cellLonSpan),
-            isExit: gridPaintMode === "exit"
-          };
+      const cellsToPaint: {row: number, col: number}[] = [];
 
-          if (existingIdx !== -1) {
-            if (prev[existingIdx].isExit === newCell.isExit) return prev; // No change needed
-            const newPaths = [...prev];
-            newPaths[existingIdx] = newCell;
-            return newPaths;
+      if (lastPaintedCellRef.current) {
+        // Bresenham's line algorithm to fill gaps during fast dragging
+        let r0 = lastPaintedCellRef.current.row;
+        let c0 = lastPaintedCellRef.current.col;
+        const r1 = row;
+        const c1 = col;
+        
+        const dc = Math.abs(c1 - c0), sc = c0 < c1 ? 1 : -1;
+        const dr = -Math.abs(r1 - r0), sr = r0 < r1 ? 1 : -1;
+        let err = dc + dr, e2; 
+        
+        while (true) {
+          cellsToPaint.push({ row: r0, col: c0 });
+          if (r0 === r1 && c0 === c1) break;
+          e2 = 2 * err;
+          if (e2 >= dr) { err += dr; c0 += sc; }
+          if (e2 <= dc) { err += dc; r0 += sr; }
+        }
+      } else {
+        cellsToPaint.push({ row, col });
+      }
+
+      lastPaintedCellRef.current = { row, col };
+
+      setGridPaths(prev => {
+        let modified = false;
+        let newPaths = [...prev];
+
+        for (const cell of cellsToPaint) {
+          const existingIdx = newPaths.findIndex((p: any) => p.row === cell.row && p.col === cell.col);
+          if (gridPaintMode === "erase") {
+            if (existingIdx >= 0) {
+              newPaths.splice(existingIdx, 1);
+              modified = true;
+            }
           } else {
-            return [...prev, newCell];
+            const newCell = {
+              row: cell.row, col: cell.col,
+              type: gridPaintMode,
+              lat: maxLat - ((cell.row + 0.5) * cellLatSpan),
+              lon: minLon + ((cell.col + 0.5) * cellLonSpan),
+              isExit: gridPaintMode === "exit"
+            };
+
+            if (existingIdx >= 0) {
+              if (newPaths[existingIdx].type !== gridPaintMode) {
+                newPaths[existingIdx] = newCell;
+                modified = true;
+              }
+            } else {
+              newPaths.push(newCell);
+              modified = true;
+            }
           }
         }
-        return prev;
+        return modified ? newPaths : prev;
       });
     }
   };
