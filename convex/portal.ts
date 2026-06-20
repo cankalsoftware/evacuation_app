@@ -356,7 +356,7 @@ export const updateBuildingGridPaths = mutation({
   args: {
     clerkId: v.string(),
     buildingId: v.id("buildings"),
-    gridPaths: v.array(v.object({ row: v.number(), col: v.number(), lat: v.number(), lon: v.number(), isExit: v.boolean() })),
+    gridPaths: v.array(v.object({ row: v.number(), col: v.number(), lat: v.number(), lon: v.number(), isExit: v.boolean(), type: v.optional(v.string()) })),
   },
   handler: async (ctx, args) => {
     const user = await ctx.db

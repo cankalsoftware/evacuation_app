@@ -102,14 +102,16 @@ export default function AdminDashboard() {
 
   const [isMapEditorOpen, setIsMapEditorOpen] = React.useState(false);
   const [isLocatingUser, setIsLocatingUser] = React.useState(false);
-  const [mapEditorStep, setMapEditorStep] = React.useState<1 | 2>(1); // 1 = Calibration, 2 = Safe Routes  const [activeCalibIdx, setActiveCalibIdx] = useState(-1);
-  const [gridPaintMode, setGridPaintMode] = useState<"pan"|"exit"|"safe_route"|"erase">("pan");
-  const lastPaintedCellRef = useRef<{row: number, col: number} | null>(null);
+  const [mapEditorStep, setMapEditorStep] = React.useState<1 | 2>(1); // 1 = Calibration, 2 = Safe Routes
+  const [activeCalibIdx, setActiveCalibIdx] = React.useState(-1);
+  const [gridPaintMode, setGridPaintMode] = React.useState<"pan"|"exit"|"safe_route"|"erase">("pan");
+  const lastPaintedCellRef = React.useRef<{row: number, col: number} | null>(null);
   const [gridSizeMeters, setGridSizeMeters] = React.useState(1.2);
   const scrollViewRef = React.useRef<ScrollView>(null);
   const [userZoom, setUserZoom] = React.useState(1);
   const [step1Zoom, setStep1Zoom] = React.useState(1);
   const [step1PanMode, setStep1PanMode] = React.useState(true);
+  const [isMapInteracting, setIsMapInteracting] = React.useState(false);
 
   const [mapPanOffset, setMapPanOffset] = React.useState({ x: 0, y: 0 });
   const [step1PanOffset, setStep1PanOffset] = React.useState({ x: 0, y: 0 });
@@ -122,7 +124,7 @@ export default function AdminDashboard() {
     lastPan: { x: 0, y: 0 }
   });
 
-  const [activeCalibIdx, setActiveCalibIdx] = React.useState(0);
+
   const [calibPoints, setCalibPoints] = React.useState<{ x: number, y: number }[]>([]);
   const [gridPaths, setGridPaths] = React.useState<{ row: number, col: number, lat: number, lon: number, isExit: boolean }[]>([]);
   const [imgLayout, setImgLayout] = React.useState<{ w: number, h: number }>({ w: 1, h: 1 });
@@ -2675,7 +2677,7 @@ export default function AdminDashboard() {
               </View>
 
 
-                <ScrollView className="flex-1" style={{ display: mapEditorStep === 1 ? 'flex' : 'none' }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
+                <ScrollView className="flex-1" style={{ display: mapEditorStep === 1 ? 'flex' : 'none' }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }} scrollEnabled={!isMapInteracting}>
                   <Text className="text-neutral-400 text-lg mb-4">Select a GPS pin from the list below, then tap its matching corner on the floor plan.</Text>
 
                   <View className="flex-row flex-wrap mb-4 justify-center">
@@ -2732,10 +2734,6 @@ export default function AdminDashboard() {
                       className="bg-neutral-700 p-2 rounded-lg"
                       onPress={() => {
                         const newZoom = Math.min(5, step1Zoom + 0.5);
-                        const isLegacyPixels = calibPoints[activeCalibIdx].x > 2;
-
-                        const unzoomedX = imgLayout.w / 2 + (screenX - imgLayout.w / 2) / step1Zoom - step1PanOffset.x;
-                        const unzoomedY = imgLayout.h / 2 + (screenY - imgLayout.h / 2) / step1Zoom - step1PanOffset.y;
                         setStep1Zoom(newZoom);
                         if (activeCalibIdx !== -1 && calibPoints[activeCalibIdx]) {
                           const p = calibPoints[activeCalibIdx];
@@ -2790,15 +2788,19 @@ export default function AdminDashboard() {
                             position: 'relative',
                           }}
                         >
-                          {/* INVISIBLE GESTURE OVERLAY - STABLE LOCATION X/Y */}
-                          <View
-                            style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1 }}
-                            onStartShouldSetResponder={() => true}
-                            onMoveShouldSetResponder={() => true}
-                            onResponderTerminationRequest={() => false}
-                            onResponderGrant={(e) => handleTouchStart(e, step1Zoom, step1PanOffset, step1PanMode, handleStep1Paint)}
-                            onResponderMove={(e) => handleTouchMove(e, step1Zoom, setStep1Zoom, setStep1PanOffset, step1PanMode, handleStep1Paint)}
-                          />
+                            <View
+                              style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1 }}
+                              onStartShouldSetResponder={() => true}
+                              onMoveShouldSetResponder={() => true}
+                              onResponderTerminationRequest={() => false}
+                              onResponderGrant={(e) => {
+                                setIsMapInteracting(true);
+                                handleTouchStart(e, step1Zoom, step1PanOffset, step1PanMode, handleStep1Paint);
+                              }}
+                              onResponderMove={(e) => handleTouchMove(e, step1Zoom, setStep1Zoom, setStep1PanOffset, step1PanMode, handleStep1Paint)}
+                              onResponderRelease={() => setIsMapInteracting(false)}
+                              onResponderTerminate={() => setIsMapInteracting(false)}
+                            />
 
                           <View
                             style={{
@@ -2904,21 +2906,21 @@ export default function AdminDashboard() {
                   </View>
 
                   <View className="flex-row justify-between mb-0">
-                    <TouchableOpacity className="bg-neutral-700 px-6 py-3 rounded-xl flex-1 mr-2 items-center" onPress={() => { setCalibPoints([]); setActiveCalibIdx(0); }}>
-                      <Text className="text-white font-bold text-lg">Clear Points</Text>
+                    <TouchableOpacity className="bg-neutral-700 px-6 py-3 rounded-xl flex-1 mr-2 items-center justify-center" onPress={() => { setCalibPoints([]); setActiveCalibIdx(0); }}>
+                      <Text className="text-white font-bold text-lg text-center">Clear Points</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      className="px-6 py-3 rounded-xl flex-1 ml-2 items-center bg-blue-600"
+                      className="px-6 py-3 rounded-xl flex-1 ml-2 items-center justify-center bg-blue-600"
                       onPress={() => {
                         performAutoZoom();
                         setMapEditorStep(2);
                       }}
                     >
-                      <Text className="text-white font-bold text-lg">Next: Safe Routes ➔</Text>
+                      <Text className="text-white font-bold text-lg text-center">Next: Safe Routes ➔</Text>
                     </TouchableOpacity>
                   </View>
                 </ScrollView>
-                <ScrollView className="flex-1" style={{ display: mapEditorStep === 2 ? 'flex' : 'none' }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
+                <ScrollView className="flex-1" style={{ display: mapEditorStep === 2 ? 'flex' : 'none' }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }} scrollEnabled={!isMapInteracting}>
                   <Text className="text-neutral-400 text-lg mb-4">Select a brush type, then tap the map to paint grid cells.</Text>
 
                   {/* Toolbar */}
@@ -3023,14 +3025,18 @@ export default function AdminDashboard() {
                             position: 'relative',
                           }}
                         >
-                          {/* INVISIBLE GESTURE OVERLAY - STABLE LOCATION X/Y */}
                           <View
                             style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 10 }}
                             onStartShouldSetResponder={() => true}
                             onMoveShouldSetResponder={() => true}
                             onResponderTerminationRequest={() => false}
-                            onResponderGrant={(e) => handleTouchStart(e, step1Zoom, step1PanOffset, gridPaintMode === "pan", handleGridInteraction)}
+                            onResponderGrant={(e) => {
+                              setIsMapInteracting(true);
+                              handleTouchStart(e, step1Zoom, step1PanOffset, gridPaintMode === "pan", handleGridInteraction);
+                            }}
                             onResponderMove={(e) => handleTouchMove(e, step1Zoom, setStep1Zoom, setStep1PanOffset, gridPaintMode === "pan", handleGridInteraction)}
+                            onResponderRelease={() => setIsMapInteracting(false)}
+                            onResponderTerminate={() => setIsMapInteracting(false)}
                           />
 
                           <View
@@ -3158,8 +3164,8 @@ export default function AdminDashboard() {
                   </View>
 
                   <View className="flex-row justify-between mb-0">
-                    <TouchableOpacity className="flex-1 bg-neutral-700 py-3 rounded-xl items-center mr-2" onPress={() => setGridPaths([])}>
-                      <Text className="text-white font-bold">Clear Grid</Text>
+                    <TouchableOpacity className="flex-1 bg-neutral-700 py-3 rounded-xl items-center justify-center mr-2" onPress={() => setGridPaths([])}>
+                      <Text className="text-white font-bold text-lg text-center">Clear Grid</Text>
                     </TouchableOpacity>
                     {(() => {
                       const requiredPins = selectedBuilding?.polygon?.length || 4;
@@ -3170,7 +3176,7 @@ export default function AdminDashboard() {
 
                       return (
                         <TouchableOpacity
-                          className={`flex-1 py-3 rounded-xl items-center ${isSaveReady ? 'bg-green-600' : 'bg-neutral-600 opacity-50'}`}
+                          className={`flex-1 py-3 rounded-xl items-center justify-center ${isSaveReady ? 'bg-green-600' : 'bg-neutral-600 opacity-50'}`}
                           disabled={!isSaveReady}
                           onPress={async () => {
                             try {
@@ -3181,7 +3187,7 @@ export default function AdminDashboard() {
                             } catch (e) { showToast("Error saving layout", "error"); }
                           }}
                         >
-                          <Text className="text-white font-bold text-lg">Save Configuration</Text>
+                          <Text className="text-white font-bold text-lg text-center">Save Configuration</Text>
                         </TouchableOpacity>
                       );
                     })()}
