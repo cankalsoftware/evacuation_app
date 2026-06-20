@@ -386,28 +386,29 @@ export default function AdminDashboard() {
       if (touches && touches.length === 1) {
         gestureState.current.lastCenter = { x: touches[0].pageX, y: touches[0].pageY };
         gestureState.current.lastPan = currentPan;
-        if (!isPanMode && onPaint) {
-          const lx = touches[0].locationX !== undefined ? touches[0].locationX : e.nativeEvent.locationX;
-          const ly = touches[0].locationY !== undefined ? touches[0].locationY : e.nativeEvent.locationY;
-          if (lx !== undefined && ly !== undefined) onPaint(lx, ly);
-        }
       } else {
-        // web single touch
         gestureState.current.lastCenter = { x: e.nativeEvent.pageX || 0, y: e.nativeEvent.pageY || 0 };
         gestureState.current.lastPan = currentPan;
-        if (!isPanMode && onPaint) {
-          let lx = (e.nativeEvent as any).offsetX;
-          let ly = (e.nativeEvent as any).offsetY;
-          if (lx === undefined && e.nativeEvent.touches && e.nativeEvent.touches.length > 0) {
-            // Touch fallback
-            const mapPos = onPaint === handleStep1Paint ? step1MapPos : step2MapPos;
-            lx = e.nativeEvent.touches[0].pageX - mapPos.x;
-            ly = e.nativeEvent.touches[0].pageY - mapPos.y;
-          } else if (lx === undefined) {
-            lx = e.nativeEvent.locationX;
-            ly = e.nativeEvent.locationY;
+      }
+
+      if (!isPanMode && onPaint) {
+        const mapRef = onPaint === handleStep1Paint ? step1MapRef : step2MapRef;
+        let lx, ly;
+        if (Platform.OS === 'web') {
+          if (mapRef.current) {
+            const rect = (mapRef.current as any).getBoundingClientRect();
+            const clientX = touches?.length > 0 ? touches[0].clientX : (e.nativeEvent as any).clientX;
+            const clientY = touches?.length > 0 ? touches[0].clientY : (e.nativeEvent as any).clientY;
+            lx = clientX - rect.left;
+            ly = clientY - rect.top;
           }
-          if (lx !== undefined && ly !== undefined && !isNaN(lx) && !isNaN(ly)) onPaint(lx, ly);
+        } else {
+          lx = touches?.length > 0 && touches[0].locationX !== undefined ? touches[0].locationX : e.nativeEvent.locationX;
+          ly = touches?.length > 0 && touches[0].locationY !== undefined ? touches[0].locationY : e.nativeEvent.locationY;
+        }
+        
+        if (lx !== undefined && ly !== undefined && !isNaN(lx) && !isNaN(ly)) {
+          onPaint(lx, ly);
         }
       }
     }
@@ -451,8 +452,8 @@ export default function AdminDashboard() {
         setPan({ x: 0, y: 0 });
       } else {
         setPan({
-          x: gestureState.current.lastPan.x + diffX,
-          y: gestureState.current.lastPan.y + diffY
+          x: gestureState.current.lastPan.x + (diffX / newZoom),
+          y: gestureState.current.lastPan.y + (diffY / newZoom)
         });
       }
 
@@ -464,19 +465,29 @@ export default function AdminDashboard() {
         const diffX = pageX - gestureState.current.lastCenter.x;
         const diffY = pageY - gestureState.current.lastCenter.y;
         setPan({
-          x: gestureState.current.lastPan.x + diffX,
-          y: gestureState.current.lastPan.y + diffY
+          x: gestureState.current.lastPan.x + (diffX / currentZoom),
+          y: gestureState.current.lastPan.y + (diffY / currentZoom)
         });
       } else {
-        let rawX = Platform.OS === 'web' && (e.nativeEvent as any).offsetX !== undefined ? (e.nativeEvent as any).offsetX : e.nativeEvent.locationX;
-        let rawY = Platform.OS === 'web' && (e.nativeEvent as any).offsetY !== undefined ? (e.nativeEvent as any).offsetY : e.nativeEvent.locationY;
-        if (rawX === undefined && e.nativeEvent.touches && e.nativeEvent.touches.length > 0) {
-            const mapPos = onPaint === handleStep1Paint ? step1MapPos : step2MapPos;
-            rawX = e.nativeEvent.touches[0].pageX - mapPos.x;
-            rawY = e.nativeEvent.touches[0].pageY - mapPos.y;
-        }
-        if (onPaint && rawX !== undefined && rawY !== undefined && !isNaN(rawX) && !isNaN(rawY)) {
-          onPaint(rawX, rawY);
+        if (onPaint) {
+          const mapRef = onPaint === handleStep1Paint ? step1MapRef : step2MapRef;
+          let rawX, rawY;
+          if (Platform.OS === 'web') {
+            if (mapRef.current) {
+              const rect = (mapRef.current as any).getBoundingClientRect();
+              const clientX = touches?.length > 0 ? touches[0].clientX : (e.nativeEvent as any).clientX;
+              const clientY = touches?.length > 0 ? touches[0].clientY : (e.nativeEvent as any).clientY;
+              rawX = clientX - rect.left;
+              rawY = clientY - rect.top;
+            }
+          } else {
+            rawX = touches?.length > 0 && touches[0].locationX !== undefined ? touches[0].locationX : e.nativeEvent.locationX;
+            rawY = touches?.length > 0 && touches[0].locationY !== undefined ? touches[0].locationY : e.nativeEvent.locationY;
+          }
+          
+          if (rawX !== undefined && rawY !== undefined && !isNaN(rawX) && !isNaN(rawY)) {
+            onPaint(rawX, rawY);
+          }
         }
       }
     }
@@ -546,8 +557,11 @@ export default function AdminDashboard() {
     let rawX = screenX;
     let rawY = screenY;
 
-    const unzoomedX = imgLayout.w / 2 + (screenX - imgLayout.w / 2 - step1PanOffset.x) / step1Zoom;
-    const unzoomedY = imgLayout.h / 2 + (screenY - imgLayout.h / 2 - step1PanOffset.y) / step1Zoom;
+    // Correct mathematical inverse of: transform: [{scale: z}, {translateX: tx}]
+    // The translation happens in the scaled space, so it must be subtracted AFTER unscaling the screen coordinate.
+    const unzoomedX = imgLayout.w / 2 + (screenX - imgLayout.w / 2) / step1Zoom - step1PanOffset.x;
+    const unzoomedY = imgLayout.h / 2 + (screenY - imgLayout.h / 2) / step1Zoom - step1PanOffset.y;
+    
     rawX = unzoomedX;
     rawY = unzoomedY;
 
@@ -563,9 +577,9 @@ export default function AdminDashboard() {
 
     if (row >= 0 && col >= 0) {
       setGridPaths(prev => {
-        const existingIdx = prev.findIndex(p => p.row === row && p.col === col);
+        const existingIdx = prev.findIndex((p: any) => p.row === row && p.col === col);
         if (gridPaintMode === "erase") {
-          if (existingIdx !== -1) {
+          if (existingIdx >= 0) {
             const newPaths = [...prev];
             newPaths.splice(existingIdx, 1);
             return newPaths;
@@ -573,6 +587,7 @@ export default function AdminDashboard() {
         } else {
           const newCell = {
             row, col,
+            type: gridPaintMode,
             lat: maxLat - ((row + 0.5) * cellLatSpan),
             lon: minLon + ((col + 0.5) * cellLonSpan),
             isExit: gridPaintMode === "exit"
@@ -2684,6 +2699,10 @@ export default function AdminDashboard() {
                       className="bg-neutral-700 p-2 rounded-lg"
                       onPress={() => {
                         const newZoom = Math.min(5, step1Zoom + 0.5);
+                        const isLegacyPixels = calibPoints[activeCalibIdx].x > 2;
+
+                        const unzoomedX = imgLayout.w / 2 + (screenX - imgLayout.w / 2) / step1Zoom - step1PanOffset.x;
+                        const unzoomedY = imgLayout.h / 2 + (screenY - imgLayout.h / 2) / step1Zoom - step1PanOffset.y;
                         setStep1Zoom(newZoom);
                         if (activeCalibIdx !== -1 && calibPoints[activeCalibIdx]) {
                           const p = calibPoints[activeCalibIdx];
@@ -2723,11 +2742,6 @@ export default function AdminDashboard() {
                       <View
                         className="w-full h-full justify-center items-center"
                         style={{ touchAction: 'none' } as any}
-                        onStartShouldSetResponder={() => true}
-                        onMoveShouldSetResponder={() => step1PanMode}
-                        onResponderTerminationRequest={() => false}
-                        onResponderGrant={(e) => handleTouchStart(e, step1Zoom, step1PanOffset, step1PanMode, handleStep1Paint)}
-                        onResponderMove={(e) => handleTouchMove(e, step1Zoom, setStep1Zoom, setStep1PanOffset, step1PanMode, undefined)}
                         // @ts-ignore - onWheel is passed through to the DOM by react-native-web
                         onWheel={(e: any) => {
                           if (Platform.OS === 'web' && e.nativeEvent.deltaY) {
@@ -2743,6 +2757,16 @@ export default function AdminDashboard() {
                             position: 'relative',
                           }}
                         >
+                          {/* INVISIBLE GESTURE OVERLAY - STABLE LOCATION X/Y */}
+                          <View
+                            style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1 }}
+                            onStartShouldSetResponder={() => true}
+                            onMoveShouldSetResponder={() => true}
+                            onResponderTerminationRequest={() => false}
+                            onResponderGrant={(e) => handleTouchStart(e, step1Zoom, step1PanOffset, step1PanMode, handleStep1Paint)}
+                            onResponderMove={(e) => handleTouchMove(e, step1Zoom, setStep1Zoom, setStep1PanOffset, step1PanMode, handleStep1Paint)}
+                          />
+
                           <View
                             style={{
                               position: 'absolute',
@@ -2754,7 +2778,8 @@ export default function AdminDashboard() {
                                 { scale: step1Zoom },
                                 { translateX: step1PanOffset.x },
                                 { translateY: step1PanOffset.y }
-                              ]
+                              ],
+                              pointerEvents: 'none'
                             }}
                           >
                           <Image
@@ -2762,6 +2787,9 @@ export default function AdminDashboard() {
                             className="w-full h-full"
                             resizeMode="contain"
                           />
+                          </View>
+                          
+                          <View style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 2, pointerEvents: 'box-none' }}>
                           {calibPoints.map((p, i) => {
                             if (!p) return null;
                             const labelStr = selectedBuilding?.polygon?.[i]?.label;
@@ -2947,11 +2975,6 @@ export default function AdminDashboard() {
                       <View
                         className="w-full h-full justify-center items-center"
                         style={{ touchAction: 'none' } as any}
-                        onStartShouldSetResponder={() => true}
-                        onMoveShouldSetResponder={() => gridPaintMode === "pan"}
-                        onResponderTerminationRequest={() => false}
-                        onResponderGrant={(e) => handleTouchStart(e, step1Zoom, step1PanOffset, gridPaintMode === "pan", handleGridInteraction)}
-                        onResponderMove={(e) => handleTouchMove(e, step1Zoom, setStep1Zoom, setStep1PanOffset, gridPaintMode === "pan", handleGridInteraction)}
                         // @ts-ignore - onWheel is passed through to the DOM by react-native-web
                         onWheel={(e: any) => {
                           if (Platform.OS === 'web' && e.nativeEvent.deltaY) {
@@ -2965,9 +2988,18 @@ export default function AdminDashboard() {
                             height: imgLayout.h,
                             overflow: 'hidden',
                             position: 'relative',
-                            pointerEvents: 'none'
                           }}
                         >
+                          {/* INVISIBLE GESTURE OVERLAY - STABLE LOCATION X/Y */}
+                          <View
+                            style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 10 }}
+                            onStartShouldSetResponder={() => true}
+                            onMoveShouldSetResponder={() => true}
+                            onResponderTerminationRequest={() => false}
+                            onResponderGrant={(e) => handleTouchStart(e, step1Zoom, step1PanOffset, gridPaintMode === "pan", handleGridInteraction)}
+                            onResponderMove={(e) => handleTouchMove(e, step1Zoom, setStep1Zoom, setStep1PanOffset, gridPaintMode === "pan", handleGridInteraction)}
+                          />
+
                           <View
                             style={{
                               position: 'absolute',
@@ -2975,6 +3007,7 @@ export default function AdminDashboard() {
                               top: 0,
                               width: imgLayout.w,
                               height: imgLayout.h,
+                              pointerEvents: 'none',
                               transform: [
                                 { scale: step1Zoom },
                                 { translateX: step1PanOffset.x },
