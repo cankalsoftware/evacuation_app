@@ -234,6 +234,12 @@ export default function AdminDashboard() {
   const [setupAgreedToTandC, setSetupAgreedToTandC] = React.useState(false);
   const [isSavingSetup, setIsSavingSetup] = React.useState(false);
   const [showValidation, setShowValidation] = React.useState(false);
+
+  const step1MapRef = React.useRef<any>(null);
+  const step2MapRef = React.useRef<any>(null);
+  const [step1MapPos, setStep1MapPos] = React.useState({ x: 0, y: 0 });
+  const [step2MapPos, setStep2MapPos] = React.useState({ x: 0, y: 0 });
+
   const fetchLocation = async () => {
     setRefreshingLocation(true);
     try {
@@ -323,7 +329,7 @@ export default function AdminDashboard() {
   };
 
   const getGridDimensions = () => {
-    if (!selectedBuilding?.polygon || selectedBuilding.polygon.length < 4) return { rows: 1, cols: 1, minLat: 0, maxLat: 0, minLon: 0, maxLon: 0 };
+    if (!selectedBuilding?.polygon || selectedBuilding.polygon.length < 4) return { rows: 1, cols: 1, minLat: 0, maxLat: 0, minLon: 0, maxLon: 0, cellLatSpan: 0, cellLonSpan: 0 };
     const poly = selectedBuilding.polygon;
     const minLat = Math.min(...poly.map((p: any) => p.lat));
     const maxLat = Math.max(...poly.map((p: any) => p.lat));
@@ -332,49 +338,28 @@ export default function AdminDashboard() {
 
     const heightMeters = getDistanceInMeters(minLat, minLon, maxLat, minLon);
     const widthMeters = getDistanceInMeters(minLat, minLon, minLat, maxLon);
+
+    const cellLatSpan = heightMeters > 0 ? ((maxLat - minLat) / heightMeters) * gridSizeMeters : 0;
+    const cellLonSpan = widthMeters > 0 ? ((maxLon - minLon) / widthMeters) * gridSizeMeters : 0;
 
     const rows = Math.max(1, Math.ceil(heightMeters / gridSizeMeters));
     const cols = Math.max(1, Math.ceil(widthMeters / gridSizeMeters));
 
-    return { rows, cols, minLat, maxLat, minLon, maxLon };
+    return { rows, cols, minLat, maxLat, minLon, maxLon, cellLatSpan, cellLonSpan };
   };
 
   const getDynamicMapHeight = () => {
-    if (selectedBuilding?.imageCalibrationPoints?.length >= 4 && imageAspectRatio) {
-      const calib = selectedBuilding.imageCalibrationPoints;
-      // We assume pixel percentages (x <= 1, y <= 1) based on current architecture
-      // For legacy compatibility, we'll gracefully fallback to standard bounding if needed.
-      const minCX = Math.min(...calib.map((c: any) => c.x));
-      const maxCX = Math.max(...calib.map((c: any) => c.x));
-      const minCY = Math.min(...calib.map((c: any) => c.y));
-      const maxCY = Math.max(...calib.map((c: any) => c.y));
-
-      const widthPct = maxCX - minCX;
-      const heightPct = maxCY - minCY;
-
-      if (widthPct > 0 && heightPct > 0 && widthPct <= 1 && heightPct <= 1) {
-        const boxAspect = (widthPct / heightPct) * imageAspectRatio;
-        const containerWidth = width - 48; // padding
-        return Math.max(100, Math.min(height * 0.8, containerWidth / boxAspect));
-      }
-    }
-
-    if (!selectedBuilding?.polygon || selectedBuilding.polygon.length < 4) return 400;
-    const poly = selectedBuilding.polygon;
-    const minLat = Math.min(...poly.map((p: any) => p.lat));
-    const maxLat = Math.max(...poly.map((p: any) => p.lat));
-    const minLon = Math.min(...poly.map((p: any) => p.lon));
-    const maxLon = Math.max(...poly.map((p: any) => p.lon));
-
-    const heightMeters = getDistanceInMeters(minLat, minLon, maxLat, minLon);
-    const widthMeters = getDistanceInMeters(minLat, minLon, minLat, maxLon);
-
-    if (widthMeters > 0 && heightMeters > 0) {
-      const containerWidth = width - 48;
-      const aspect = widthMeters / heightMeters;
-      return Math.max(100, Math.min(height * 0.8, containerWidth / aspect));
-    }
-    return 400;
+    const containerWidth = width - 32; // Modal has px-4 (16px * 2)
+    const ratio = imageAspectRatio || (4 / 3); // Fallback to 4:3
+    const expectedImageHeight = containerWidth / ratio;
+    
+    // Add 40px total margin (20px top, 20px bottom)
+    const heightWithMargins = expectedImageHeight + 40;
+    
+    // Cap at 75% of screen height to ensure UI fits on screen
+    const maxHeight = height * 0.75;
+    
+    return Math.min(heightWithMargins, maxHeight);
   };
 
   const handleTouchStart = (
@@ -402,14 +387,27 @@ export default function AdminDashboard() {
         gestureState.current.lastCenter = { x: touches[0].pageX, y: touches[0].pageY };
         gestureState.current.lastPan = currentPan;
         if (!isPanMode && onPaint) {
-          onPaint(touches[0].locationX, touches[0].locationY);
+          const lx = touches[0].locationX !== undefined ? touches[0].locationX : e.nativeEvent.locationX;
+          const ly = touches[0].locationY !== undefined ? touches[0].locationY : e.nativeEvent.locationY;
+          if (lx !== undefined && ly !== undefined) onPaint(lx, ly);
         }
       } else {
         // web single touch
         gestureState.current.lastCenter = { x: e.nativeEvent.pageX || 0, y: e.nativeEvent.pageY || 0 };
         gestureState.current.lastPan = currentPan;
         if (!isPanMode && onPaint) {
-          onPaint((e.nativeEvent as any).offsetX !== undefined ? (e.nativeEvent as any).offsetX : e.nativeEvent.locationX, (e.nativeEvent as any).offsetY !== undefined ? (e.nativeEvent as any).offsetY : e.nativeEvent.locationY);
+          let lx = (e.nativeEvent as any).offsetX;
+          let ly = (e.nativeEvent as any).offsetY;
+          if (lx === undefined && e.nativeEvent.touches && e.nativeEvent.touches.length > 0) {
+            // Touch fallback
+            const mapPos = onPaint === handleStep1Paint ? step1MapPos : step2MapPos;
+            lx = e.nativeEvent.touches[0].pageX - mapPos.x;
+            ly = e.nativeEvent.touches[0].pageY - mapPos.y;
+          } else if (lx === undefined) {
+            lx = e.nativeEvent.locationX;
+            ly = e.nativeEvent.locationY;
+          }
+          if (lx !== undefined && ly !== undefined && !isNaN(lx) && !isNaN(ly)) onPaint(lx, ly);
         }
       }
     }
@@ -470,9 +468,14 @@ export default function AdminDashboard() {
           y: gestureState.current.lastPan.y + diffY
         });
       } else {
-        const rawX = Platform.OS === 'web' && (e.nativeEvent as any).offsetX !== undefined ? (e.nativeEvent as any).offsetX : e.nativeEvent.locationX;
-        const rawY = Platform.OS === 'web' && (e.nativeEvent as any).offsetY !== undefined ? (e.nativeEvent as any).offsetY : e.nativeEvent.locationY;
-        if (onPaint) {
+        let rawX = Platform.OS === 'web' && (e.nativeEvent as any).offsetX !== undefined ? (e.nativeEvent as any).offsetX : e.nativeEvent.locationX;
+        let rawY = Platform.OS === 'web' && (e.nativeEvent as any).offsetY !== undefined ? (e.nativeEvent as any).offsetY : e.nativeEvent.locationY;
+        if (rawX === undefined && e.nativeEvent.touches && e.nativeEvent.touches.length > 0) {
+            const mapPos = onPaint === handleStep1Paint ? step1MapPos : step2MapPos;
+            rawX = e.nativeEvent.touches[0].pageX - mapPos.x;
+            rawY = e.nativeEvent.touches[0].pageY - mapPos.y;
+        }
+        if (onPaint && rawX !== undefined && rawY !== undefined && !isNaN(rawX) && !isNaN(rawY)) {
           onPaint(rawX, rawY);
         }
       }
@@ -531,6 +534,7 @@ export default function AdminDashboard() {
     const y = (unzoomedY - bounds.offsetY) / bounds.renderH;
 
     if (activeCalibIdx === -1) return;
+    if (isNaN(x) || isNaN(y)) return; // Protection against corrupted coordinates
 
     const isNewPlacement = !calibPoints[activeCalibIdx];
     const newPoints = [...calibPoints];
@@ -548,9 +552,11 @@ export default function AdminDashboard() {
     rawY = unzoomedY;
 
     const gps = mapImageToGPS(rawX, rawY);
-    const { rows, cols, minLat, maxLat, minLon, maxLon } = getGridDimensions();
-    let row = Math.floor((maxLat - gps.lat) / (maxLat - minLat) * rows);
-    let col = Math.floor((gps.lon - minLon) / (maxLon - minLon) * cols);
+    const { rows, cols, minLat, maxLat, minLon, maxLon, cellLatSpan, cellLonSpan } = getGridDimensions();
+    if (cellLatSpan <= 0 || cellLonSpan <= 0) return;
+
+    let row = Math.floor((maxLat - gps.lat) / cellLatSpan);
+    let col = Math.floor((gps.lon - minLon) / cellLonSpan);
 
     row = Math.max(0, Math.min(rows - 1, row));
     col = Math.max(0, Math.min(cols - 1, col));
@@ -567,8 +573,8 @@ export default function AdminDashboard() {
         } else {
           const newCell = {
             row, col,
-            lat: maxLat - ((row + 0.5) * (maxLat - minLat) / rows),
-            lon: minLon + ((col + 0.5) * (maxLon - minLon) / cols),
+            lat: maxLat - ((row + 0.5) * cellLatSpan),
+            lon: minLon + ((col + 0.5) * cellLonSpan),
             isExit: gridPaintMode === "exit"
           };
 
@@ -721,13 +727,14 @@ export default function AdminDashboard() {
     let v = (maxLat - lat) / (maxLat - minLat || 1);
     let u = (lon - minLon) / (maxLon - minLon || 1);
 
-    const calib = calibPoints.length >= 4 ? calibPoints : selectedBuilding.imageCalibrationPoints;
-    if (calib && calib.length >= 4) {
-      const isLegacyPixels = calib[0].x > 2;
-      const minCX = Math.min(...calib.map((c: any) => isLegacyPixels ? c.x / Math.max(1, imgLayout.w) : c.x));
-      const maxCX = Math.max(...calib.map((c: any) => isLegacyPixels ? c.x / Math.max(1, imgLayout.w) : c.x));
-      const minCY = Math.min(...calib.map((c: any) => isLegacyPixels ? c.y / Math.max(1, imgLayout.h) : c.y));
-      const maxCY = Math.max(...calib.map((c: any) => isLegacyPixels ? c.y / Math.max(1, imgLayout.h) : c.y));
+    const reqPins = selectedBuilding?.polygon?.length || 4;
+    const currentCalib = calibPoints.filter(Boolean).length >= reqPins ? calibPoints.filter(Boolean) : selectedBuilding.imageCalibrationPoints;
+    if (currentCalib && currentCalib.length >= reqPins) {
+      const isLegacyPixels = currentCalib[0].x > 2;
+      const minCX = Math.min(...currentCalib.map((c: any) => isLegacyPixels ? c.x / Math.max(1, imgLayout.w) : c.x));
+      const maxCX = Math.max(...currentCalib.map((c: any) => isLegacyPixels ? c.x / Math.max(1, imgLayout.w) : c.x));
+      const minCY = Math.min(...currentCalib.map((c: any) => isLegacyPixels ? c.y / Math.max(1, imgLayout.h) : c.y));
+      const maxCY = Math.max(...currentCalib.map((c: any) => isLegacyPixels ? c.y / Math.max(1, imgLayout.h) : c.y));
 
       u = minCX + u * (maxCX - minCX);
       v = minCY + v * (maxCY - minCY);
@@ -746,6 +753,8 @@ export default function AdminDashboard() {
 
     const newX = (rawX - bounds.offsetX) / bounds.renderW;
     const newY = (rawY - bounds.offsetY) / bounds.renderH;
+
+    if (isNaN(newX) || isNaN(newY)) return; // Protection against corrupted coordinates
 
     const newPoints = [...calibPoints];
     newPoints[idx] = { x: newX, y: newY };
@@ -2695,16 +2704,36 @@ export default function AdminDashboard() {
                   </View>
 
                   <View
+                    ref={step1MapRef}
                     className="bg-neutral-800 rounded-xl overflow-hidden mb-6 w-full justify-center items-center relative"
-                    style={{ height: getDynamicMapHeight() * 1.3 }}
-                    onLayout={(e) => setImgLayout({ w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height) })}
+                    style={{ height: getDynamicMapHeight() }}
+                    onLayout={(e) => {
+                      setImgLayout({ w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height) });
+                      if (Platform.OS === 'web' && step1MapRef.current) {
+                        const rect = step1MapRef.current.getBoundingClientRect();
+                        setStep1MapPos({ x: rect.left + window.scrollX, y: rect.top + window.scrollY });
+                      } else if (step1MapRef.current) {
+                        step1MapRef.current.measureInWindow((x: number, y: number) => {
+                          setStep1MapPos({ x, y });
+                        });
+                      }
+                    }}
                   >
                     {selectedBuilding?.masterPlanUrl && (
                       <View
                         className="w-full h-full justify-center items-center"
+                        style={{ touchAction: 'none' } as any}
                         onStartShouldSetResponder={() => true}
+                        onMoveShouldSetResponder={() => step1PanMode}
+                        onResponderTerminationRequest={() => false}
                         onResponderGrant={(e) => handleTouchStart(e, step1Zoom, step1PanOffset, step1PanMode, handleStep1Paint)}
                         onResponderMove={(e) => handleTouchMove(e, step1Zoom, setStep1Zoom, setStep1PanOffset, step1PanMode, undefined)}
+                        // @ts-ignore - onWheel is passed through to the DOM by react-native-web
+                        onWheel={(e: any) => {
+                          if (Platform.OS === 'web' && e.nativeEvent.deltaY) {
+                            setStep1Zoom(z => Math.max(1, Math.min(5, z - (e.nativeEvent.deltaY > 0 ? 0.2 : -0.2))));
+                          }
+                        }}
                       >
                         <View
                           style={{
@@ -2746,6 +2775,10 @@ export default function AdminDashboard() {
                                 key={i}
                                 activeOpacity={0.8}
                                 className="absolute items-center justify-center"
+                                // @ts-ignore - Web specific properties to prevent parent map panning
+                                onTouchStart={(e) => e.stopPropagation()}
+                                // @ts-ignore
+                                onPointerDown={(e: any) => { if (e.stopPropagation) e.stopPropagation(); }}
                                 style={{ 
                                   left: px - 20, 
                                   top: py - 20, 
@@ -2855,38 +2888,76 @@ export default function AdminDashboard() {
                     </TouchableOpacity>
                   </View>
 
-                  <View className="flex-row justify-end space-x-2 mb-4">
-                    <Text className="text-white my-auto font-bold mr-2">Zoom:</Text>
-                    <TouchableOpacity
-                      className="bg-neutral-700 p-2 rounded-lg"
-                      onPress={() => {
-                        setStep1Zoom(z => Math.max(1, z - 0.5));
-                      }}
-                    >
-                      <MaterialCommunityIcons name="minus" size={24} color="white" />
-                    </TouchableOpacity>
-                    <Text className="text-white my-auto font-bold">{Math.round(step1Zoom * 100)}%</Text>
-                    <TouchableOpacity
-                      className="bg-neutral-700 p-2 rounded-lg"
-                      onPress={() => {
-                        setStep1Zoom(z => Math.min(5, z + 0.5));
-                      }}
-                    >
-                      <MaterialCommunityIcons name="plus" size={24} color="white" />
-                    </TouchableOpacity>
+                  <View className="flex-row justify-between items-center mb-4">
+                    <View className="flex-row space-x-2">
+                      <Text className="text-white my-auto font-bold mr-2">Grid Size:</Text>
+                      <TouchableOpacity
+                        className="bg-neutral-700 p-2 rounded-lg"
+                        onPress={() => setGridSizeMeters(s => Math.max(0.5, s - 0.1))}
+                      >
+                        <MaterialCommunityIcons name="minus" size={20} color="white" />
+                      </TouchableOpacity>
+                      <Text className="text-white my-auto font-bold w-12 text-center">{gridSizeMeters.toFixed(1)}m</Text>
+                      <TouchableOpacity
+                        className="bg-neutral-700 p-2 rounded-lg"
+                        onPress={() => setGridSizeMeters(s => Math.min(5.0, s + 0.1))}
+                      >
+                        <MaterialCommunityIcons name="plus" size={20} color="white" />
+                      </TouchableOpacity>
+                    </View>
+                    <View className="flex-row space-x-2">
+                      <Text className="text-white my-auto font-bold mr-2">Zoom:</Text>
+                      <TouchableOpacity
+                        className="bg-neutral-700 p-2 rounded-lg"
+                        onPress={() => {
+                          setStep1Zoom(z => Math.max(1, z - 0.5));
+                        }}
+                      >
+                        <MaterialCommunityIcons name="minus" size={20} color="white" />
+                      </TouchableOpacity>
+                      <Text className="text-white my-auto font-bold w-10 text-center">{Math.round(step1Zoom * 100)}%</Text>
+                      <TouchableOpacity
+                        className="bg-neutral-700 p-2 rounded-lg"
+                        onPress={() => {
+                          setStep1Zoom(z => Math.min(5, z + 0.5));
+                        }}
+                      >
+                        <MaterialCommunityIcons name="plus" size={20} color="white" />
+                      </TouchableOpacity>
+                    </View>
                   </View>
 
                   <View
+                    ref={step2MapRef}
                     className="bg-neutral-800 rounded-xl mb-4 w-full justify-center items-center relative overflow-hidden"
-                    style={{ height: getDynamicMapHeight() * 1.3 }}
-                    onLayout={(e) => setImgLayout({ w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height) })}
+                    style={{ height: getDynamicMapHeight() }}
+                    onLayout={(e) => {
+                      setImgLayout({ w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height) });
+                      if (Platform.OS === 'web' && step2MapRef.current) {
+                        const rect = step2MapRef.current.getBoundingClientRect();
+                        setStep2MapPos({ x: rect.left + window.scrollX, y: rect.top + window.scrollY });
+                      } else if (step2MapRef.current) {
+                        step2MapRef.current.measureInWindow((x: number, y: number) => {
+                          setStep2MapPos({ x, y });
+                        });
+                      }
+                    }}
                   >
                     {selectedBuilding?.masterPlanUrl && (
                       <View
                         className="w-full h-full justify-center items-center"
+                        style={{ touchAction: 'none' } as any}
                         onStartShouldSetResponder={() => true}
+                        onMoveShouldSetResponder={() => gridPaintMode === "pan"}
+                        onResponderTerminationRequest={() => false}
                         onResponderGrant={(e) => handleTouchStart(e, step1Zoom, step1PanOffset, gridPaintMode === "pan", handleGridInteraction)}
                         onResponderMove={(e) => handleTouchMove(e, step1Zoom, setStep1Zoom, setStep1PanOffset, gridPaintMode === "pan", handleGridInteraction)}
+                        // @ts-ignore - onWheel is passed through to the DOM by react-native-web
+                        onWheel={(e: any) => {
+                          if (Platform.OS === 'web' && e.nativeEvent.deltaY) {
+                            setStep1Zoom(z => Math.max(1, Math.min(5, z - (e.nativeEvent.deltaY > 0 ? 0.2 : -0.2))));
+                          }
+                        }}
                       >
                         <View
                           style={{
@@ -2919,27 +2990,37 @@ export default function AdminDashboard() {
 
                             {/* Lightweight Grid Overlay & Painted Cells */}
                             {(() => {
-                              const { rows, cols, minLat, maxLat, minLon, maxLon } = getGridDimensions();
+                              const { rows, cols, minLat, maxLat, minLon, maxLon, cellLatSpan, cellLonSpan } = getGridDimensions();
                               const bounds = getRenderedImageBounds();
                               
                               const gridLines = [];
-                              if (rows > 0 && cols > 0 && selectedBuilding?.imageCalibrationPoints?.length >= 4) {
+                              const reqPins = selectedBuilding?.polygon?.length || 4;
+                              const currentCalib = calibPoints.filter(Boolean).length >= reqPins ? calibPoints.filter(Boolean) : selectedBuilding?.imageCalibrationPoints;
+                              if (rows > 0 && cols > 0 && currentCalib && currentCalib.length >= reqPins) {
                                 const tl = mapGPSToImage(maxLat, minLon);
                                 const br = mapGPSToImage(minLat, maxLon);
                                 if (tl && br) {
-                                  const isLegacy = selectedBuilding.imageCalibrationPoints[0]?.x > 2;
+                                  const isLegacy = currentCalib[0]?.x > 2;
                                   const tlX = isLegacy ? tl.x : bounds.offsetX + tl.x * bounds.renderW;
                                   const brX = isLegacy ? br.x : bounds.offsetX + br.x * bounds.renderW;
                                   const tlY = isLegacy ? tl.y : bounds.offsetY + tl.y * bounds.renderH;
                                   const brY = isLegacy ? br.y : bounds.offsetY + br.y * bounds.renderH;
-                                  
-                                  for (let c = 0; c <= cols; c++) {
-                                    const lx = tlX + (c / cols) * (brX - tlX);
-                                    gridLines.push(<View key={`v-${c}`} style={{ position: 'absolute', left: lx, top: tlY, width: 1, height: brY - tlY, backgroundColor: 'rgba(255,255,255,0.2)', pointerEvents: 'none' }} />);
-                                  }
-                                  for (let r = 0; r <= rows; r++) {
-                                    const ly = tlY + (r / rows) * (brY - tlY);
-                                    gridLines.push(<View key={`h-${r}`} style={{ position: 'absolute', left: tlX, top: ly, width: brX - tlX, height: 1, backgroundColor: 'rgba(255,255,255,0.2)', pointerEvents: 'none' }} />);
+                                  const tlGrid = mapGPSToImage(maxLat, minLon);
+                                  const brGrid = mapGPSToImage(maxLat - (rows * cellLatSpan), minLon + (cols * cellLonSpan));
+                                  if (tlGrid && brGrid) {
+                                    const tlxG = isLegacy ? tlGrid.x : bounds.offsetX + tlGrid.x * bounds.renderW;
+                                    const brxG = isLegacy ? brGrid.x : bounds.offsetX + brGrid.x * bounds.renderW;
+                                    const tlyG = isLegacy ? tlGrid.y : bounds.offsetY + tlGrid.y * bounds.renderH;
+                                    const bryG = isLegacy ? brGrid.y : bounds.offsetY + brGrid.y * bounds.renderH;
+                                    
+                                    for (let c = 0; c <= cols; c++) {
+                                      const lx = tlxG + (c / cols) * (brxG - tlxG);
+                                      gridLines.push(<View key={`v-${c}`} style={{ position: 'absolute', left: lx, top: tlyG, width: 1, height: bryG - tlyG, backgroundColor: 'rgba(255,255,255,0.2)', pointerEvents: 'none' }} />);
+                                    }
+                                    for (let r = 0; r <= rows; r++) {
+                                      const ly = tlyG + (r / rows) * (bryG - tlyG);
+                                      gridLines.push(<View key={`h-${r}`} style={{ position: 'absolute', left: tlxG, top: ly, width: brxG - tlxG, height: 1, backgroundColor: 'rgba(255,255,255,0.2)', pointerEvents: 'none' }} />);
+                                    }
                                   }
                                 }
                               }
@@ -2948,8 +3029,8 @@ export default function AdminDashboard() {
                                 <>
                                   {gridLines}
                                   {gridPaths.map(p => {
-                                const latCenter = maxLat - ((p.row + 0.5) * (maxLat - minLat) / rows);
-                                const lonCenter = minLon + ((p.col + 0.5) * (maxLon - minLon) / cols);
+                                const latCenter = maxLat - ((p.row + 0.5) * cellLatSpan);
+                                const lonCenter = minLon + ((p.col + 0.5) * cellLonSpan);
                                 const pu = mapGPSToImage(latCenter, lonCenter);
                                 if (!pu) return null;
 
@@ -2957,9 +3038,11 @@ export default function AdminDashboard() {
                                 const sx = isLegacy ? pu.x : bounds.offsetX + pu.x * bounds.renderW;
                                 const sy = isLegacy ? pu.y : bounds.offsetY + pu.y * bounds.renderH;
 
-                                const cellTopLeft = mapGPSToImage(maxLat - (p.row * (maxLat - minLat) / rows), minLon + (p.col * (maxLon - minLon) / cols));
-                                const cellBottomRight = mapGPSToImage(maxLat - ((p.row + 1) * (maxLat - minLat) / rows), minLon + ((p.col + 1) * (maxLon - minLon) / cols));
+                                const cellTopLeft = mapGPSToImage(maxLat - (p.row * cellLatSpan), minLon + (p.col * cellLonSpan));
+                                const cellBottomRight = mapGPSToImage(maxLat - ((p.row + 1) * cellLatSpan), minLon + ((p.col + 1) * cellLonSpan));
 
+                                let finalLeft = sx - 10;
+                                let finalTop = sy - 10;
                                 let cellW = 20;
                                 let cellH = 20;
 
@@ -2968,18 +3051,20 @@ export default function AdminDashboard() {
                                   const brX = isLegacy ? cellBottomRight.x : bounds.offsetX + cellBottomRight.x * bounds.renderW;
                                   const tlY = isLegacy ? cellTopLeft.y : bounds.offsetY + cellTopLeft.y * bounds.renderH;
                                   const brY = isLegacy ? cellBottomRight.y : bounds.offsetY + cellBottomRight.y * bounds.renderH;
-                                  cellW = Math.max(10, Math.abs(brX - tlX));
-                                  cellH = Math.max(10, Math.abs(brY - tlY));
+                                  finalLeft = tlX;
+                                  finalTop = tlY;
+                                  cellW = Math.abs(brX - tlX);
+                                  cellH = Math.abs(brY - tlY);
                                 }
 
                                 return (
                                   <View
                                     key={`grid-${p.row}-${p.col}`}
-                                    className={`absolute items-center justify-center border ${p.isExit ? 'bg-green-500/50 border-green-400' : 'bg-blue-500/50 border-blue-400'}`}
+                                    className={`absolute items-center justify-center border ${p.isExit ? 'bg-green-600/80 border-green-500' : 'bg-lime-500/80 border-lime-400'}`}
                                     style={{
                                       pointerEvents: 'none',
-                                      left: sx - (cellW / 2),
-                                      top: sy - (cellH / 2),
+                                      left: finalLeft,
+                                      top: finalTop,
                                       width: cellW,
                                       height: cellH,
                                       zIndex: p.isExit ? 10 : 1
