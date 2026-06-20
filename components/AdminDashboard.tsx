@@ -2617,8 +2617,8 @@ export default function AdminDashboard() {
                 </TouchableOpacity>
               </View>
 
-              {mapEditorStep === 1 ? (
-                <ScrollView className="flex-1" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
+
+                <ScrollView className="flex-1" style={{ display: mapEditorStep === 1 ? 'flex' : 'none' }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
                   <Text className="text-neutral-400 text-lg mb-4">Select a GPS pin from the list below, then tap its matching corner on the floor plan.</Text>
 
                   <View className="flex-row flex-wrap mb-4 justify-center">
@@ -2627,7 +2627,14 @@ export default function AdminDashboard() {
                         <TouchableOpacity
                           key={i}
                           className={`px-3 py-2 rounded-lg border mr-2 mb-2 ${activeCalibIdx === i ? 'bg-blue-600 border-blue-400' : 'bg-neutral-800 border-neutral-600'}`}
-                          onPress={() => setActiveCalibIdx(activeCalibIdx === i ? -1 : i)}
+                          onPress={() => {
+                            if (activeCalibIdx === i) {
+                              setActiveCalibIdx(-1);
+                            } else {
+                              setActiveCalibIdx(i);
+                              setStep1PanMode(false);
+                            }
+                          }}
                         >
                           <Text className="text-white font-bold text-base">{p.label || `P${i + 1}`}</Text>
                           {calibPoints[i] && <Text className="text-green-400 text-[10px] mt-1 font-bold">✓ Placed</Text>}
@@ -2688,7 +2695,7 @@ export default function AdminDashboard() {
                   </View>
 
                   <View
-                    className="bg-neutral-800 rounded-xl overflow-hidden mb-6 w-full relative"
+                    className="bg-neutral-800 rounded-xl overflow-hidden mb-6 w-full justify-center items-center relative"
                     style={{ height: getDynamicMapHeight() * 1.3 }}
                     onLayout={(e) => setImgLayout({ w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height) })}
                   >
@@ -2701,18 +2708,26 @@ export default function AdminDashboard() {
                       >
                         <View
                           style={{
-                            position: 'absolute',
-                            left: 0,
-                            top: 0,
                             width: imgLayout.w,
                             height: imgLayout.h,
-                            transform: [
-                              { scale: step1Zoom },
-                              { translateX: step1PanOffset.x },
-                              { translateY: step1PanOffset.y }
-                            ]
+                            overflow: 'hidden',
+                            position: 'relative',
                           }}
                         >
+                          <View
+                            style={{
+                              position: 'absolute',
+                              left: 0,
+                              top: 0,
+                              width: imgLayout.w,
+                              height: imgLayout.h,
+                              transform: [
+                                { scale: step1Zoom },
+                                { translateX: step1PanOffset.x },
+                                { translateY: step1PanOffset.y }
+                              ]
+                            }}
+                          >
                           <Image
                             source={{ uri: selectedBuilding.masterPlanUrl }}
                             className="w-full h-full"
@@ -2730,10 +2745,10 @@ export default function AdminDashboard() {
                               <TouchableOpacity
                                 key={i}
                                 activeOpacity={0.8}
-                                className="absolute items-center"
+                                className="absolute items-center justify-center"
                                 style={{ 
                                   left: px - 20, 
-                                  top: py - 20 - 20 / step1Zoom, 
+                                  top: py - 20, 
                                   width: 40, 
                                   height: 40, 
                                   zIndex: activeCalibIdx === i ? 10 : 1,
@@ -2741,11 +2756,16 @@ export default function AdminDashboard() {
                                 }}
                                 onPress={(e) => {
                                   e.stopPropagation();
-                                  setActiveCalibIdx(activeCalibIdx === i ? -1 : i);
+                                  if (activeCalibIdx === i) {
+                                    setActiveCalibIdx(-1);
+                                  } else {
+                                    setActiveCalibIdx(i);
+                                    setStep1PanMode(false);
+                                  }
                                 }}
                               >
                                 {activeCalibIdx === i ? (
-                                  <View className="absolute pointer-events-none" style={{ left: 4, top: 24, width: 32, height: 32, transform: [{ scale: step1Zoom }] }}>
+                                  <View className="absolute pointer-events-none" style={{ left: 4, top: 4, width: 32, height: 32, transform: [{ scale: step1Zoom }] }}>
                                     <View className="absolute bg-red-500 shadow-md shadow-black" style={{ left: 15, top: 0, width: 2, height: 12 }} />
                                     <View className="absolute bg-red-500 shadow-md shadow-black" style={{ left: 15, bottom: 0, width: 2, height: 12 }} />
                                     <View className="absolute bg-red-500 shadow-md shadow-black" style={{ top: 15, left: 0, width: 12, height: 2 }} />
@@ -2754,7 +2774,7 @@ export default function AdminDashboard() {
                                 ) : (
                                   <>
                                     <MaterialCommunityIcons
-                                      name="map-marker"
+                                      name="crosshairs-gps"
                                       size={40}
                                       color="#22c55e"
                                     />
@@ -2783,6 +2803,7 @@ export default function AdminDashboard() {
                               </TouchableOpacity>
                             )
                           })}
+                          </View>
                         </View>
                       </View>
                     )}
@@ -2793,28 +2814,17 @@ export default function AdminDashboard() {
                       <Text className="text-white font-bold text-lg">Clear Points</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      className={`px-6 py-3 rounded-xl flex-1 ml-2 items-center bg-green-600`}
-                      onPress={async () => {
-                        try {
-                          if (calibPoints.filter(Boolean).length !== selectedBuilding?.polygon?.length) {
-                            showToast("Please place all GPS pins on the map first to calibrate.");
-                            return;
-                          }
-                          await updateBuildingCalibration({ clerkId: user?.id || "", buildingId: selectedBuilding._id, calibrationPoints: calibPoints });
-                          
-                          performAutoZoom();
-
-                          setMapEditorStep(2);
-                          showToast("Image calibrated successfully!");
-                        } catch (e) { showToast("Error saving calibration", "error"); }
+                      className="px-6 py-3 rounded-xl flex-1 ml-2 items-center bg-blue-600"
+                      onPress={() => {
+                        performAutoZoom();
+                        setMapEditorStep(2);
                       }}
                     >
                       <Text className="text-white font-bold text-lg">Next: Safe Routes ➔</Text>
                     </TouchableOpacity>
                   </View>
                 </ScrollView>
-              ) : (
-                <ScrollView className="flex-1" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
+                <ScrollView className="flex-1" style={{ display: mapEditorStep === 2 ? 'flex' : 'none' }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
                   <Text className="text-neutral-400 text-lg mb-4">Select a brush type, then tap the map to paint grid cells.</Text>
 
                   {/* Toolbar */}
@@ -3000,36 +3010,34 @@ export default function AdminDashboard() {
                     <TouchableOpacity className="flex-1 bg-neutral-700 py-3 rounded-xl items-center mr-2" onPress={() => setGridPaths([])}>
                       <Text className="text-white font-bold">Clear Grid</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity
-                      className="flex-1 bg-green-600 py-3 rounded-xl items-center"
-                      onPress={async () => {
-                        if (calibPoints.filter(Boolean).length !== selectedBuilding?.polygon?.length) {
-                          showToast("Please complete Step 1 (Calibration) before saving.");
-                          setMapEditorStep(1);
-                          setStep1PanMode(true);
-                          setStep1Zoom(1);
-                          setStep1PanOffset({ x: 0, y: 0 });
-                          return;
-                        }
-                        if (!gridPaths.some(p => p.isExit)) {
-                          showToast("Please paint at least one Exit.");
-                          return;
-                        }
+                    {(() => {
+                      const requiredPins = selectedBuilding?.polygon?.length || 4;
+                      const hasAllPins = calibPoints.filter(Boolean).length === requiredPins;
+                      const hasSafeRoute = gridPaths.some(p => !p.isExit);
+                      const hasExit = gridPaths.some(p => p.isExit);
+                      const isSaveReady = hasAllPins && hasSafeRoute && hasExit;
 
-                        try {
-                          await updateBuildingGridPaths({ clerkId: user?.id || "", buildingId: selectedBuilding._id, gridPaths });
-                          setIsMapEditorOpen(false);
-                          showToast("Grid Layout saved!");
-                        } catch (e) { showToast("Error saving grid", "error"); }
-                      }}
-                    >
-                      <Text className="text-white font-bold">Save Grid</Text>
-                    </TouchableOpacity>
+                      return (
+                        <TouchableOpacity
+                          className={`flex-1 py-3 rounded-xl items-center ${isSaveReady ? 'bg-green-600' : 'bg-neutral-600 opacity-50'}`}
+                          disabled={!isSaveReady}
+                          onPress={async () => {
+                            try {
+                              await updateBuildingCalibration({ clerkId: user?.id || "", buildingId: selectedBuilding._id, calibrationPoints: calibPoints });
+                              await updateBuildingGridPaths({ clerkId: user?.id || "", buildingId: selectedBuilding._id, gridPaths });
+                              setIsMapEditorOpen(false);
+                              showToast("Floor plan configured successfully!");
+                            } catch (e) { showToast("Error saving layout", "error"); }
+                          }}
+                        >
+                          <Text className="text-white font-bold text-lg">Save Configuration</Text>
+                        </TouchableOpacity>
+                      );
+                    })()}
                   </View>
                 </ScrollView>
-              )}
-            </>
-          )}
+              </>
+            )}
         </View>
       </Modal>
 
