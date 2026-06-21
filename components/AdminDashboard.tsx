@@ -126,7 +126,7 @@ export default function AdminDashboard() {
 
 
   const [calibPoints, setCalibPoints] = React.useState<{ x: number, y: number }[]>([]);
-  const [gridPaths, setGridPaths] = React.useState<{ row: number, col: number, lat: number, lon: number, isExit: boolean }[]>([]);
+  const [gridPaths, setGridPaths] = React.useState<{ row: number, col: number, lat: number, lon: number, isExit: boolean, type?: string }[]>([]);
   const [imgLayout, setImgLayout] = React.useState<{ w: number, h: number }>({ w: 1, h: 1 });
   const [imageAspectRatio, setImageAspectRatio] = React.useState<number | null>(null);
   const [isUploading, setIsUploading] = React.useState(false);
@@ -664,23 +664,13 @@ export default function AdminDashboard() {
 
       const csvString = rows.join('\n');
 
-      if (Platform.OS === 'web') {
-        const blob = new Blob([csvString], { type: 'text/csv' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `evacuation_logs_${Date.now()}.csv`;
-        link.click();
-        URL.revokeObjectURL(url);
-      } else {
-        const fileUri = `${(FileSystem as any).documentDirectory}evacuation_logs_${Date.now()}.csv`;
-        await (FileSystem as any).writeAsStringAsync(fileUri, csvString, { encoding: (FileSystem as any).EncodingType.UTF8 });
+      const fileUri = `${(FileSystem as any).documentDirectory}evacuation_logs_${Date.now()}.csv`;
+      await (FileSystem as any).writeAsStringAsync(fileUri, csvString, { encoding: (FileSystem as any).EncodingType.UTF8 });
 
-        if (await Sharing.isAvailableAsync()) {
-          await Sharing.shareAsync(fileUri, { mimeType: 'text/csv', dialogTitle: 'Export Evacuation Logs' });
-        } else {
-          showToast("Sharing is not available on this device", "error");
-        }
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(fileUri, { mimeType: 'text/csv', dialogTitle: 'Export Evacuation Logs' });
+      } else {
+        showToast("Sharing is not available on this device", "error");
       }
     } catch (e) {
       console.log("Export failed", e);
@@ -2926,8 +2916,8 @@ export default function AdminDashboard() {
                   {/* Toolbar */}
                   <View className="flex-row space-x-2 mb-2">
                     <TouchableOpacity
-                      className={`flex-1 py-3 rounded-xl items-center border-2 ${gridPaintMode === "safe" ? 'bg-blue-600 border-blue-400' : 'bg-neutral-800 border-neutral-700'}`}
-                      onPress={() => setGridPaintMode("safe")}
+                      className={`flex-1 py-3 rounded-xl items-center border-2 ${gridPaintMode === "safe_route" ? 'bg-blue-600 border-blue-400' : 'bg-neutral-800 border-neutral-700'}`}
+                      onPress={() => setGridPaintMode("safe_route")}
                     >
                       <Text className="text-white font-bold text-lg">🟦 Safe Route</Text>
                     </TouchableOpacity>

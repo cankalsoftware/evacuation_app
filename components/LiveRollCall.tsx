@@ -3,6 +3,8 @@ import { View, ScrollView, Platform } from "react-native";
 import { useAudioPlayer } from 'expo-audio';import { Text, TouchableOpacity } from "./ResponsiveUI";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 
 export default function LiveRollCall({ incidentId, clerkId, onLocateUser, buildingPolygon }: { incidentId: any, clerkId: string, onLocateUser: (lat: number, lon: number, name: string) => void, buildingPolygon?: any[] }) {
   const evacData = useQuery(api.portal.getEvacuationData, { clerkId, incidentId }) || { inside: [], outside: [] };
@@ -118,25 +120,25 @@ export default function LiveRollCall({ incidentId, clerkId, onLocateUser, buildi
   const totalIn = panicUsers.length + inBuildingUsers.length;
   const totalOut = safeUsers.length;
 
-  const handleExportCSV = (list: any[], title: string) => {
-    if (Platform.OS !== 'web') {
-      alert("Export is only supported on web right now.");
-      return;
-    }
-    
+  const handleExportCSV = async (list: any[], title: string) => {
     const headers = "Name,Status,Last Latitude,Last Longitude,Updated At\n";
     const rows = list.map((r: any) => `"${r.userName}","${r.status}",${r.lastLat || ""},${r.lastLon || ""},"${new Date(r.updatedAt).toLocaleString()}"`).join("\n");
     const csvContent = headers + rows;
+    const fileName = `evacuation_${title}_${new Date().toISOString().slice(0,10)}.csv`;
     
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", `evacuation_${title}_${new Date().toISOString().slice(0,10)}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    try {
+      const fileUri = `${(FileSystem as any).documentDirectory}${fileName}`;
+      await (FileSystem as any).writeAsStringAsync(fileUri, csvContent, { encoding: (FileSystem as any).EncodingType.UTF8 });
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(fileUri, { mimeType: 'text/csv', dialogTitle: 'Export Evacuation List' });
+      } else {
+        alert("Sharing is not available on this device");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Failed to export logs");
+    }
   };
 
   const renderUser = (r: any) => (

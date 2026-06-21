@@ -54,6 +54,7 @@ function RootNavigator() {
   const [hasSynced, setHasSynced] = useState(false);
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [collisionWarning, setCollisionWarning] = useState(false);
+  const [deviceConfirmed, setDeviceConfirmed] = useState(false);
 
   useEffect(() => {
     getOrCreateDeviceId().then(id => setDeviceId(id));
@@ -96,14 +97,22 @@ function RootNavigator() {
       }).catch((err: any) => console.error("SecureStore failed:", err));
   };
 
-  // Auto-Kick Enforcer (Listen for changes AFTER we have synced)
+  // Ensure convex actually registers our device before enforcing kicks
   useEffect(() => {
-    if (hasSynced && isSignedIn && convexUser && deviceId && convexUser.activeDeviceId) {
+    if (convexUser?.activeDeviceId === deviceId) {
+      setDeviceConfirmed(true);
+    }
+  }, [convexUser?.activeDeviceId, deviceId]);
+
+  // Auto-Kick Enforcer (Listen for changes AFTER we have synced and confirmed our device)
+  useEffect(() => {
+    if (deviceConfirmed && isSignedIn && convexUser && deviceId && convexUser.activeDeviceId) {
       if (convexUser.activeDeviceId !== deviceId) {
         console.warn("Device kicked! Active device changed.");
         signOut();
         setHasSynced(false); // Reset sync state
         setCollisionWarning(false);
+        setDeviceConfirmed(false);
         if (Platform.OS !== 'web') {
            const { Alert } = require('react-native');
            Alert.alert("Logged Out", "You were logged out because your account was accessed from another device.");
@@ -112,7 +121,7 @@ function RootNavigator() {
         }
       }
     }
-  }, [hasSynced, isSignedIn, convexUser?.activeDeviceId, deviceId, signOut]);
+  }, [deviceConfirmed, isSignedIn, convexUser?.activeDeviceId, deviceId, signOut]);
 
   const hasConsented = useQuery(api.consent.getConsentStatus, 
     { clerkId: userId ?? undefined }
