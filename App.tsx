@@ -1,5 +1,7 @@
+import './polyfill';
 import "react-native-reanimated";
 import './global.css';
+
 import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator, Image, Text, useWindowDimensions, TouchableOpacity } from 'react-native';
 import React, { useEffect, useState } from 'react';
@@ -109,7 +111,13 @@ function RootNavigator() {
     if (deviceConfirmed && isSignedIn && convexUser && deviceId && convexUser.activeDeviceId) {
       if (convexUser.activeDeviceId !== deviceId) {
         console.warn("Device kicked! Active device changed.");
-        signOut();
+        (async () => {
+          try {
+            await signOut();
+          } catch (e) {
+            console.log("Clerk signout error (ignored):", e);
+          }
+        })();
         setHasSynced(false); // Reset sync state
         setCollisionWarning(false);
         setDeviceConfirmed(false);
@@ -123,9 +131,9 @@ function RootNavigator() {
     }
   }, [deviceConfirmed, isSignedIn, convexUser?.activeDeviceId, deviceId, signOut]);
 
-  const hasConsented = useQuery(api.consent.getConsentStatus, 
-    { clerkId: userId ?? undefined }
-  );
+  const hasConsented = convexUser === undefined 
+    ? undefined 
+    : (convexUser?.locationGranted !== undefined && convexUser?.notificationsGranted !== undefined);
 
   if (!isLoaded) {
     return (
@@ -148,6 +156,7 @@ function RootNavigator() {
              <View className="mb-3">
                <TouchableOpacity 
                  onPress={() => {
+                   setHasSynced(true);
                    executeSync();
                    setCollisionWarning(false);
                  }}
@@ -158,7 +167,13 @@ function RootNavigator() {
              </View>
              <TouchableOpacity 
                onPress={() => {
-                 signOut();
+                 (async () => {
+                   try {
+                     await signOut();
+                   } catch (e) {
+                     console.log(e);
+                   }
+                 })();
                  setCollisionWarning(false);
                }}
                className="bg-neutral-800 border border-neutral-700 rounded-xl py-4 items-center"

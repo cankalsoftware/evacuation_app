@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "374810636040",
+    "project_id": "firevision-evacuation",
+    "storage_bucket": "firevision-evacuation.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:374810636040:android:3d2f269632a4a0d93946bd",
+        "android_client_info": {
+          "package_name": "uk.firevision.evacuation"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBVSKmKv_LUjnMAYaV5c8pdvj0M4f8ztv8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

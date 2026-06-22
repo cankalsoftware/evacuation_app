@@ -8,7 +8,6 @@
  * @module
  */
 
-import type * as consent from "../consent.js";
 import type * as crons from "../crons.js";
 import type * as emails from "../emails.js";
 import type * as portal from "../portal.js";
@@ -22,7 +21,6 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
-  consent: typeof consent;
   crons: typeof crons;
   emails: typeof emails;
   portal: typeof portal;

@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 
+
 export const getDashboardData = query({
   args: { clerkId: v.optional(v.string()) },
   handler: async (ctx, args) => {
@@ -30,7 +31,7 @@ export const getDashboardData = query({
         .query("sites")
         .withIndex("by_admin", (q) => q.eq("adminId", args.clerkId!))
         .collect();
-        
+
       const sites = await Promise.all(sitesRaw.map(async (s) => ({
         ...s,
         masterPlanUrl: s.masterPlanId ? await ctx.storage.getUrl(s.masterPlanId) : null
@@ -48,7 +49,8 @@ export const getDashboardData = query({
         postCode: user.postCode,
         country: user.country,
         agreedToTandC: user.agreedToTandC,
-        permissionsGranted: user.permissionsGranted,
+        locationGranted: user.locationGranted,
+        notificationsGranted: user.notificationsGranted,
         buildings,
         sites,
       };
@@ -64,7 +66,8 @@ export const getDashboardData = query({
       name: user.name,
       phone: user.phone,
       agreedToTandC: user.agreedToTandC,
-      permissionsGranted: user.permissionsGranted,
+      locationGranted: user.locationGranted,
+      notificationsGranted: user.notificationsGranted,
       scannedPlanId: plan?.storageId,
       scannedPlanLat: plan?.latitude,
       scannedPlanLon: plan?.longitude,
@@ -130,7 +133,8 @@ export const updateProfile = mutation({
     name: v.optional(v.string()),
     phone: v.optional(v.string()),
     agreedToTandC: v.optional(v.boolean()),
-    permissionsGranted: v.optional(v.boolean()),
+    locationGranted: v.optional(v.boolean()),
+    notificationsGranted: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const user = await ctx.db
@@ -144,7 +148,8 @@ export const updateProfile = mutation({
     if (args.name !== undefined) patchData.name = args.name;
     if (args.phone !== undefined) patchData.phone = args.phone;
     if (args.agreedToTandC !== undefined) patchData.agreedToTandC = args.agreedToTandC;
-    if (args.permissionsGranted !== undefined) patchData.permissionsGranted = args.permissionsGranted;
+    if (args.locationGranted !== undefined) patchData.locationGranted = args.locationGranted;
+    if (args.notificationsGranted !== undefined) patchData.notificationsGranted = args.notificationsGranted;
 
     await ctx.db.patch(user._id, patchData);
   },
@@ -168,7 +173,7 @@ export const saveBuilding = mutation({
       .first();
 
     if (!user || user.role !== "admin") throw new Error("Unauthorized");
-    
+
     if (args.polygon && args.polygon.length < 3) {
       throw new Error("A building polygon must have at least 3 points.");
     }
@@ -240,7 +245,7 @@ export const updateBuildingImage = mutation({
       .first();
 
     if (!user || user.role !== "admin") throw new Error("Unauthorized");
-    
+
     const building = await ctx.db.get(args.buildingId);
     if (building && building.masterPlanId && building.masterPlanId !== args.storageId) {
       await ctx.storage.delete(building.masterPlanId);
@@ -264,8 +269,8 @@ export const updateBuildingPolygon = mutation({
 
     if (!user || user.role !== "admin") throw new Error("Unauthorized");
     if (args.polygon.length < 4) throw new Error("A building polygon must have at least 4 points.");
-    
-    await ctx.db.patch(args.buildingId, { 
+
+    await ctx.db.patch(args.buildingId, {
       polygon: args.polygon,
       latitude: args.polygon[0].lat,
       longitude: args.polygon[0].lon
@@ -288,8 +293,8 @@ export const updateBuildingInfo = mutation({
       .first();
 
     if (!user || user.role !== "admin") throw new Error("Unauthorized");
-    
-    await ctx.db.patch(args.buildingId, { 
+
+    await ctx.db.patch(args.buildingId, {
       name: args.name,
       ...(args.siteName !== undefined ? { siteName: args.siteName } : {}),
       address: args.address
@@ -311,8 +316,8 @@ export const updateBuildingCalibration = mutation({
 
     if (!user || user.role !== "admin") throw new Error("Unauthorized");
     if (args.calibrationPoints.length < 3) throw new Error("Must provide at least 3 calibration points.");
-    
-    await ctx.db.patch(args.buildingId, { 
+
+    await ctx.db.patch(args.buildingId, {
       imageCalibrationPoints: args.calibrationPoints
     });
   }
@@ -331,7 +336,7 @@ export const updateBuildingSafeNodes = mutation({
       .first();
 
     if (!user || user.role !== "admin") throw new Error("Unauthorized");
-    
+
     const building = await ctx.db.get(args.buildingId);
     if (!building || !building.polygon) throw new Error("Building or polygon not found");
 
@@ -346,7 +351,7 @@ export const updateBuildingSafeNodes = mutation({
         }
       }
     }
-    await ctx.db.patch(args.buildingId, { 
+    await ctx.db.patch(args.buildingId, {
       safeNodes: args.safeNodes
     });
   },
@@ -365,8 +370,8 @@ export const updateBuildingGridPaths = mutation({
       .first();
 
     if (!user || user.role !== "admin") throw new Error("Unauthorized");
-    
-    await ctx.db.patch(args.buildingId, { 
+
+    await ctx.db.patch(args.buildingId, {
       gridPaths: args.gridPaths
     });
   }
@@ -384,12 +389,12 @@ export const deleteBuilding = mutation({
       .first();
 
     if (!user || user.role !== "admin") throw new Error("Unauthorized");
-    
+
     const building = await ctx.db.get(args.buildingId);
     if (building?.masterPlanId) {
       await ctx.storage.delete(building.masterPlanId);
     }
-    
+
     // Cleanup incident and rollCall data
     const incidents = await ctx.db.query("incidents").withIndex("by_building", q => q.eq("buildingId", args.buildingId)).collect();
     for (const incident of incidents) {
@@ -419,9 +424,9 @@ export function isPointInPolygon(point: { lat: number, lon: number }, polygon: {
   for (let i = 0; i < polygon.length; i++) {
     const xi = polygon[i].lon, yi = polygon[i].lat;
     const xj = polygon[j].lon, yj = polygon[j].lat;
-    
+
     const intersect = ((yi > point.lat) !== (yj > point.lat)) &&
-        (point.lon < (xj - xi) * (point.lat - yi) / (yj - yi) + xi);
+      (point.lon < (xj - xi) * (point.lat - yi) / (yj - yi) + xi);
     if (intersect) isInside = !isInside;
     j = i;
   }
@@ -429,18 +434,18 @@ export function isPointInPolygon(point: { lat: number, lon: number }, polygon: {
 }
 
 function distanceToLineSegment(p: { lat: number, lon: number }, v: { lat: number, lon: number }, w: { lat: number, lon: number }) {
-  const l2 = (w.lat - v.lat)**2 + (w.lon - v.lon)**2;
-  if (l2 === 0) return Math.sqrt((p.lat - v.lat)**2 + (p.lon - v.lon)**2);
+  const l2 = (w.lat - v.lat) ** 2 + (w.lon - v.lon) ** 2;
+  if (l2 === 0) return Math.sqrt((p.lat - v.lat) ** 2 + (p.lon - v.lon) ** 2);
   let t = ((p.lon - v.lon) * (w.lon - v.lon) + (p.lat - v.lat) * (w.lat - v.lat)) / l2;
   t = Math.max(0, Math.min(1, t));
   const projLat = v.lat + t * (w.lat - v.lat);
   const projLon = v.lon + t * (w.lon - v.lon);
-  return Math.sqrt((p.lat - projLat)**2 + (p.lon - projLon)**2);
+  return Math.sqrt((p.lat - projLat) ** 2 + (p.lon - projLon) ** 2);
 }
 
 export function isPointInPolygonWithMargin(point: { lat: number, lon: number }, polygon: { lat: number, lon: number }[], marginFactor: number) {
   if (isPointInPolygon(point, polygon)) return true;
-  
+
   let minLat = Infinity, maxLat = -Infinity;
   let minLon = Infinity, maxLon = -Infinity;
   for (const p of polygon) {
@@ -449,16 +454,16 @@ export function isPointInPolygonWithMargin(point: { lat: number, lon: number }, 
     if (p.lon < minLon) minLon = p.lon;
     if (p.lon > maxLon) maxLon = p.lon;
   }
-  
-  const diag = Math.sqrt((maxLat - minLat)**2 + (maxLon - minLon)**2);
+
+  const diag = Math.sqrt((maxLat - minLat) ** 2 + (maxLon - minLon) ** 2);
   const allowedDist = Math.max(0.00005, diag * marginFactor); // Dynamic margin based on polygon scale
-  
+
   // Check precise distance to any edge to handle concave (L-shape) polygons
   for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
     const d = distanceToLineSegment(point, polygon[j], polygon[i]);
     if (d <= allowedDist) return true;
   }
-  
+
   return false;
 }
 
@@ -467,26 +472,26 @@ export const getAutoPushedBuilding = query({
   handler: async (ctx, args) => {
     // 1. Fetch all buildings
     const buildings = await ctx.db.query("buildings").collect();
-    
+
     // 2. Run ray-casting to find if the user is inside any building's polygon
     for (const b of buildings) {
-       const isReady = b.polygon && b.polygon.length >= 3 && 
-                       b.masterPlanId && 
-                       b.imageCalibrationPoints && b.imageCalibrationPoints.length >= 3 &&
-                       b.safeNodes && b.safeNodes.some((n: any) => n.isExit);
-                       
-       if (isReady) {
-          if (isPointInPolygonWithMargin({ lat: args.lat, lon: args.lon }, b.polygon!, 0.05)) {
-             return {
-               buildingId: b._id,
-               name: b.name,
-               masterPlanUrl: await ctx.storage.getUrl(b.masterPlanId!),
-               polygon: b.polygon,
-               safeNodes: b.safeNodes,
-               imageCalibrationPoints: b.imageCalibrationPoints,
-             };
-          }
-       }
+      const isReady = b.polygon && b.polygon.length >= 3 &&
+        b.masterPlanId &&
+        b.imageCalibrationPoints && b.imageCalibrationPoints.length >= 3 &&
+        b.safeNodes && b.safeNodes.some((n: any) => n.isExit);
+
+      if (isReady) {
+        if (isPointInPolygonWithMargin({ lat: args.lat, lon: args.lon }, b.polygon!, 0.05)) {
+          return {
+            buildingId: b._id,
+            name: b.name,
+            masterPlanUrl: await ctx.storage.getUrl(b.masterPlanId!),
+            polygon: b.polygon,
+            safeNodes: b.safeNodes,
+            imageCalibrationPoints: b.imageCalibrationPoints,
+          };
+        }
+      }
     }
     return null; // Not inside any known building
   }
@@ -632,7 +637,7 @@ export const getRecentIncidents = query({
 
     const buildings = await ctx.db.query("buildings").withIndex("by_admin", q => q.eq("adminId", clerkId)).collect();
     const buildingIds = buildings.map(b => b._id);
-    
+
     // In Convex, no "IN" query natively yet. So we fetch all incidents for these buildings and sort.
     let recentIncidents = [];
     for (const bId of buildingIds) {
@@ -642,7 +647,7 @@ export const getRecentIncidents = query({
         recentIncidents.push({ ...inc, buildingName: building?.name, siteName: building?.siteName });
       }
     }
-    
+
     // Sort by triggeredAt descending
     recentIncidents.sort((a, b) => b.triggeredAt - a.triggeredAt);
     return recentIncidents.slice(0, 5); // top 5 overall
@@ -659,7 +664,7 @@ export const getAllIncidentsHistory = query({
 
     const buildings = await ctx.db.query("buildings").withIndex("by_admin", q => q.eq("adminId", clerkId)).collect();
     const buildingIds = buildings.map(b => b._id);
-    
+
     let allIncidents = [];
     for (const bId of buildingIds) {
       const incs = await ctx.db.query("incidents").withIndex("by_building", q => q.eq("buildingId", bId)).filter(q => q.eq(q.field("isActive"), false)).collect();
@@ -668,7 +673,7 @@ export const getAllIncidentsHistory = query({
         allIncidents.push({ ...inc, buildingName: building?.name, siteName: building?.siteName });
       }
     }
-    
+
     allIncidents.sort((a, b) => b.triggeredAt - a.triggeredAt);
     return allIncidents;
   }
@@ -695,9 +700,9 @@ export const checkInUser = mutation({
       .query("users")
       .withIndex("by_clerkId", (q) => q.eq("clerkId", args.clerkId))
       .first();
-    
+
     if (!user) return;
-    
+
     await ctx.db.patch(user._id, {
       activeBuildingId: args.buildingId || undefined,
     });
@@ -783,7 +788,7 @@ export const getEvacuationData = query({
 
     const insides = await ctx.db.query("inside").withIndex("by_incident", q => q.eq("incidentId", args.incidentId!)).collect();
     const outsides = await ctx.db.query("outside").withIndex("by_incident", q => q.eq("incidentId", args.incidentId!)).collect();
-    
+
     // Join with users
     const resultsInside = await Promise.all(insides.map(async (r) => {
       const u = await ctx.db.get(r.userId);
@@ -837,7 +842,7 @@ export const internalTriggerDrill = internalMutation({
       }
       const sites = await ctx.db.query("sites").withIndex("by_name", q => q.eq("name", args.siteName!)).collect();
       for (const s of sites) {
-         await ctx.db.patch(s._id, { nextDrillAt: undefined, drillJobId: undefined });
+        await ctx.db.patch(s._id, { nextDrillAt: undefined, drillJobId: undefined });
       }
     }
   }
@@ -899,11 +904,11 @@ export const savePushToken = mutation({
 });
 
 export const sendDrillNotification = mutation({
-  args: { 
-    clerkId: v.string(), 
-    buildingId: v.optional(v.id("buildings")), 
+  args: {
+    clerkId: v.string(),
+    buildingId: v.optional(v.id("buildings")),
     siteName: v.optional(v.string()),
-    message: v.string() 
+    message: v.string()
   },
   handler: async (ctx, args) => {
     const admin = await ctx.db.query("users").withIndex("by_clerkId", q => q.eq("clerkId", args.clerkId)).first();
@@ -969,14 +974,14 @@ export const debugUykoComplete = query({
   }
 });
 export const deleteIncidents = mutation({
-  args: { 
-    clerkId: v.string(), 
-    incidentIds: v.array(v.id("incidents")) 
+  args: {
+    clerkId: v.string(),
+    incidentIds: v.array(v.id("incidents"))
   },
   handler: async (ctx, args) => {
     const admin = await ctx.db.query("users").withIndex("by_clerkId", q => q.eq("clerkId", args.clerkId)).first();
     if (!admin || admin.role !== "admin") throw new Error("Unauthorized");
-    
+
     // In a real production app we might verify that these incidents belong to buildings owned by the admin.
     // For now, we trust the UI since the UI only shows their incidents.
     for (const id of args.incidentIds) {
@@ -993,7 +998,7 @@ export const moveToOutside = mutation({
   handler: async (ctx, args) => {
     const user = await ctx.db.query("users").withIndex("by_clerkId", q => q.eq("clerkId", args.clerkId)).first();
     if (!user || user.role !== "admin") throw new Error("Unauthorized");
-    
+
     for (const id of args.insideIds) {
       const record = await ctx.db.get(id);
       if (record) {

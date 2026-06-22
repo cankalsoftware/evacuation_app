@@ -15,6 +15,7 @@ module.exports = {
     },
     android: {
       package: "uk.firevision.evacuation",
+      googleServicesFile: "./google-services.json",
       predictiveBackGestureEnabled: false,
       permissions: [
         "android.permission.CAMERA",

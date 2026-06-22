@@ -31,6 +31,14 @@ export const syncUser = mutation({
           role: newRole,
           ...(args.activeDeviceId ? { activeDeviceId: args.activeDeviceId } : {}),
         });
+
+        // If the device ID changed, revoke their permissions so they are prompted on the new device
+        if (args.activeDeviceId && existingUser.activeDeviceId && existingUser.activeDeviceId !== args.activeDeviceId) {
+          await ctx.db.patch(existingUser._id, {
+            locationGranted: undefined,
+            notificationsGranted: undefined
+          });
+        }
       }
       return existingUser._id;
     }
@@ -82,7 +90,8 @@ export const updateAdminProfile = mutation({
     postCode: v.string(),
     country: v.string(),
     agreedToTandC: v.boolean(),
-    permissionsGranted: v.boolean(),
+    locationGranted: v.boolean(),
+    notificationsGranted: v.boolean(),
   },
   handler: async (ctx, args) => {
     const existingUser = await ctx.db
@@ -101,7 +110,8 @@ export const updateAdminProfile = mutation({
       postCode: args.postCode,
       country: args.country,
       agreedToTandC: args.agreedToTandC,
-      permissionsGranted: args.permissionsGranted,
+      locationGranted: args.locationGranted,
+      notificationsGranted: args.notificationsGranted,
       approvalStatus: existingUser.approvalStatus || "pending",
     });
   },
@@ -141,3 +151,25 @@ export const getPendingActivationAdmins = internalQuery({
   },
 });
 
+export const updatePermissions = mutation({
+  args: {
+    clerkId: v.string(),
+    locationGranted: v.boolean(),
+    notificationsGranted: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const existingUser = await ctx.db
+      .query("users")
+      .withIndex("by_clerkId", (q) => q.eq("clerkId", args.clerkId))
+      .first();
+
+    if (existingUser) {
+      await ctx.db.patch(existingUser._id, {
+        locationGranted: args.locationGranted,
+        notificationsGranted: args.notificationsGranted,
+      });
+      return existingUser._id;
+    }
+    return null;
+  },
+});

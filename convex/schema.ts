@@ -20,7 +20,9 @@ export default defineSchema({
     postCode: v.optional(v.string()),
     country: v.optional(v.string()),
     agreedToTandC: v.optional(v.boolean()),
-    permissionsGranted: v.optional(v.boolean()),
+    permissionsGranted: v.optional(v.boolean()), // Legacy field kept for schema validation
+    locationGranted: v.optional(v.boolean()),
+    notificationsGranted: v.optional(v.boolean()),
     approvalStatus: v.optional(v.union(v.literal("pending"), v.literal("approved"), v.literal("rejected"))),
     activationEmailSent: v.optional(v.boolean()),
     activeDeviceId: v.optional(v.string()), // Phase 23: Single Device Login
@@ -37,13 +39,7 @@ export default defineSchema({
     exitNode: v.optional(v.object({ x: v.number(), y: v.number() })), // Added for Phase 9 guest scans
   }).index("by_clerkId", ["clerkId"]),
 
-  locationConsent: defineTable({
-    clerkId: v.optional(v.string()), // Optional to prevent crashing on old records
-    userId: v.optional(v.id("users")), // Legacy support
-    hasConsented: v.boolean(),
-    consentedAt: v.number(),
-    ipAddress: v.optional(v.string()),
-  }).index("by_clerkId", ["clerkId"]),
+
 
   buildings: defineTable({
     name: v.string(),

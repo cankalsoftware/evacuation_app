@@ -15,7 +15,7 @@ export default function LocationConsentScreen() {
   const { userId } = useAuth();
   
   // Explicitly import the API mutations
-  const grantConsent = useMutation(api.consent.grantConsent);
+  const updatePermissions = useMutation(api.users.updatePermissions);
   const savePushToken = useMutation(api.users.savePushToken);
 
   const requestPermission = async () => {
@@ -28,6 +28,7 @@ export default function LocationConsentScreen() {
         // We no longer block if Location is denied. Just proceed.
       }
 
+      let notificationsGranted = !Device.isDevice; // Default to true on emulators to prevent warning banners
       // Request Push Notification Permission (Phase 13) - MOBILE ONLY
       let pushToken = "";
       if (Platform.OS !== 'web' && Device.isDevice) {
@@ -44,6 +45,9 @@ export default function LocationConsentScreen() {
           });
           finalStatus = newStatus;
         }
+        
+        notificationsGranted = finalStatus === 'granted';
+
         if (finalStatus !== 'granted') {
           // We no longer block if Push is denied. Just proceed.
         }
@@ -52,13 +56,17 @@ export default function LocationConsentScreen() {
         try {
           pushToken = (await Notifications.getExpoPushTokenAsync()).data;
         } catch (e) {
-          console.log("Failed to get push token:", e);
+          // Silently ignore push token errors on dev clients without Firebase setup
         }
       }
 
       // If granted, inform our backend
       if (userId) {
-        await grantConsent({ clerkId: userId });
+        await updatePermissions({ 
+          clerkId: userId, 
+          locationGranted: status === 'granted',
+          notificationsGranted: notificationsGranted
+        });
         if (pushToken) {
           await savePushToken({ clerkId: userId, token: pushToken });
         }
@@ -99,7 +107,7 @@ export default function LocationConsentScreen() {
         <TouchableOpacity 
           className="w-full py-4 items-center"
           onPress={() => {
-            if (userId) grantConsent({ clerkId: userId });
+            if (userId) updatePermissions({ clerkId: userId, locationGranted: false, notificationsGranted: false });
           }}
           disabled={loading}
         >

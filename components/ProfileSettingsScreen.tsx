@@ -21,7 +21,9 @@ export default function ProfileSettingsScreen({ visible, onClose, dashboardData 
   const [saving, setSaving] = useState(false);
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
   const [refreshingLocation, setRefreshingLocation] = useState(false);
-  const [hasPermissions, setHasPermissions] = useState(true);
+  const [hasLocation, setHasLocation] = useState(true);
+  const [hasNotifications, setHasNotifications] = useState(true);
+  const hasPermissions = hasLocation && hasNotifications;
 
   const updateProfile = useMutation(api.portal.updateProfile);
 
@@ -31,7 +33,8 @@ export default function ProfileSettingsScreen({ visible, onClose, dashboardData 
       setPhone(dashboardData?.phone || "");
       setAgreedToTandC(dashboardData?.agreedToTandC || false);
       
-      setHasPermissions(dashboardData?.permissionsGranted === true);
+      setHasLocation(dashboardData?.locationGranted === true);
+      setHasNotifications(dashboardData?.notificationsGranted === true);
 
       fetchLocation();
     }
@@ -41,7 +44,7 @@ export default function ProfileSettingsScreen({ visible, onClose, dashboardData 
     setRefreshingLocation(true);
     try {
       let { status } = await Location.getForegroundPermissionsAsync();
-      const dbGranted = dashboardData?.permissionsGranted === true;
+      const dbGranted = dashboardData?.locationGranted === true;
       
       if (dbGranted && status === 'granted') {
         let loc = await Location.getCurrentPositionAsync({});
@@ -72,7 +75,8 @@ export default function ProfileSettingsScreen({ visible, onClose, dashboardData 
         name: name.trim(), 
         phone: phone.trim(),
         agreedToTandC,
-        permissionsGranted: hasPermissions,
+        locationGranted: hasLocation,
+        notificationsGranted: hasNotifications,
       });
       onClose();
     } catch (err) {
@@ -140,15 +144,13 @@ export default function ProfileSettingsScreen({ visible, onClose, dashboardData 
           <TouchableOpacity 
             className="flex-row items-center mb-6"
             onPress={async () => {
-              if (hasPermissions) {
-                setHasPermissions(false);
+              if (hasLocation) {
+                setHasLocation(false);
               } else {
-                setHasPermissions(true);
+                setHasLocation(true);
                 try {
                   const { status } = await Location.requestForegroundPermissionsAsync();
-                  if (status === 'granted') {
-                    const { status: pStatus } = await Notifications.requestPermissionsAsync();
-                  } else {
+                  if (status !== 'granted') {
                     alert("Location permission denied by OS. Please enable it in your device settings.");
                   }
                 } catch (e) {
@@ -157,11 +159,39 @@ export default function ProfileSettingsScreen({ visible, onClose, dashboardData 
               }
             }}
           >
-            <View className={`w-6 h-6 rounded border items-center justify-center mr-3 ${hasPermissions ? 'bg-blue-600 border-blue-500' : 'bg-neutral-900 border-neutral-700'}`}>
-              {hasPermissions && <Text className="text-white font-bold text-xs">✓</Text>}
+            <View className={`w-6 h-6 rounded border items-center justify-center mr-3 ${hasLocation ? 'bg-blue-600 border-blue-500' : 'bg-neutral-900 border-neutral-700'}`}>
+              {hasLocation && <Text className="text-white font-bold text-xs">✓</Text>}
             </View>
             <Text className="text-neutral-300 flex-1">
-              Grant Location & Notification Permissions (Required for full access)
+              Grant Location Permission
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            className="flex-row items-center mb-6"
+            onPress={async () => {
+              if (hasNotifications) {
+                setHasNotifications(false);
+              } else {
+                setHasNotifications(true);
+                try {
+                  if (Platform.OS !== 'web') {
+                    const { status } = await Notifications.requestPermissionsAsync();
+                    if (status !== 'granted') {
+                      alert("Notification permission denied by OS. Please enable it in your device settings.");
+                    }
+                  }
+                } catch (e) {
+                  console.warn(e);
+                }
+              }
+            }}
+          >
+            <View className={`w-6 h-6 rounded border items-center justify-center mr-3 ${hasNotifications ? 'bg-blue-600 border-blue-500' : 'bg-neutral-900 border-neutral-700'}`}>
+              {hasNotifications && <Text className="text-white font-bold text-xs">✓</Text>}
+            </View>
+            <Text className="text-neutral-300 flex-1">
+              Grant Push Notification Permission
             </Text>
           </TouchableOpacity>
 

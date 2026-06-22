@@ -135,7 +135,7 @@ export default function GuestDashboard() {
   }, [activeIncident, autoBuilding]);
 
   useEffect(() => {
-    setHasPermissions(dashboardData?.permissionsGranted === true);
+    setHasPermissions(dashboardData?.locationGranted === true && dashboardData?.notificationsGranted === true);
   }, [isViewingProfile, dashboardData]);
 
   useEffect(() => {
