@@ -1,3 +1,11 @@
+/**
+ * @file ProfileSettingsScreen.tsx
+ * @description Provides a modal interface for users (both guests and admins) to update their
+ * profile information (name, phone) and review/grant necessary device permissions like
+ * Location and Notifications.
+ * 
+ * @module ProfileSettingsScreen
+ */
 import React, { useState, useEffect } from "react";
 import { View, Modal, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform, Linking } from "react-native";
 import { Text, TouchableOpacity, TextInput, FooterLinks } from "./ResponsiveUI";
@@ -13,6 +21,18 @@ type Props = {
   dashboardData: any;
 };
 
+/**
+ * ProfileSettingsScreen Component
+ * 
+ * @description Renders a modal overlay containing user profile inputs and permission toggles.
+ * Automatically synchronizes profile changes to the Convex database.
+ * 
+ * @param {Object} props - Component props
+ * @param {boolean} props.visible - Controls the visibility of the modal
+ * @param {Function} props.onClose - Callback triggered when the modal is closed
+ * @param {any} props.dashboardData - Current user's preferences, permissions, and profile info
+ * @returns {JSX.Element} The rendered React component.
+ */
 export default function ProfileSettingsScreen({ visible, onClose, dashboardData }: Props) {
   const { user } = useUser();
   const [name, setName] = useState(dashboardData?.name || "");

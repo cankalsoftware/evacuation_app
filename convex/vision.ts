@@ -1,3 +1,10 @@
+/**
+ * @file vision.ts
+ * @description Integrates with the Google Gemini / OpenAI Vision API to automatically parse
+ * floor numbers, room numbers, and textual metadata from images of evacuation plans uploaded by users.
+ * 
+ * @module ConvexVision
+ */
 import { action } from "./_generated/server";
 import { v } from "convex/values";
 

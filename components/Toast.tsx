@@ -1,3 +1,11 @@
+/**
+ * @file Toast.tsx
+ * @description A custom global toast notification system built without heavy third-party
+ * libraries. Uses React Native's DeviceEventEmitter to allow any component to trigger
+ * a temporary pop-up message (success/error).
+ * 
+ * @module Toast
+ */
 import React, { useState, useEffect } from 'react';
 import { Animated, Text, StyleSheet, DeviceEventEmitter, Platform } from 'react-native';
 
@@ -5,6 +13,14 @@ export const showToast = (message: string, type: 'success' | 'error' = 'success'
   DeviceEventEmitter.emit('SHOW_TOAST', { message, type });
 };
 
+/**
+ * Toast Component
+ * 
+ * @description Listens for global 'SHOW_TOAST' events and animates a small notification
+ * pill at the top of the screen. Auto-hides after 3 seconds.
+ * 
+ * @returns {JSX.Element | null} The rendered animated React component, or null if invisible.
+ */
 export default function Toast() {
   const [message, setMessage] = useState('');
   const [type, setType] = useState('success');

@@ -1,3 +1,11 @@
+/**
+ * @file AuthScreen.tsx
+ * @description Handles user authentication, onboarding, and password recovery using Clerk.
+ * Provides a unified interface for Guest and Admin sign-in, sign-up, email verification,
+ * Passkey/WebAuthn support, and Magic Link generation.
+ * 
+ * @module AuthScreen
+ */
 import { showToast } from "./Toast";
 import React, { useState, useEffect, useRef } from "react";
 import { View, ActivityIndicator, Image, KeyboardAvoidingView, Platform, ScrollView, Keyboard } from "react-native";
@@ -5,6 +13,14 @@ import { useSignIn, useSignUp } from "@clerk/clerk-expo";
 
 import { Text, TextInput, TouchableOpacity, FooterLinks } from "./ResponsiveUI";
 
+/**
+ * AuthScreen Component
+ * 
+ * @description Main component for the authentication flow. Toggles between Login, Sign Up,
+ * and Forgot Password modes. Manages Clerk states and triggers toast notifications on auth errors.
+ * 
+ * @returns {JSX.Element} The rendered React component.
+ */
 export default function AuthScreen() {
   const { isLoaded: isSignUpLoaded, signUp, setActive: setSignUpActive } = useSignUp();
   const { isLoaded: isSignInLoaded, signIn, setActive: setSignInActive } = useSignIn();

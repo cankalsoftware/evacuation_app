@@ -1,7 +1,26 @@
+/**
+ * @file ResponsiveUI.tsx
+ * @description Provides a set of custom, scaled UI primitives (Text, TextInput, TouchableOpacity)
+ * that automatically adjust their size (padding, fonts, dimensions) based on the device's screen width.
+ * Essential for ensuring the app looks identical across mobile phones, tablets, and web browsers.
+ * 
+ * @module ResponsiveUI
+ */
 import React from "react";
 import { Text as RNText, TouchableOpacity as RNTouchableOpacity, TextInput as RNTextInput, useWindowDimensions, TextProps, TouchableOpacityProps, TextInputProps, Linking, View } from "react-native";
 import { MaterialCommunityIcons as OriginalIcon } from "@expo/vector-icons";
 
+/**
+ * Responsive Text Component
+ * 
+ * @description A drop-in replacement for React Native's `<Text>`. Intercepts standard
+ * TailwindCSS text size classes (e.g., `text-sm`, `text-xl`) and recalculates their pixel
+ * value dynamically based on screen width.
+ * 
+ * @param {TextProps & { className?: string }} props - Standard Text props plus NativeWind className
+ * @param {React.Ref<RNText>} ref - Forwarded ref for the Text node
+ * @returns {JSX.Element} Dynamically scaled Text component
+ */
 export const Text = React.forwardRef<RNText, TextProps & { className?: string }>((props, ref) => {
   const { width } = useWindowDimensions();
   const fontScale = Math.min(Math.max(width / 400, 1), 1.6);

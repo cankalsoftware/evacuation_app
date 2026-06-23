@@ -1,3 +1,11 @@
+/**
+ * @file AdminDashboard.tsx
+ * @description The primary interface for administrators to manage buildings, setup evacuation plans,
+ * and oversee active emergencies. This component allows admins to create buildings, scan floor plans,
+ * set coordinates for geofencing, and trigger the Live Roll Call dashboard when an emergency occurs.
+ * 
+ * @module AdminDashboard
+ */
 import { showToast } from "./Toast";
 import React from "react";
 import { View, ScrollView, ActivityIndicator, Modal, Platform, Image, Alert, useWindowDimensions, Linking, TouchableOpacity } from "react-native";
@@ -27,7 +35,11 @@ if (Platform.OS !== 'web') {
   } catch (e) { }
 }
 
-// Math helpers to detect if polygon lines criss-cross (self-intersect)
+/**
+ * Math helpers to detect if polygon lines criss-cross (self-intersect).
+ * Used during the Admin setup phase when an Admin draws a geofence around a building.
+ * Ensures the polygon is simple and valid for the geofencing algorithm.
+ */
 function onSegment(p: any, q: any, r: any) {
   return q.lat <= Math.max(p.lat, r.lat) && q.lat >= Math.min(p.lat, r.lat) &&
     q.lon <= Math.max(p.lon, r.lon) && q.lon >= Math.min(p.lon, r.lon);
@@ -68,6 +80,15 @@ function hasSelfIntersection(polygon: { lat: number, lon: number }[]) {
   return false;
 }
 
+/**
+ * AdminDashboard Component
+ * 
+ * @description Main functional component that renders the administrative dashboard.
+ * It manages multiple state variables for handling modals (building creation, plan setup),
+ * fetches data via Convex queries, and handles Clerk user authentication and session management.
+ * 
+ * @returns {JSX.Element} The rendered React component.
+ */
 export default function AdminDashboard() {
   const { width, height } = useWindowDimensions();
   const { signOut } = useAuth();

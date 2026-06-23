@@ -1,3 +1,10 @@
+/**
+ * @file users.ts
+ * @description Handles the automatic syncing of user identities between the Clerk Authentication
+ * provider and the Convex database. Exposes queries/mutations for reading/writing user states.
+ * 
+ * @module ConvexUsers
+ */
 import { mutation, query, internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 

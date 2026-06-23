@@ -1,3 +1,11 @@
+/**
+ * @file LiveRollCall.tsx
+ * @description Admin-facing component that displays a real-time list of all users checked
+ * into a building during an active emergency. Shows whether users are inside the danger zone
+ * or outside in the safe zone, and provides walkie-talkie communication.
+ * 
+ * @module LiveRollCall
+ */
 import React, { useState, useEffect, useRef } from "react";
 import { View, ScrollView, Platform } from "react-native";
 import { useAudioPlayer } from 'expo-audio';
@@ -7,6 +15,19 @@ import { api } from "../convex/_generated/api";
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 
+/**
+ * LiveRollCall Component
+ * 
+ * @description Provides the UI for administrators to track users during an evacuation.
+ * Users are categorized as 'At Risk' (inside geofence) or 'Safe' (outside geofence/at safe zone).
+ * 
+ * @param {Object} props - Component props
+ * @param {any} props.incidentId - The ID of the active incident
+ * @param {string} props.clerkId - The Admin's Clerk ID
+ * @param {Function} props.onLocateUser - Callback to pan the admin's map to a specific user's location
+ * @param {any[]} [props.buildingPolygon] - The geofence coordinates of the building
+ * @returns {JSX.Element} The rendered React component.
+ */
 export default function LiveRollCall({ incidentId, clerkId, onLocateUser, buildingPolygon }: { incidentId: any, clerkId: string, onLocateUser: (lat: number, lon: number, name: string) => void, buildingPolygon?: any[] }) {
   const evacData = useQuery(api.portal.getEvacuationData, { clerkId, incidentId }) || { inside: [], outside: [] };
   const moveToOutside = useMutation(api.portal.moveToOutside);

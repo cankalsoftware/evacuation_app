@@ -1,3 +1,11 @@
+/**
+ * @file PlanScannerModal.tsx
+ * @description Provides a reusable modal interface for users to scan evacuation plans.
+ * Integrates with Expo Camera/ImagePicker and Convex backend to upload images and trigger
+ * the server-side AI extraction to identify the user's floor and room number.
+ * 
+ * @module PlanScannerModal
+ */
 import React, { useState } from "react";
 import { View, Modal, Image, ActivityIndicator, Alert } from "react-native";
 import { Text, TouchableOpacity } from "./ResponsiveUI";
@@ -12,6 +20,18 @@ type Props = {
   onClose: () => void;
 };
 
+/**
+ * PlanScannerModal Component
+ * 
+ * @description Renders the UI for capturing and uploading a floor plan.
+ * Handles the upload process, passes coordinates to the server, and alerts the user
+ * if the AI successfully processed the map or failed.
+ * 
+ * @param {Object} props - Component props
+ * @param {boolean} props.visible - Controls visibility of the modal
+ * @param {Function} props.onClose - Callback triggered when the modal is dismissed or upload completes
+ * @returns {JSX.Element} The rendered React component.
+ */
 export default function PlanScannerModal({ visible, onClose }: Props) {
   const { user } = useUser();
   const [imageUri, setImageUri] = useState<string | null>(null);

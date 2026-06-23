@@ -1,3 +1,11 @@
+/**
+ * @file GuestDashboard.tsx
+ * @description The primary interface for end-users (guests) to interact with the evacuation system.
+ * Handles permissions, background location syncing, panic button interactions, and emergency
+ * evacuation mode transitions.
+ * 
+ * @module GuestDashboard
+ */
 import { showToast } from "./Toast";
 import React, { useState, useEffect } from "react";
 import { View, ActivityIndicator, useWindowDimensions, Alert, Platform, Modal, Image, ScrollView } from "react-native";
@@ -22,7 +30,16 @@ Notifications.setNotificationHandler({
 import ProfileSettingsScreen from "./ProfileSettingsScreen";
 import EvacuationMode from "./EvacuationMode";
 
-// Calculate distance between two coordinates in meters using Haversine formula
+/**
+ * Calculate distance between two coordinates in meters using the Haversine formula.
+ * Used to ensure guests are physically near the evacuation plan they are trying to scan.
+ * 
+ * @param {number} lat1 - Latitude of first coordinate
+ * @param {number} lon1 - Longitude of first coordinate
+ * @param {number} lat2 - Latitude of second coordinate
+ * @param {number} lon2 - Longitude of second coordinate
+ * @returns {number} Distance in meters
+ */
 function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371e3; // meters
   const φ1 = lat1 * Math.PI / 180;
@@ -38,6 +55,15 @@ function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
   return R * c;
 }
 
+/**
+ * GuestDashboard Component
+ * 
+ * @description Main functional component for the guest user interface.
+ * Manages location polling, AI plan scanning validation, and checks Convex backend
+ * for active incidents in their current building to trigger the EvacuationMode overlay.
+ * 
+ * @returns {JSX.Element} The rendered React component.
+ */
 export default function GuestDashboard() {
   const { signOut } = useAuth();
   const { user } = useUser();

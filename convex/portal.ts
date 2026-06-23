@@ -1,7 +1,20 @@
+/**
+ * @file portal.ts
+ * @description The core Convex backend API file containing over 30 queries and mutations.
+ * Handles everything from Building CRUD operations, emergency incident tracking, live roll call
+ * states, walkie-talkie audio file references, to daily background check-ins.
+ * 
+ * @module ConvexPortal
+ */
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 
 
+/**
+ * ==========================================
+ * SECTION 1: USER & DASHBOARD DATA
+ * ==========================================
+ */
 export const getDashboardData = query({
   args: { clerkId: v.optional(v.string()) },
   handler: async (ctx, args) => {

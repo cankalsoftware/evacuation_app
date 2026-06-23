@@ -1,3 +1,11 @@
+/**
+ * @file emails.ts
+ * @description Handles external email communication via SMTP (Nodemailer).
+ * Integrates directly with Resend/SendGrid/SMTP to send activation emails to new Admins,
+ * as well as internal system notifications.
+ * 
+ * @module ConvexEmails
+ */
 "use node";
 
 import { action, internalAction, internalMutation } from "./_generated/server";

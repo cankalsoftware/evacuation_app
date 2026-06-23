@@ -1,3 +1,11 @@
+/**
+ * @file schema.ts
+ * @description The central database schema for the Convex backend. Defines all collections,
+ * validation rules (v.string(), v.number(), etc.), and table indexes for performant querying.
+ * Includes tables for users, buildings, incidents, scans, and walkie-talkie communication.
+ * 
+ * @module ConvexSchema
+ */
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 

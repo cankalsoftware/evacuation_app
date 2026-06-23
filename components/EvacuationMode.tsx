@@ -6,6 +6,15 @@ import * as Speech from "expo-speech";
 import { Pedometer } from 'expo-sensors';
 import { useUser } from "@clerk/clerk-expo";
 import { useMutation } from "convex/react";
+/**
+ * @file EvacuationMode.tsx
+ * @description The active emergency interface triggered when a building incident occurs.
+ * Renders the live interactive map, dynamic routing lines from the user to the Safe Zone,
+ * WebRTC Walkie-Talkie logic for emergency communication, and the SOS panic trigger.
+ * 
+ * @module EvacuationMode
+ */
+import { showToast } from "./Toast";
 import { api } from "../convex/_generated/api";
 import { useAudioPlayer } from 'expo-audio';
 // Basic Haversine distance
@@ -145,6 +154,21 @@ function aStarGridPath(startCell: GridCell, exits: GridCell[], gridPaths: GridCe
   return null; // No path found
 }
 
+/**
+ * EvacuationMode Component
+ * 
+ * @description Renders the full-screen emergency overlay. Calculates distance to safe zones,
+ * handles walkie-talkie audio recording/playback via Convex file storage, and provides
+ * real-time feedback on user location relative to the designated safe zone.
+ * 
+ * @param {Object} props - Component props
+ * @param {any} props.dashboardData - Current user's dashboard preferences and state
+ * @param {any} props.autoBuilding - The active building the user is checked into
+ * @param {any} props.currentLocation - The user's live GPS coordinates
+ * @param {any} props.activeIncident - Incident details containing safe zone coordinates
+ * @param {Function} props.onClose - Callback triggered when the emergency is resolved
+ * @returns {JSX.Element} The rendered React component.
+ */
 export default function EvacuationMode({ dashboardData, autoBuilding, currentLocation, activeIncident, onClose }: any) {
   const { width, height } = useWindowDimensions();
   const { user } = useUser();

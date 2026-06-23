@@ -1,3 +1,11 @@
+/**
+ * @file LocationConsentScreen.tsx
+ * @description The onboarding screen presented to users immediately after signing up.
+ * Educates the user on why background location and push notifications are critical
+ * for the evacuation app to function, and handles the OS-level permission requests.
+ * 
+ * @module LocationConsentScreen
+ */
 import React, { useState } from "react";
 import { View, ActivityIndicator } from "react-native";
 import { Text, TouchableOpacity } from "./ResponsiveUI";
@@ -9,6 +17,15 @@ import { useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { useAuth } from "@clerk/clerk-expo";
 
+/**
+ * LocationConsentScreen Component
+ * 
+ * @description Manages the UI and logic for requesting mandatory device permissions.
+ * Persists the user's choices to the Convex backend so the app knows whether to render
+ * the full dashboard or a warning banner in the future.
+ * 
+ * @returns {JSX.Element} The rendered React component.
+ */
 export default function LocationConsentScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
