@@ -228,17 +228,18 @@ export default function ProfileSettingsScreen({ visible, onClose, dashboardData 
           </TouchableOpacity>
         </View>
 
-          <TouchableOpacity 
-            className="flex-row items-center mb-4 mt-2"
-            onPress={() => setAgreedToTandC(!agreedToTandC)}
-          >
-            <View className={`w-6 h-6 rounded border items-center justify-center mr-3 ${agreedToTandC ? 'bg-blue-600 border-blue-500' : 'bg-neutral-900 border-neutral-700'}`}>
-              {agreedToTandC && <Text className="text-white font-bold text-xs">✓</Text>}
-            </View>
-            <Text className="flex-1 text-neutral-300">
-              I confirm and agree to the <Text className="underline" onPress={() => Linking.openURL('https://www.firevision.uk/terms')}>Terms and Conditions</Text>.
-            </Text>
-          </TouchableOpacity>
+          <View className="flex-row flex-wrap items-center mb-4 mt-2">
+            <TouchableOpacity onPress={() => setAgreedToTandC(!agreedToTandC)} className="flex-row items-center mr-1">
+              <View className={`w-6 h-6 rounded border items-center justify-center mr-3 ${agreedToTandC ? 'bg-blue-600 border-blue-500' : 'bg-neutral-900 border-neutral-700'}`}>
+                {agreedToTandC && <Text className="text-white font-bold text-xs">✓</Text>}
+              </View>
+              <Text className="text-neutral-300">I confirm and agree to the </Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => Linking.openURL('https://www.firevision.uk/terms')}>
+              <Text className="underline text-neutral-300">Terms and Conditions</Text>
+            </TouchableOpacity>
+            <Text className="text-neutral-300">.</Text>
+          </View>
 
           <TouchableOpacity 
             onPress={handleSave} 

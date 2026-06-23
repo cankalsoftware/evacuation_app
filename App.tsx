@@ -234,7 +234,7 @@ export default function App() {
     return (
       <View className="flex-1 bg-neutral-900 items-center justify-center px-4">
         <Image 
-          source={require('./FireVision.png')} 
+          source={require('./assets/FireVision.png')} 
           style={{ width: logoSize, height: logoSize }} 
           resizeMode="contain" 
         />

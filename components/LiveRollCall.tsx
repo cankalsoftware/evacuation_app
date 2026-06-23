@@ -47,11 +47,8 @@ export default function LiveRollCall({ incidentId, clerkId, onLocateUser, buildi
     };
   }, [panicUsers.length, isMuted]);
 
-  useEffect(() => {
-    return () => {
-      sirenPlayer.remove();
-    };
-  }, [sirenPlayer]);
+  // expo-audio useAudioPlayer manages cleanup automatically.
+  // Do NOT call sirenPlayer.remove() here or it crashes on Android.
 
   const isInsidePolygon = (lat: number, lon: number, poly: any[]) => {
     let isInside = false;

@@ -236,7 +236,7 @@ export default function AuthScreen() {
 
           <View className="items-center mb-6 w-full">
             <Image
-              source={require('../FireVision.png')}
+              source={require('../assets/FireVision.png')}
               style={{ width: '100%', height: 100, marginBottom: 16 }}
               resizeMode="contain"
             />

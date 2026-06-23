@@ -96,9 +96,10 @@ export default function AdminDashboard() {
   const [isHistoryOpen, setIsHistoryOpen] = React.useState(false);
   const [selectedBuilding, setSelectedBuilding] = React.useState<any>(null);
 
-  const [hasLocation, setHasLocation] = React.useState(true);
-  const [hasNotifications, setHasNotifications] = React.useState(true);
-  const hasPermissions = hasLocation && hasNotifications;
+  const hasPermissions = dashboardData?.locationGranted === true && dashboardData?.notificationsGranted === true;
+  const [setupHasLocation, setSetupHasLocation] = React.useState(false);
+  const [setupHasNotifications, setSetupHasNotifications] = React.useState(false);
+
   const [location, setLocation] = React.useState<Location.LocationObject | null>(null);
   const [refreshingLocation, setRefreshingLocation] = React.useState(false);
 
@@ -106,8 +107,8 @@ export default function AdminDashboard() {
   const [isLocatingUser, setIsLocatingUser] = React.useState(false);
   const [mapEditorStep, setMapEditorStep] = React.useState<1 | 2>(1); // 1 = Calibration, 2 = Safe Routes
   const [activeCalibIdx, setActiveCalibIdx] = React.useState(-1);
-  const [gridPaintMode, setGridPaintMode] = React.useState<"pan"|"exit"|"safe_route"|"erase">("pan");
-  const lastPaintedCellRef = React.useRef<{row: number, col: number} | null>(null);
+  const [gridPaintMode, setGridPaintMode] = React.useState<"pan" | "exit" | "safe_route" | "erase">("pan");
+  const lastPaintedCellRef = React.useRef<{ row: number, col: number } | null>(null);
   const [gridSizeMeters, setGridSizeMeters] = React.useState(1.2);
   const scrollViewRef = React.useRef<ScrollView>(null);
   const [userZoom, setUserZoom] = React.useState(1);
@@ -250,7 +251,7 @@ export default function AdminDashboard() {
     try {
       let { status } = await Location.getForegroundPermissionsAsync();
       const dbGranted = dashboardData?.locationGranted === true;
-      
+
       if (dbGranted && status === 'granted') {
         let loc = await Location.getCurrentPositionAsync({});
         setLocation(loc);
@@ -264,10 +265,7 @@ export default function AdminDashboard() {
     }
   };
 
-  React.useEffect(() => {
-    setHasLocation(dashboardData?.locationGranted === true);
-    setHasNotifications(dashboardData?.notificationsGranted === true);
-  }, [showSettings, dashboardData]);
+
 
   React.useEffect(() => {
     if (showSettings && dashboardData) {
@@ -279,6 +277,8 @@ export default function AdminDashboard() {
       setSetupPostCode(dashboardData.postCode || "");
       setSetupCountry(dashboardData.country || "");
       setSetupAgreedToTandC(dashboardData.agreedToTandC || false);
+      setSetupHasLocation(dashboardData.locationGranted === true);
+      setSetupHasNotifications(dashboardData.notificationsGranted === true);
       fetchLocation();
     }
   }, [showSettings, dashboardData]);
@@ -358,13 +358,13 @@ export default function AdminDashboard() {
     const containerWidth = width - 32; // Modal has px-4 (16px * 2)
     const ratio = imageAspectRatio || (4 / 3); // Fallback to 4:3
     const expectedImageHeight = containerWidth / ratio;
-    
+
     // Add 40px total margin (20px top, 20px bottom)
     const heightWithMargins = expectedImageHeight + 40;
-    
+
     // Cap at 75% of screen height to ensure UI fits on screen
     const maxHeight = height * 0.75;
-    
+
     return Math.min(heightWithMargins, maxHeight);
   };
 
@@ -413,7 +413,7 @@ export default function AdminDashboard() {
           lx = touches?.length > 0 && touches[0].locationX !== undefined ? touches[0].locationX : e.nativeEvent.locationX;
           ly = touches?.length > 0 && touches[0].locationY !== undefined ? touches[0].locationY : e.nativeEvent.locationY;
         }
-        
+
         if (lx !== undefined && ly !== undefined && !isNaN(lx) && !isNaN(ly)) {
           onPaint(lx, ly);
         }
@@ -491,7 +491,7 @@ export default function AdminDashboard() {
             rawX = touches?.length > 0 && touches[0].locationX !== undefined ? touches[0].locationX : e.nativeEvent.locationX;
             rawY = touches?.length > 0 && touches[0].locationY !== undefined ? touches[0].locationY : e.nativeEvent.locationY;
           }
-          
+
           if (rawX !== undefined && rawY !== undefined && !isNaN(rawX) && !isNaN(rawY)) {
             onPaint(rawX, rawY);
           }
@@ -568,7 +568,7 @@ export default function AdminDashboard() {
     // The translation happens in the scaled space, so it must be subtracted AFTER unscaling the screen coordinate.
     const unzoomedX = imgLayout.w / 2 + (screenX - imgLayout.w / 2) / step1Zoom - step1PanOffset.x;
     const unzoomedY = imgLayout.h / 2 + (screenY - imgLayout.h / 2) / step1Zoom - step1PanOffset.y;
-    
+
     rawX = unzoomedX;
     rawY = unzoomedY;
 
@@ -583,7 +583,7 @@ export default function AdminDashboard() {
     col = Math.max(0, Math.min(cols - 1, col));
 
     if (row >= 0 && col >= 0) {
-      const cellsToPaint: {row: number, col: number}[] = [];
+      const cellsToPaint: { row: number, col: number }[] = [];
 
       if (lastPaintedCellRef.current) {
         // Bresenham's line algorithm to fill gaps during fast dragging
@@ -591,11 +591,11 @@ export default function AdminDashboard() {
         let c0 = lastPaintedCellRef.current.col;
         const r1 = row;
         const c1 = col;
-        
+
         const dc = Math.abs(c1 - c0), sc = c0 < c1 ? 1 : -1;
         const dr = -Math.abs(r1 - r0), sr = r0 < r1 ? 1 : -1;
-        let err = dc + dr, e2; 
-        
+        let err = dc + dr, e2;
+
         while (true) {
           cellsToPaint.push({ row: r0, col: c0 });
           if (r0 === r1 && c0 === c1) break;
@@ -809,10 +809,10 @@ export default function AdminDashboard() {
       const validPoints = calibPoints.filter(Boolean);
       const bounds = getRenderedImageBounds();
       const isLegacyPixels = validPoints[0].x > 2;
-      
+
       const xs = validPoints.map((c: any) => isLegacyPixels ? c.x / Math.max(1, imgLayout.w) : c.x);
       const ys = validPoints.map((c: any) => isLegacyPixels ? c.y / Math.max(1, imgLayout.h) : c.y);
-      
+
       if (xs.length > 0 && ys.length > 0) {
         const minCX = Math.min(...xs);
         const maxCX = Math.max(...xs);
@@ -827,7 +827,7 @@ export default function AdminDashboard() {
           const targetH = imgLayout.h * 0.9;
 
           const baseScale = Math.min(targetW / boxW_px, targetH / boxH_px);
-          
+
           const boxCenterX = bounds.offsetX + ((minCX + maxCX) / 2) * bounds.renderW;
           const boxCenterY = bounds.offsetY + ((minCY + maxCY) / 2) * bounds.renderH;
 
@@ -864,21 +864,21 @@ export default function AdminDashboard() {
       if (bImageUri) {
         try {
           const postUrl = await generateUploadUrl();
-          
+
           // Fallback for Android where fetch(fileUri) can sometimes fail
           const blob = await uriToBlob(bImageUri);
-          
+
           const uploadResult = await fetch(postUrl, {
             method: "POST",
             headers: { "Content-Type": bImageMimeType || blob.type || "image/jpeg" },
             body: blob,
           });
-          
+
           if (!uploadResult.ok) {
             console.error("Convex upload failed:", await uploadResult.text());
             throw new Error("Upload rejected by server");
           }
-          
+
           const result = await uploadResult.json();
           storageId = result.storageId;
         } catch (imgError) {
@@ -1016,7 +1016,7 @@ export default function AdminDashboard() {
             buildingId,
             storageId
           });
-          
+
           if (selectedBuilding && selectedBuilding._id === buildingId) {
             setSelectedBuilding({ ...selectedBuilding, masterPlanId: storageId });
           }
@@ -1048,7 +1048,7 @@ export default function AdminDashboard() {
 
   const clerkEmail = user?.primaryEmailAddress?.emailAddress || "";
   const needsSetup = !dashboardData.name || !dashboardData.phone || !dashboardData.businessName;
-  
+
   if (needsSetup || showSettings) {
     return (
       <View className="flex-1 bg-neutral-900 pt-6 px-4 md:px-6">
@@ -1063,7 +1063,7 @@ export default function AdminDashboard() {
           )}
         </View>
 
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
+        <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
           <Text className="text-neutral-400 mb-6">
             {needsSetup
               ? "Welcome to FireVision Admin! Please provide your business and contact details before continuing."
@@ -1101,162 +1101,165 @@ export default function AdminDashboard() {
               <View className="h-[1px] bg-neutral-700 my-4" />
               <Text className="text-white font-bold text-lg mb-4">Business Details</Text>
 
-                <Text className="text-white font-bold mb-2">Business Name</Text>
-                <TextInput
-                  className={`bg-neutral-900 border ${showValidation && !setupBusinessName ? 'border-red-500' : 'border-neutral-700'} text-white p-4 rounded-xl mb-4`}
-                  placeholder="Acme Corp"
-                  placeholderTextColor="#666"
-                  value={setupBusinessName}
-                  onChangeText={setSetupBusinessName}
-                />
+              <Text className="text-white font-bold mb-2">Business Name</Text>
+              <TextInput
+                className={`bg-neutral-900 border ${showValidation && !setupBusinessName ? 'border-red-500' : 'border-neutral-700'} text-white p-4 rounded-xl mb-4`}
+                placeholder="Acme Corp"
+                placeholderTextColor="#666"
+                value={setupBusinessName}
+                onChangeText={setSetupBusinessName}
+              />
 
-                <Text className="text-white font-bold mb-2">Business Address</Text>
-                <TextInput
-                  className={`bg-neutral-900 border ${showValidation && !setupBusinessAddress ? 'border-red-500' : 'border-neutral-700'} text-white p-4 rounded-xl mb-4`}
-                  placeholder="123 Corporate Way, City, Postcode"
-                  placeholderTextColor="#666"
-                  value={setupBusinessAddress}
-                  onChangeText={setSetupBusinessAddress}
-                />
+              <Text className="text-white font-bold mb-2">Business Address</Text>
+              <TextInput
+                className={`bg-neutral-900 border ${showValidation && !setupBusinessAddress ? 'border-red-500' : 'border-neutral-700'} text-white p-4 rounded-xl mb-4`}
+                placeholder="123 Corporate Way, City, Postcode"
+                placeholderTextColor="#666"
+                value={setupBusinessAddress}
+                onChangeText={setSetupBusinessAddress}
+              />
 
-                <Text className="text-white font-bold mb-2">Registered Post or Zip Code</Text>
-                <TextInput
-                  className={`bg-neutral-900 border ${showValidation && !setupPostCode ? 'border-red-500' : 'border-neutral-700'} text-white p-4 rounded-xl mb-4`}
-                  placeholder="AB12 3CD"
-                  placeholderTextColor="#666"
-                  value={setupPostCode}
-                  onChangeText={setSetupPostCode}
-                />
+              <Text className="text-white font-bold mb-2">Registered Post or Zip Code</Text>
+              <TextInput
+                className={`bg-neutral-900 border ${showValidation && !setupPostCode ? 'border-red-500' : 'border-neutral-700'} text-white p-4 rounded-xl mb-4`}
+                placeholder="AB12 3CD"
+                placeholderTextColor="#666"
+                value={setupPostCode}
+                onChangeText={setSetupPostCode}
+              />
 
-                <Text className="text-white font-bold mb-2">Country</Text>
-                <TextInput
-                  className={`bg-neutral-900 border ${showValidation && !setupCountry ? 'border-red-500' : 'border-neutral-700'} text-white p-4 rounded-xl mb-4`}
-                  placeholder="United Kingdom"
-                  placeholderTextColor="#666"
-                  value={setupCountry}
-                  onChangeText={setSetupCountry}
-                />
+              <Text className="text-white font-bold mb-2">Country</Text>
+              <TextInput
+                className={`bg-neutral-900 border ${showValidation && !setupCountry ? 'border-red-500' : 'border-neutral-700'} text-white p-4 rounded-xl mb-4`}
+                placeholder="United Kingdom"
+                placeholderTextColor="#666"
+                value={setupCountry}
+                onChangeText={setSetupCountry}
+              />
 
-                <Text className="text-white font-bold mb-2">Employer Count</Text>
-                <View className="flex-row flex-wrap mb-6">
-                  {['1-10', '10-50', '50-100', '100+'].map(count => (
-                    <TouchableOpacity
-                      key={count}
-                      className={`px-4 py-2 rounded-lg border mr-2 mb-2 ${setupEmployerCount === count ? 'bg-blue-600 border-blue-500' : 'bg-neutral-900 border-neutral-700'}`}
-                      onPress={() => setSetupEmployerCount(count)}
-                    >
-                      <Text className="text-white font-bold">{count}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+              <Text className="text-white font-bold mb-2">Employer Count</Text>
+              <View className="flex-row flex-wrap mb-6">
+                {['1-10', '10-50', '50-100', '100+'].map(count => (
+                  <TouchableOpacity
+                    key={count}
+                    className={`px-4 py-2 rounded-lg border mr-2 mb-2 ${setupEmployerCount === count ? 'bg-blue-600 border-blue-500' : 'bg-neutral-900 border-neutral-700'}`}
+                    onPress={() => setSetupEmployerCount(count)}
+                  >
+                    <Text className="text-white font-bold">{count}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
 
-                <View className="bg-neutral-900 p-4 rounded-xl mb-4 border border-neutral-700">
-                  <Text className="text-neutral-400 text-sm">
-                    Note: I agree to pay a subscription fee once my account is approved. (Currently in Test Mode, subscription details will be announced on firevision.uk in the near future).
-                  </Text>
-                </View>
+              <View className="bg-neutral-900 p-4 rounded-xl mb-4 border border-neutral-700">
+                <Text className="text-neutral-400 text-sm">
+                  Note: I agree to pay a subscription fee once my account is approved. (Currently in Test Mode, subscription details will be announced on firevision.uk in the near future).
+                </Text>
+              </View>
 
-                <View className="mb-4">
-                  <Text className="text-white font-bold mb-2">Device Permissions</Text>
-                  <TouchableOpacity 
-                    className="flex-row items-center mb-2"
-                    onPress={async () => {
-                      if (hasLocation) {
-                        setHasLocation(false);
-                      } else {
-                        setHasLocation(true);
-                        try {
-                          const { status } = await Location.requestForegroundPermissionsAsync();
-                          if (status !== 'granted') {
-                            alert("Location permission denied by OS. Please enable it in your device settings.");
-                          }
-                        } catch (e) {
-                          console.warn(e);
+              <View className="mb-4">
+                <Text className="text-white font-bold mb-2">Device Permissions</Text>
+                <TouchableOpacity
+                  className="flex-row items-center mb-2"
+                  onPress={async () => {
+                    if (setupHasLocation) {
+                      setSetupHasLocation(false);
+                    } else {
+                      setSetupHasLocation(true);
+                      try {
+                        const { status } = await Location.requestForegroundPermissionsAsync();
+                        if (status !== 'granted') {
+                          alert("Location permission denied by OS. Please enable it in your device settings.");
                         }
+                      } catch (e) {
+                        console.warn(e);
                       }
-                    }}
-                  >
-                    <View className={`w-6 h-6 rounded border items-center justify-center mr-3 ${hasLocation ? 'bg-blue-600 border-blue-500' : 'bg-neutral-900 border-neutral-700'}`}>
-                      {hasLocation && <Text className="text-white font-bold text-xs">✓</Text>}
-                    </View>
-                    <Text className="text-neutral-300 flex-1">
-                      Grant Location Permission
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity 
-                    className="flex-row items-center mb-2"
-                    onPress={async () => {
-                      if (hasNotifications) {
-                        setHasNotifications(false);
-                      } else {
-                        setHasNotifications(true);
-                        try {
-                          if (Platform.OS !== 'web') {
-                            const { status } = await Notifications.requestPermissionsAsync();
-                            if (status !== 'granted') {
-                              alert("Notification permission denied by OS. Please enable it in your device settings.");
-                            }
-                          }
-                        } catch (e) {
-                          console.warn(e);
-                        }
-                      }
-                    }}
-                  >
-                    <View className={`w-6 h-6 rounded border items-center justify-center mr-3 ${hasNotifications ? 'bg-blue-600 border-blue-500' : 'bg-neutral-900 border-neutral-700'}`}>
-                      {hasNotifications && <Text className="text-white font-bold text-xs">✓</Text>}
-                    </View>
-                    <Text className="text-neutral-300 flex-1">
-                      Grant Push Notification Permission
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity 
-                    onPress={fetchLocation}
-                    disabled={refreshingLocation}
-                    className="bg-neutral-900 p-4 rounded-xl border border-neutral-700 mb-6 flex-row items-center"
-                  >
-                    {refreshingLocation ? (
-                      <ActivityIndicator color="white" size="large" className="mr-4" />
-                    ) : (
-                      <Text className="text-3xl mr-4">📍</Text>
-                    )}
-                    <View>
-                      <Text className="text-neutral-400 text-xs uppercase mb-1 font-bold">Current Coordinates</Text>
-                      {location ? (
-                         <Text className="text-white font-mono text-xs">
-                           Lat: {location.coords.latitude.toFixed(6)}{"\n"}
-                           Lon: {location.coords.longitude.toFixed(6)}
-                         </Text>
-                      ) : (
-                         <Text className="text-neutral-500 italic text-xs">Waiting for GPS lock...</Text>
-                      )}
-                    </View>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity 
-                    onPress={fetchLocation}
-                    disabled={refreshingLocation}
-                    className="flex-row justify-center items-center py-3 bg-neutral-700 rounded-xl border border-neutral-600"
-                  >
-                    {refreshingLocation ? <ActivityIndicator color="white" className="mr-2" /> : <Text className="mr-2 text-xl">🛰️</Text>}
-                    <Text className="text-white font-bold">Force Refresh Location</Text>
-                  </TouchableOpacity>
-                </View>
-
-                <TouchableOpacity 
-                  className="flex-row items-center mb-8"
-                  onPress={() => setSetupAgreedToTandC(!setupAgreedToTandC)}
+                    }
+                  }}
                 >
+                  <View className={`w-6 h-6 rounded border items-center justify-center mr-3 ${setupHasLocation ? 'bg-blue-600 border-blue-500' : 'bg-neutral-900 border-neutral-700'}`}>
+                    {setupHasLocation && <Text className="text-white font-bold text-xs">✓</Text>}
+                  </View>
+                  <Text className="text-neutral-300 flex-1">
+                    Grant Location Permission
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  className="flex-row items-center mb-2"
+                  onPress={async () => {
+                    if (setupHasNotifications) {
+                      setSetupHasNotifications(false);
+                    } else {
+                      setSetupHasNotifications(true);
+                      try {
+                        if (Platform.OS !== 'web') {
+                          const { status } = await Notifications.requestPermissionsAsync();
+                          if (status !== 'granted') {
+                            alert("Notification permission denied by OS. Please enable it in your device settings.");
+                          }
+                        }
+                      } catch (e) {
+                        console.warn(e);
+                      }
+                    }
+                  }}
+                >
+                  <View className={`w-6 h-6 rounded border items-center justify-center mr-3 ${setupHasNotifications ? 'bg-blue-600 border-blue-500' : 'bg-neutral-900 border-neutral-700'}`}>
+                    {setupHasNotifications && <Text className="text-white font-bold text-xs">✓</Text>}
+                  </View>
+                  <Text className="text-neutral-300 flex-1">
+                    Grant Push Notification Permission
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={fetchLocation}
+                  disabled={refreshingLocation}
+                  className="bg-neutral-900 p-4 rounded-xl border border-neutral-700 mb-6 flex-row items-center"
+                >
+                  {refreshingLocation ? (
+                    <ActivityIndicator color="white" size="large" className="mr-4" />
+                  ) : (
+                    <Text className="text-3xl mr-4">📍</Text>
+                  )}
+                  <View>
+                    <Text className="text-neutral-400 text-xs uppercase mb-1 font-bold">Current Coordinates</Text>
+                    {location ? (
+                      <Text className="text-white font-mono text-xs">
+                        Lat: {location.coords.latitude.toFixed(6)}{"\n"}
+                        Lon: {location.coords.longitude.toFixed(6)}
+                      </Text>
+                    ) : (
+                      <Text className="text-neutral-500 italic text-xs">Waiting for GPS lock...</Text>
+                    )}
+                  </View>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={fetchLocation}
+                  disabled={refreshingLocation}
+                  className="flex-row justify-center items-center py-3 bg-neutral-700 rounded-xl border border-neutral-600"
+                >
+                  {refreshingLocation ? <ActivityIndicator color="white" className="mr-2" /> : <Text className="mr-2 text-xl">🛰️</Text>}
+                  <Text className="text-white font-bold">Force Refresh Location</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View className="flex-row flex-wrap items-center bg-neutral-900 border border-neutral-700 p-4 rounded-2xl">
+                <TouchableOpacity onPress={() => setSetupAgreedToTandC(!setupAgreedToTandC)} className="flex-row items-center mr-1">
                   <View className={`w-6 h-6 rounded border items-center justify-center mr-3 ${setupAgreedToTandC ? 'bg-blue-600 border-blue-500' : (showValidation && !setupAgreedToTandC ? 'bg-red-900/50 border-red-500' : 'bg-neutral-900 border-neutral-700')}`}>
                     {setupAgreedToTandC && <Text className="text-white font-bold text-xs">✓</Text>}
                   </View>
-                  <Text className={`flex-1 ${showValidation && !setupAgreedToTandC ? 'text-red-400' : 'text-neutral-300'}`}>
-                    I confirm and agree to the <Text className="underline" onPress={() => Linking.openURL('https://www.firevision.uk/terms')}>terms and conditions</Text>.
+                  <Text className={`${showValidation && !setupAgreedToTandC ? 'text-red-400' : 'text-neutral-300'}`}>
+                    I confirm and agree to the 
                   </Text>
                 </TouchableOpacity>
+                <TouchableOpacity onPress={() => Linking.openURL('https://www.firevision.uk/terms')}>
+                  <Text className={`underline ${showValidation && !setupAgreedToTandC ? 'text-red-400' : 'text-neutral-300'}`}>terms and conditions</Text>
+                </TouchableOpacity>
+                <Text className={`${showValidation && !setupAgreedToTandC ? 'text-red-400' : 'text-neutral-300'}`}>.</Text>
               </View>
+            </View>
 
             <TouchableOpacity
               className={`bg-blue-600 py-4 rounded-xl items-center mb-6 ${isSavingSetup ? 'opacity-50' : ''}`}
@@ -1264,7 +1267,7 @@ export default function AdminDashboard() {
               onPress={async () => {
                 const effectiveName = setupName;
                 const effectivePhone = setupPhone;
-                
+
                 if (!effectiveName || !effectivePhone || !setupBusinessName || !setupBusinessAddress || !setupPostCode || !setupCountry || !setupAgreedToTandC) {
                   setShowValidation(true);
                   showToast("Please fill in all required fields", "error");
@@ -1275,16 +1278,16 @@ export default function AdminDashboard() {
                   const email = clerkEmail.toLowerCase();
                   const domain = email.split('@')[1];
                   const publicDomains = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com', 'aol.com', 'protonmail.com'];
-                  
+
                   if (!domain || publicDomains.includes(domain)) {
                     showToast("Public email domains are not allowed. Please register with a corporate domain.", "error");
                     return;
                   }
-                  
+
                   const bNameRaw = setupBusinessName.toLowerCase().replace(/[^a-z0-9]/g, '');
                   const domainName = domain ? domain.split('.')[0] : '';
                   const minRequiredLength = Math.max(3, Math.floor(bNameRaw.length / 2));
-                  
+
                   if (!bNameRaw || !domainName || (!domainName.includes(bNameRaw.substring(0, minRequiredLength)) && !bNameRaw.includes(domainName.substring(0, minRequiredLength)))) {
                     alert("Your email domain does not appear to match your business name. Please register with a matching corporate email, or contact info@firevision.uk with your details for manual approval.");
                     return;
@@ -1295,13 +1298,13 @@ export default function AdminDashboard() {
                 try {
                   const { status: locStatus } = await Location.getForegroundPermissionsAsync();
                   const { status: pushStatus } = await Notifications.getPermissionsAsync();
-                  
+
                   await updateAdminProfile({
                     clerkId: user?.id || "",
                     name: setupName || "",
                     phone: setupPhone || "",
-                    locationGranted: hasLocation,
-                    notificationsGranted: hasNotifications,
+                    locationGranted: setupHasLocation,
+                    notificationsGranted: setupHasNotifications,
                     businessName: setupBusinessName || "",
                     businessAddress: setupBusinessAddress || "",
                     employerCount: setupEmployerCount || "1-10",
@@ -1309,7 +1312,7 @@ export default function AdminDashboard() {
                     country: setupCountry || "",
                     agreedToTandC: setupAgreedToTandC,
                   });
-                  
+
                   if (needsSetup) {
                     try {
                       await notifyFireVisionNewAdmin({
@@ -1323,7 +1326,7 @@ export default function AdminDashboard() {
                       console.warn("Failed to notify FireVision", err);
                     }
                   }
-                  
+
                   setShowSettings(false);
                 } catch (e) {
                   showToast("Error saving profile", "error");
@@ -1335,23 +1338,23 @@ export default function AdminDashboard() {
               {isSavingSetup ? <ActivityIndicator color="white" /> : <Text className="text-white font-bold text-lg">{needsSetup ? "Submit for Approval" : "Save Details"}</Text>}
             </TouchableOpacity>
 
-          {!needsSetup && (
-            <TouchableOpacity
-              className="bg-neutral-800 border border-neutral-700 py-4 rounded-xl items-center flex-row justify-center"
-              onPress={async () => {
-                try {
-                  const passkey = await user?.createPasskey();
-                  if (passkey) showToast("Passkey created successfully! You can now use FaceID/TouchID to sign in.");
-                } catch (e: any) {
-                  showToast(e.errors?.[0]?.longMessage || e.message || "Error creating passkey. Your device might not support it.");
-                }
-              }}
-            >
-              <Text className="text-2xl mr-2">🔑</Text>
-              <Text className="text-white font-bold text-lg">Create Biometric Passkey</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+            {!needsSetup && (
+              <TouchableOpacity
+                className="bg-neutral-800 border border-neutral-700 py-4 rounded-xl items-center flex-row justify-center"
+                onPress={async () => {
+                  try {
+                    const passkey = await user?.createPasskey();
+                    if (passkey) showToast("Passkey created successfully! You can now use FaceID/TouchID to sign in.");
+                  } catch (e: any) {
+                    showToast(e.errors?.[0]?.longMessage || e.message || "Error creating passkey. Your device might not support it.");
+                  }
+                }}
+              >
+                <Text className="text-2xl mr-2">🔑</Text>
+                <Text className="text-white font-bold text-lg">Create Biometric Passkey</Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
           {needsSetup && (
             <TouchableOpacity className="mt-8 self-center" onPress={() => signOut()}>
@@ -1369,11 +1372,11 @@ export default function AdminDashboard() {
     return (
       <View className="flex-1 bg-neutral-900 justify-center items-center p-6">
         <View className="w-full mb-8">
-            <Image
-              source={require('../FireVision.png')}
-              style={{ width: '100%', height: 100 }}
-              resizeMode="contain"
-            />
+          <Image
+            source={require('../assets/FireVision.png')}
+            style={{ width: '100%', height: 100 }}
+            resizeMode="contain"
+          />
         </View>
         <Text className="text-6xl mb-6">⏳</Text>
         <Text className="text-white text-3xl font-extrabold text-center mb-4">Pending Approval</Text>
@@ -1387,15 +1390,35 @@ export default function AdminDashboard() {
     );
   }
 
+  if (!hasPermissions) {
+    return (
+      <View className="flex-1 bg-neutral-900 pt-6 justify-center items-center px-6">
+        <Text className="text-6xl mb-6">🚨</Text>
+        <Text className="text-white text-3xl font-extrabold text-center mb-4">Permissions Required</Text>
+        <Text className="text-neutral-300 text-center text-lg mb-8">
+          You must approve both location and push notification permissions to use the Admin Dashboard.
+        </Text>
+        <TouchableOpacity 
+          className="bg-red-600 border border-red-500 py-4 px-10 rounded-xl w-full max-w-xs shadow-lg mb-8"
+          onPress={() => setShowSettings(true)}
+        >
+          <Text className="text-white font-bold text-lg text-center">Open Settings</Text>
+        </TouchableOpacity>
+
+        {/* Debug info so we can see exactly what Convex is returning */}
+        <View className="bg-black/50 p-4 rounded-lg w-full max-w-sm">
+          <Text className="text-white font-mono text-xs mb-1">Debug Info:</Text>
+          <Text className="text-neutral-400 font-mono text-xs">locationGranted: {String(dashboardData?.locationGranted)}</Text>
+          <Text className="text-neutral-400 font-mono text-xs">notificationsGranted: {String(dashboardData?.notificationsGranted)}</Text>
+          <Text className="text-neutral-400 font-mono text-xs">hasPermissions: {String(hasPermissions)}</Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View className="flex-1 bg-neutral-900 pt-6">
-      {/* Top Warning Banner */}
-      {!hasPermissions && (
-        <View className="bg-red-900/80 p-3 mt-2 mx-6 rounded-lg border border-red-500">
-          <Text className="text-white text-center text-xs font-bold">You must approve location and notification permissions in settings.</Text>
-        </View>
-      )}
-
+      
       {/* Header */}
       <View className="px-6 flex-row justify-between items-center my-6">
         <View className="flex-1 mr-4">
@@ -1405,7 +1428,9 @@ export default function AdminDashboard() {
         <View className="flex-row items-center shrink-0">
           <TouchableOpacity
             className={`p-3 rounded-full border mr-2 ${!hasPermissions ? 'bg-red-600 border-red-400 shadow-[0_0_15px_rgba(220,38,38,0.8)]' : 'bg-neutral-800 border-neutral-700'}`}
-            onPress={() => setShowSettings(true)}
+            onPress={() => {
+              setShowSettings(true);
+            }}
           >
             <Text className="text-white">⚙️</Text>
           </TouchableOpacity>
@@ -1418,7 +1443,7 @@ export default function AdminDashboard() {
         </View>
       </View>
 
-      <ScrollView className="flex-1 px-6" contentContainerStyle={{ paddingBottom: 120 }}>
+      <ScrollView keyboardShouldPersistTaps="handled" className="flex-1 px-6" contentContainerStyle={{ paddingBottom: 120 }}>
 
         {/* Quick Actions */}
         <View className="flex-row space-x-4 mb-8">
@@ -1431,7 +1456,6 @@ export default function AdminDashboard() {
               }
               setIsRegistering(true);
             }}
-            disabled={!hasPermissions}
           >
             <Text className="text-2xl mb-1">🗺️</Text>
             <Text className="text-white font-bold text-center text-xs">Add Location</Text>
@@ -1450,10 +1474,9 @@ export default function AdminDashboard() {
             return (
               <View className="bg-neutral-800 border border-neutral-700 p-6 rounded-2xl items-center mb-8">
                 <Text className="text-neutral-400 text-center">You have not registered any buildings yet.</Text>
-                <TouchableOpacity 
-                  className={`mt-4 px-4 py-2 rounded-lg ${!hasPermissions ? 'bg-white/5 opacity-50' : 'bg-white/10'}`} 
-                  onPress={() => hasPermissions ? setIsRegistering(true) : showToast("Permissions required", "error")}
-                  disabled={!hasPermissions}
+                <TouchableOpacity
+                  className={`mt-4 px-4 py-2 rounded-lg ${!hasPermissions ? 'bg-white/5 opacity-50' : 'bg-white/10'}`}
+                  onPress={() => hasPermissions ? setIsRegistering(true) : showToast("Permissions required to add locations", "error")}
                 >
                   <Text className="text-white font-bold">Register Building</Text>
                 </TouchableOpacity>
@@ -1598,7 +1621,7 @@ export default function AdminDashboard() {
                 }
 
                 return (
-                  <View key={siteName} className={`mb-10 bg-neutral-800/40 rounded-[32px] overflow-hidden -mx-2 ${siteStatusClass}`}>
+                  <View key={siteName} className={`mb-10 bg-neutral-800/40 rounded-[32px]   ${siteStatusClass}`}>
                     <View className="flex-row justify-between items-center bg-neutral-800/60 p-5 border-b border-neutral-700/50">
                       <View className="flex-row items-center flex-1">
                         <Text className="text-2xl font-black text-white tracking-wide mr-3 shrink">{siteName}</Text>
@@ -1686,7 +1709,7 @@ export default function AdminDashboard() {
               })}
 
               {independent.length > 0 && (
-                <View className="mb-10 bg-neutral-900 border border-neutral-800 rounded-[32px] p-5 shadow-lg -mx-2">
+                <View className="mb-10 bg-neutral-900 border border-neutral-800 rounded-[32px] p-5 shadow-lg ">
                   <Text className="text-xl font-bold text-white mb-5 border-b border-neutral-800 pb-3 px-1">Independent Buildings</Text>
                   {independent.map(b => renderBuilding(b))}
                 </View>
@@ -1698,33 +1721,15 @@ export default function AdminDashboard() {
         {/* Recent Incidents moved to Modal */}
 
         {/* Footer */}
-        <View className="mt-4 mb-8 pt-6 border-t border-neutral-800 items-center px-4">
-          <Text className="text-neutral-500 text-xs text-center mb-4">
-            © 2026 FireVision. All rights reserved.
-          </Text>
-          <View className="flex-row flex-wrap justify-center items-center">
-            <TouchableOpacity onPress={() => alert("Privacy Policy coming soon")} className="mb-3">
-              <Text className="text-neutral-400 text-xs font-semibold">Privacy Policy</Text>
-            </TouchableOpacity>
-            <Text className="text-neutral-600 mx-2 mb-3">|</Text>
-            <TouchableOpacity onPress={() => alert("Terms of Service coming soon")} className="mb-3">
-              <Text className="text-neutral-400 text-xs font-semibold">Terms of Service</Text>
-            </TouchableOpacity>
-            <Text className="text-neutral-600 mx-2 mb-3">|</Text>
-            <TouchableOpacity onPress={() => alert("Cookie Policy coming soon")} className="mb-3">
-              <Text className="text-neutral-400 text-xs font-semibold">Cookie Policy</Text>
-            </TouchableOpacity>
-            <Text className="text-neutral-600 mx-2 mb-3">|</Text>
-            <TouchableOpacity onPress={() => alert("Acceptable Use coming soon")} className="mb-3">
-              <Text className="text-neutral-400 text-xs font-semibold">Acceptable Use</Text>
-            </TouchableOpacity>
-          </View>
+        <View className="mt-4 mb-8 pt-6 border-t border-neutral-800">
+          <FooterLinks />
         </View>
       </ScrollView>
 
       {/* Register Building Modal */}
-      <Modal visible={isRegistering} animationType="slide" presentationStyle="pageSheet">
-        <ScrollView className="flex-1 bg-neutral-900 pt-12 px-6" contentContainerStyle={{ paddingBottom: 120 }}>
+      {Boolean(isRegistering) && (
+      <Modal visible={true} animationType="slide" presentationStyle="pageSheet">
+        <ScrollView keyboardShouldPersistTaps="handled" className="flex-1 bg-neutral-900 pt-12 px-6" contentContainerStyle={{ paddingBottom: 120 }}>
           <View className="flex-row justify-between items-center mb-6">
             <Text className="text-2xl font-extrabold text-white">New Building</Text>
             <TouchableOpacity onPress={() => setIsRegistering(false)} className="bg-neutral-800 p-2 rounded-full border border-neutral-700">
@@ -1772,88 +1777,88 @@ export default function AdminDashboard() {
             </View>
           )}
 
-          <View className="bg-neutral-800 rounded-2xl overflow-hidden mb-6 border border-neutral-700 relative" style={{ height: 300 }}>
-              {!showAddMap ? (
-                <View className="flex-1 justify-center items-center p-6">
-                  <ActivityIndicator color="white" />
-                  <Text className="text-neutral-400 mt-4 text-xs font-bold">Loading interactive map...</Text>
+          <View className="bg-neutral-800 rounded-2xl  mb-6 border border-neutral-700 relative" style={{ height: 300 }}>
+            {!showAddMap ? (
+              <View className="flex-1 justify-center items-center p-6">
+                <ActivityIndicator color="white" />
+                <Text className="text-neutral-400 mt-4 text-xs font-bold">Loading interactive map...</Text>
+              </View>
+            ) : Platform.OS === 'web' || !MapView ? (
+              <View className="flex-1 justify-center items-center p-6">
+                <Text className="text-white text-center mb-4">Interactive Maps are not supported in the Web Simulator.</Text>
+                <Text className="text-neutral-400 text-center text-sm mb-4">Please open this Admin Console on a physical mobile device via Expo Go to use the Pin Drop feature.</Text>
+                <View className="flex-row items-center bg-yellow-900/50 p-4 rounded-xl border border-yellow-700">
+                  <Text className="text-yellow-500 font-bold mr-2">⚠️</Text>
+                  <Text className="text-yellow-500 text-xs flex-1">Web Fallback: We will generate 4 fake pins for testing.</Text>
                 </View>
-              ) : Platform.OS === 'web' || !MapView ? (
-                <View className="flex-1 justify-center items-center p-6">
-                  <Text className="text-white text-center mb-4">Interactive Maps are not supported in the Web Simulator.</Text>
-                  <Text className="text-neutral-400 text-center text-sm mb-4">Please open this Admin Console on a physical mobile device via Expo Go to use the Pin Drop feature.</Text>
-                  <View className="flex-row items-center bg-yellow-900/50 p-4 rounded-xl border border-yellow-700">
-                    <Text className="text-yellow-500 font-bold mr-2">⚠️</Text>
-                    <Text className="text-yellow-500 text-xs flex-1">Web Fallback: We will generate 4 fake pins for testing.</Text>
-                  </View>
-                  <TouchableOpacity
-                    className={`mt-6 px-6 py-3 rounded-xl ${bPins.length > 0 ? 'bg-green-600' : 'bg-blue-600'}`}
-                    onPress={() => {
-                      setBPins([
-                        { lat: 51.472, lon: -2.124, label: "Top Left" },
-                        { lat: 51.471, lon: -2.124, label: "Bottom Left" },
-                        { lat: 51.471, lon: -2.123, label: "Bottom Right" },
-                        { lat: 51.472, lon: -2.123, label: "Top Right" }
-                      ]);
-                      showToast("4 Test Pins Generated! You can now save the building.");
-                    }}
-                  >
-                    <Text className="text-white font-bold">{bPins.length > 0 ? "Test Polygon Generated!" : "Generate Test Polygon"}</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <>
-                  <MapView
-                    ref={addMapRef}
-                    style={{ flex: 1 }}
-                    onPress={handleMapPress}
-                    showsUserLocation={true}
-                    showsMyLocationButton={true}
+                <TouchableOpacity
+                  className={`mt-6 px-6 py-3 rounded-xl ${bPins.length > 0 ? 'bg-green-600' : 'bg-blue-600'}`}
+                  onPress={() => {
+                    setBPins([
+                      { lat: 51.472, lon: -2.124, label: "Top Left" },
+                      { lat: 51.471, lon: -2.124, label: "Bottom Left" },
+                      { lat: 51.471, lon: -2.123, label: "Bottom Right" },
+                      { lat: 51.472, lon: -2.123, label: "Top Right" }
+                    ]);
+                    showToast("4 Test Pins Generated! You can now save the building.");
+                  }}
+                >
+                  <Text className="text-white font-bold">{bPins.length > 0 ? "Test Polygon Generated!" : "Generate Test Polygon"}</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <>
+                <MapView
+                  ref={addMapRef}
+                  style={{ flex: 1 }}
+                  onPress={handleMapPress}
+                  showsUserLocation={true}
+                  showsMyLocationButton={true}
 
-                    initialRegion={{
-                      latitude: location ? location.coords.latitude : 51.4717,
-                      longitude: location ? location.coords.longitude : -2.1239,
-                      latitudeDelta: 0.01,
-                      longitudeDelta: 0.01,
-                    }}
-                  >
-                    {bPins.map((pin, i) => (
-                      <Marker 
-                        key={i} 
-                        coordinate={{ latitude: parseFloat(pin.lat as any) || 0, longitude: parseFloat(pin.lon as any) || 0 }} 
-                        title={pin.label || `P${i + 1}`}
-                        draggable={true}
-                        onDragEnd={(e: any) => {
-                          const newPins = [...bPins];
-                          newPins[i] = { ...newPins[i], lat: parseFloat(e.nativeEvent.coordinate.latitude.toFixed(6)), lon: parseFloat(e.nativeEvent.coordinate.longitude.toFixed(6)) };
-                          setBPins(newPins);
-                        }}
-                      />
-                    ))}
-                    <Polygon
-                      coordinates={bPins.length > 2 ? bPins.map(p => ({ latitude: parseFloat(p.lat as any) || 0, longitude: parseFloat(p.lon as any) || 0 })) : [{ latitude: 0, longitude: 0 }, { latitude: 0.000001, longitude: 0 }, { latitude: 0, longitude: 0.000001 }]}
-                      fillColor="rgba(255, 0, 0, 0.3)"
-                      strokeColor="rgba(255, 0, 0, 0.8)"
-                      strokeWidth={2}
+                  initialRegion={{
+                    latitude: location ? location.coords.latitude : 51.4717,
+                    longitude: location ? location.coords.longitude : -2.1239,
+                    latitudeDelta: 0.01,
+                    longitudeDelta: 0.01,
+                  }}
+                >
+                  {bPins.map((pin, i) => (
+                    <Marker
+                      key={i}
+                      coordinate={{ latitude: parseFloat(pin.lat as any) || 0, longitude: parseFloat(pin.lon as any) || 0 }}
+                      title={pin.label || `P${i + 1}`}
+                      draggable={true}
+                      onDragEnd={(e: any) => {
+                        const newPins = [...bPins];
+                        newPins[i] = { ...newPins[i], lat: parseFloat(e.nativeEvent.coordinate.latitude.toFixed(6)), lon: parseFloat(e.nativeEvent.coordinate.longitude.toFixed(6)) };
+                        setBPins(newPins);
+                      }}
                     />
-                  </MapView>
-                  <TouchableOpacity
-                    className="absolute bottom-4 left-4 bg-neutral-900/80 p-3 rounded-full border border-neutral-700"
-                    onPress={() => setBPins([])}
-                  >
-                    <Text className="text-white text-xs font-bold">Clear Pins</Text>
-                  </TouchableOpacity>
+                  ))}
+                  <Polygon
+                    coordinates={bPins.length > 2 ? bPins.map(p => ({ latitude: parseFloat(p.lat as any) || 0, longitude: parseFloat(p.lon as any) || 0 })) : [{ latitude: 0, longitude: 0 }, { latitude: 0.000001, longitude: 0 }, { latitude: 0, longitude: 0.000001 }]}
+                    fillColor="rgba(255, 0, 0, 0.3)"
+                    strokeColor="rgba(255, 0, 0, 0.8)"
+                    strokeWidth={2}
+                  />
+                </MapView>
+                <TouchableOpacity
+                  className="absolute bottom-4 left-4 bg-neutral-900/80 p-3 rounded-full border border-neutral-700"
+                  onPress={() => setBPins([])}
+                >
+                  <Text className="text-white text-xs font-bold">Clear Pins</Text>
+                </TouchableOpacity>
 
-                  {!bName && (
-                    <View className="absolute inset-0 bg-neutral-900/90 justify-center items-center p-6 z-10">
-                      <Text className="text-2xl mb-2">📸</Text>
-                      <Text className="text-white font-bold text-center">Enter a Building Name first</Text>
-                      <Text className="text-neutral-400 text-center text-xs mt-2">The map drawing tools will unlock once you name the building above.</Text>
-                    </View>
-                  )}
-                </>
-              )}
-            </View>
+                {!bName && (
+                  <View className="absolute inset-0 bg-neutral-900/90 justify-center items-center p-6 z-10">
+                    <Text className="text-2xl mb-2">📸</Text>
+                    <Text className="text-white font-bold text-center">Enter a Building Name first</Text>
+                    <Text className="text-neutral-400 text-center text-xs mt-2">The map drawing tools will unlock once you name the building above.</Text>
+                  </View>
+                )}
+              </>
+            )}
+          </View>
 
           {bPins.length > 0 && (
             <View className="bg-neutral-800 rounded-2xl p-4 border border-neutral-700 mb-6">
@@ -1892,7 +1897,7 @@ export default function AdminDashboard() {
                         setBPins(newPins);
                       }}
                     />
-                    
+
                     <View className="flex-col">
                       <View className="w-full mb-3">
                         <Text className="text-neutral-500 text-[10px] uppercase font-bold mb-1 ml-1">Latitude ↕️</Text>
@@ -1908,7 +1913,7 @@ export default function AdminDashboard() {
                           }}
                         />
                       </View>
-                      
+
                       <View className="w-full">
                         <Text className="text-neutral-500 text-[10px] uppercase font-bold mb-1 ml-1">Longitude ↔️</Text>
                         <TextInput
@@ -2029,11 +2034,13 @@ export default function AdminDashboard() {
           </TouchableOpacity>
         </ScrollView>
       </Modal>
+      )}
 
       {/* Manage Building Modal */}
-      <Modal visible={!!selectedBuilding} animationType="slide" presentationStyle="pageSheet">
+      {Boolean(!!selectedBuilding) && (
+      <Modal visible={true} animationType="slide" presentationStyle="pageSheet">
         {selectedBuilding && (
-          <ScrollView className="flex-1 bg-neutral-900 pt-12 px-6" contentContainerStyle={{ paddingBottom: 120 }}>
+          <ScrollView keyboardShouldPersistTaps="handled" className="flex-1 bg-neutral-900 pt-12 px-6" contentContainerStyle={{ paddingBottom: 120 }}>
             <View className="flex-row justify-between items-center mb-6">
               <Text className="text-2xl font-extrabold text-white">Manage Building</Text>
               <TouchableOpacity onPress={() => { setSelectedBuilding(null); setEditingPins(null); }} className="bg-neutral-800 p-2 rounded-full border border-neutral-700">
@@ -2119,13 +2126,13 @@ export default function AdminDashboard() {
             </View>
 
             <Text className="text-white font-bold text-lg mb-4">Polygon Footprint</Text>
-            <View className="bg-neutral-800 rounded-2xl overflow-hidden mb-6 border border-neutral-700 relative" style={{ height: 300 }}>
-                {!showEditMap ? (
-                  <View className="flex-1 justify-center items-center p-6">
-                    <ActivityIndicator color="white" />
-                    <Text className="text-neutral-400 mt-4 text-xs font-bold">Loading interactive map...</Text>
-                  </View>
-                ) : Platform.OS === 'web' || !MapView ? (
+            <View className="bg-neutral-800 rounded-2xl  mb-6 border border-neutral-700 relative" style={{ height: 300 }}>
+              {!showEditMap ? (
+                <View className="flex-1 justify-center items-center p-6">
+                  <ActivityIndicator color="white" />
+                  <Text className="text-neutral-400 mt-4 text-xs font-bold">Loading interactive map...</Text>
+                </View>
+              ) : Platform.OS === 'web' || !MapView ? (
                 <View className="flex-1 justify-center items-center p-6">
                   <Text className="text-white text-center mb-4">Interactive Maps are not supported in the Web Simulator.</Text>
                   <Text className="text-neutral-400 text-center text-sm mb-4">Please open this Admin Console on a physical mobile device via Expo Go to view or edit the Polygon pins.</Text>
@@ -2187,9 +2194,9 @@ export default function AdminDashboard() {
                     }
                   >
                     {editingPins?.map((pin: any, i: number) => (
-                      <Marker 
-                        key={i} 
-                        coordinate={{ latitude: parseFloat(pin.lat as any) || 0, longitude: parseFloat(pin.lon as any) || 0 }} 
+                      <Marker
+                        key={i}
+                        coordinate={{ latitude: parseFloat(pin.lat as any) || 0, longitude: parseFloat(pin.lon as any) || 0 }}
                         title={pin.label || `P${i + 1}`}
                         draggable={true}
                         onDragEnd={(e: any) => {
@@ -2291,7 +2298,7 @@ export default function AdminDashboard() {
                         setEditingPins(newPins);
                       }}
                     />
-                    
+
                     <View className="flex-col">
                       <View className="w-full mb-3">
                         <Text className="text-neutral-500 text-[10px] uppercase font-bold mb-1 ml-1">Latitude ↕️</Text>
@@ -2307,7 +2314,7 @@ export default function AdminDashboard() {
                           }}
                         />
                       </View>
-                      
+
                       <View className="w-full">
                         <Text className="text-neutral-500 text-[10px] uppercase font-bold mb-1 ml-1">Longitude ↔️</Text>
                         <TextInput
@@ -2468,8 +2475,10 @@ export default function AdminDashboard() {
           </ScrollView>
         )}
       </Modal>
+      )}
       {/* Delete Confirmation Modal */}
-      <Modal visible={showDeleteConfirm} animationType="fade" transparent>
+      {Boolean(showDeleteConfirm) && (
+      <Modal visible={true} animationType="fade" transparent>
         <View className="flex-1 bg-black/80 justify-center items-center px-6">
           <View className="bg-neutral-900 border border-neutral-700 p-6 rounded-3xl w-full max-w-sm">
             <Text className="text-xl font-bold text-white mb-2">Delete Building</Text>
@@ -2502,11 +2511,13 @@ export default function AdminDashboard() {
           </View>
         </View>
       </Modal>
+      )}
 
 
 
       {/* Unified Map Editor Modal */}
-      <Modal visible={isMapEditorOpen} animationType="slide">
+      {Boolean(isMapEditorOpen) && (
+      <Modal visible={true} animationType="slide">
         <View className="flex-1 bg-neutral-900 pt-6 px-4">
           <View className="flex-row justify-between items-center mb-4">
             <Text className="text-xl font-bold text-white">{isLocatingUser ? "Locate Trapped User" : "Manage Map Layout"}</Text>
@@ -2554,7 +2565,7 @@ export default function AdminDashboard() {
                   </View>
                 ) : (
                   <View
-                    className="bg-neutral-800 rounded-xl overflow-hidden mb-6 w-full"
+                    className="bg-neutral-800 rounded-xl  mb-6 w-full"
                     style={{ height: '70%' }}
                     onLayout={(e) => setImgLayout({ w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height) })}
                   >
@@ -2697,154 +2708,154 @@ export default function AdminDashboard() {
               </View>
 
 
-                <ScrollView className="flex-1" style={{ display: mapEditorStep === 1 ? 'flex' : 'none' }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }} scrollEnabled={!isMapInteracting}>
-                  <Text className="text-neutral-400 text-lg mb-4">Select a GPS pin from the list below, then tap its matching corner on the floor plan.</Text>
+              <ScrollView keyboardShouldPersistTaps="handled" className="flex-1" style={{ display: mapEditorStep === 1 ? 'flex' : 'none' }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }} scrollEnabled={!isMapInteracting}>
+                <Text className="text-neutral-400 text-lg mb-4">Select a GPS pin from the list below, then tap its matching corner on the floor plan.</Text>
 
-                  <View className="flex-row flex-wrap mb-4 justify-center">
-                    {selectedBuilding?.polygon?.map((p: any, i: number) => {
-                      return (
-                        <TouchableOpacity
-                          key={i}
-                          className={`px-3 py-2 rounded-lg border mr-2 mb-2 ${activeCalibIdx === i ? 'bg-blue-600 border-blue-400' : 'bg-neutral-800 border-neutral-600'}`}
-                          onPress={() => {
-                            if (activeCalibIdx === i) {
-                              setActiveCalibIdx(-1);
-                            } else {
-                              setActiveCalibIdx(i);
-                              setStep1PanMode(false);
-                            }
-                          }}
-                        >
-                          <Text className="text-white font-bold text-base">{p.label || `P${i + 1}`}</Text>
-                          {calibPoints[i] && <Text className="text-green-400 text-[10px] mt-1 font-bold">✓ Placed</Text>}
-                        </TouchableOpacity>
-                      )
-                    })}
-                  </View>
-
-                  {/* Step 1 Toolbar */}
-                  <View className="flex-row space-x-2 mb-2">
-                    <TouchableOpacity
-                      className={`flex-1 py-3 rounded-xl items-center border-2 ${!step1PanMode ? 'bg-blue-600 border-blue-400' : 'bg-neutral-800 border-neutral-700'}`}
-                      onPress={() => setStep1PanMode(false)}
-                    >
-                      <Text className="text-white font-bold text-lg">📍 Place Pin</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      className={`flex-1 py-3 rounded-xl items-center border-2 ${step1PanMode ? 'bg-amber-600 border-amber-400' : 'bg-neutral-800 border-neutral-700'}`}
-                      onPress={() => setStep1PanMode(true)}
-                    >
-                      <Text className="text-white font-bold text-lg">✋ Pan</Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  <View className="flex-row justify-end space-x-2 mb-4">
-                    <Text className="text-white my-auto font-bold mr-2">Zoom:</Text>
-                    <TouchableOpacity
-                      className="bg-neutral-700 p-2 rounded-lg"
-                      onPress={() => {
-                        setStep1Zoom(Math.max(1, step1Zoom - 0.5));
-                        setStep1PanOffset({ x: 0, y: 0 });
-                      }}
-                    >
-                      <MaterialCommunityIcons name="minus" size={24} color="white" />
-                    </TouchableOpacity>
-                    <Text className="text-white my-auto font-bold">{Math.round(step1Zoom * 100)}%</Text>
-                    <TouchableOpacity
-                      className="bg-neutral-700 p-2 rounded-lg"
-                      onPress={() => {
-                        const newZoom = Math.min(5, step1Zoom + 0.5);
-                        setStep1Zoom(newZoom);
-                        if (activeCalibIdx !== -1 && calibPoints[activeCalibIdx]) {
-                          const p = calibPoints[activeCalibIdx];
-                          const bounds = getRenderedImageBounds();
-                          const px = p.x > 2 ? p.x : bounds.offsetX + p.x * bounds.renderW;
-                          const py = p.x > 2 ? p.y : bounds.offsetY + p.y * bounds.renderH;
-                          setStep1PanOffset({
-                            x: (imgLayout.w / 2 - px) * newZoom,
-                            y: (imgLayout.h / 2 - py) * newZoom
-                          });
-                        } else {
-                          setStep1PanOffset({ x: 0, y: 0 });
-                        }
-                      }}
-                    >
-                      <MaterialCommunityIcons name="plus" size={24} color="white" />
-                    </TouchableOpacity>
-                  </View>
-
-                  <View
-                    ref={step1MapRef}
-                    className="bg-neutral-800 rounded-xl overflow-hidden mb-6 w-full justify-center items-center relative"
-                    style={{ height: getDynamicMapHeight() }}
-                    onLayout={(e) => {
-                      setImgLayout({ w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height) });
-                      if (Platform.OS === 'web' && step1MapRef.current) {
-                        const rect = step1MapRef.current.getBoundingClientRect();
-                        setStep1MapPos({ x: rect.left + window.scrollX, y: rect.top + window.scrollY });
-                      } else if (step1MapRef.current) {
-                        step1MapRef.current.measureInWindow((x: number, y: number) => {
-                          setStep1MapPos({ x, y });
-                        });
-                      }
-                    }}
-                  >
-                    {selectedBuilding?.masterPlanUrl && (
-                      <View
-                        className="w-full h-full justify-center items-center"
-                        style={{ touchAction: 'none' } as any}
-                        // @ts-ignore - onWheel is passed through to the DOM by react-native-web
-                        onWheel={(e: any) => {
-                          if (Platform.OS === 'web' && e.nativeEvent.deltaY) {
-                            setStep1Zoom(z => Math.max(1, Math.min(5, z - (e.nativeEvent.deltaY > 0 ? 0.2 : -0.2))));
+                <View className="flex-row flex-wrap mb-4 justify-center">
+                  {selectedBuilding?.polygon?.map((p: any, i: number) => {
+                    return (
+                      <TouchableOpacity
+                        key={i}
+                        className={`px-3 py-2 rounded-lg border mr-2 mb-2 ${activeCalibIdx === i ? 'bg-blue-600 border-blue-400' : 'bg-neutral-800 border-neutral-600'}`}
+                        onPress={() => {
+                          if (activeCalibIdx === i) {
+                            setActiveCalibIdx(-1);
+                          } else {
+                            setActiveCalibIdx(i);
+                            setStep1PanMode(false);
                           }
                         }}
                       >
+                        <Text className="text-white font-bold text-base">{p.label || `P${i + 1}`}</Text>
+                        {calibPoints[i] && <Text className="text-green-400 text-[10px] mt-1 font-bold">✓ Placed</Text>}
+                      </TouchableOpacity>
+                    )
+                  })}
+                </View>
+
+                {/* Step 1 Toolbar */}
+                <View className="flex-row space-x-2 mb-2">
+                  <TouchableOpacity
+                    className={`flex-1 py-3 rounded-xl items-center border-2 ${!step1PanMode ? 'bg-blue-600 border-blue-400' : 'bg-neutral-800 border-neutral-700'}`}
+                    onPress={() => setStep1PanMode(false)}
+                  >
+                    <Text className="text-white font-bold text-lg">📍 Place Pin</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    className={`flex-1 py-3 rounded-xl items-center border-2 ${step1PanMode ? 'bg-amber-600 border-amber-400' : 'bg-neutral-800 border-neutral-700'}`}
+                    onPress={() => setStep1PanMode(true)}
+                  >
+                    <Text className="text-white font-bold text-lg">✋ Pan</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View className="flex-row justify-end space-x-2 mb-4">
+                  <Text className="text-white my-auto font-bold mr-2">Zoom:</Text>
+                  <TouchableOpacity
+                    className="bg-neutral-700 p-2 rounded-lg"
+                    onPress={() => {
+                      setStep1Zoom(Math.max(1, step1Zoom - 0.5));
+                      setStep1PanOffset({ x: 0, y: 0 });
+                    }}
+                  >
+                    <MaterialCommunityIcons name="minus" size={24} color="white" />
+                  </TouchableOpacity>
+                  <Text className="text-white my-auto font-bold">{Math.round(step1Zoom * 100)}%</Text>
+                  <TouchableOpacity
+                    className="bg-neutral-700 p-2 rounded-lg"
+                    onPress={() => {
+                      const newZoom = Math.min(5, step1Zoom + 0.5);
+                      setStep1Zoom(newZoom);
+                      if (activeCalibIdx !== -1 && calibPoints[activeCalibIdx]) {
+                        const p = calibPoints[activeCalibIdx];
+                        const bounds = getRenderedImageBounds();
+                        const px = p.x > 2 ? p.x : bounds.offsetX + p.x * bounds.renderW;
+                        const py = p.x > 2 ? p.y : bounds.offsetY + p.y * bounds.renderH;
+                        setStep1PanOffset({
+                          x: (imgLayout.w / 2 - px) * newZoom,
+                          y: (imgLayout.h / 2 - py) * newZoom
+                        });
+                      } else {
+                        setStep1PanOffset({ x: 0, y: 0 });
+                      }
+                    }}
+                  >
+                    <MaterialCommunityIcons name="plus" size={24} color="white" />
+                  </TouchableOpacity>
+                </View>
+
+                <View
+                  ref={step1MapRef}
+                  className="bg-neutral-800 rounded-xl  mb-6 w-full justify-center items-center relative"
+                  style={{ height: getDynamicMapHeight() }}
+                  onLayout={(e) => {
+                    setImgLayout({ w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height) });
+                    if (Platform.OS === 'web' && step1MapRef.current) {
+                      const rect = step1MapRef.current.getBoundingClientRect();
+                      setStep1MapPos({ x: rect.left + window.scrollX, y: rect.top + window.scrollY });
+                    } else if (step1MapRef.current) {
+                      step1MapRef.current.measureInWindow((x: number, y: number) => {
+                        setStep1MapPos({ x, y });
+                      });
+                    }
+                  }}
+                >
+                  {selectedBuilding?.masterPlanUrl && (
+                    <View
+                      className="w-full h-full justify-center items-center"
+                      style={{ touchAction: 'none' } as any}
+                      // @ts-ignore - onWheel is passed through to the DOM by react-native-web
+                      onWheel={(e: any) => {
+                        if (Platform.OS === 'web' && e.nativeEvent.deltaY) {
+                          setStep1Zoom(z => Math.max(1, Math.min(5, z - (e.nativeEvent.deltaY > 0 ? 0.2 : -0.2))));
+                        }
+                      }}
+                    >
+                      <View
+                        style={{
+                          width: imgLayout.w,
+                          height: imgLayout.h,
+                          overflow: 'hidden',
+                          position: 'relative',
+                        }}
+                      >
+                        <View
+                          style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1 }}
+                          onStartShouldSetResponder={() => true}
+                          onMoveShouldSetResponder={() => true}
+                          onResponderTerminationRequest={() => false}
+                          onResponderGrant={(e) => {
+                            setIsMapInteracting(true);
+                            handleTouchStart(e, step1Zoom, step1PanOffset, step1PanMode, handleStep1Paint);
+                          }}
+                          onResponderMove={(e) => handleTouchMove(e, step1Zoom, setStep1Zoom, setStep1PanOffset, step1PanMode, handleStep1Paint)}
+                          onResponderRelease={() => setIsMapInteracting(false)}
+                          onResponderTerminate={() => setIsMapInteracting(false)}
+                        />
+
                         <View
                           style={{
+                            position: 'absolute',
+                            left: 0,
+                            top: 0,
                             width: imgLayout.w,
                             height: imgLayout.h,
-                            overflow: 'hidden',
-                            position: 'relative',
+                            transform: [
+                              { scale: step1Zoom },
+                              { translateX: step1PanOffset.x },
+                              { translateY: step1PanOffset.y }
+                            ],
+                            pointerEvents: 'none'
                           }}
                         >
-                            <View
-                              style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1 }}
-                              onStartShouldSetResponder={() => true}
-                              onMoveShouldSetResponder={() => true}
-                              onResponderTerminationRequest={() => false}
-                              onResponderGrant={(e) => {
-                                setIsMapInteracting(true);
-                                handleTouchStart(e, step1Zoom, step1PanOffset, step1PanMode, handleStep1Paint);
-                              }}
-                              onResponderMove={(e) => handleTouchMove(e, step1Zoom, setStep1Zoom, setStep1PanOffset, step1PanMode, handleStep1Paint)}
-                              onResponderRelease={() => setIsMapInteracting(false)}
-                              onResponderTerminate={() => setIsMapInteracting(false)}
-                            />
-
-                          <View
-                            style={{
-                              position: 'absolute',
-                              left: 0,
-                              top: 0,
-                              width: imgLayout.w,
-                              height: imgLayout.h,
-                              transform: [
-                                { scale: step1Zoom },
-                                { translateX: step1PanOffset.x },
-                                { translateY: step1PanOffset.y }
-                              ],
-                              pointerEvents: 'none'
-                            }}
-                          >
                           <Image
                             source={{ uri: selectedBuilding.masterPlanUrl }}
                             className="w-full h-full"
                             resizeMode="contain"
                           />
-                          </View>
-                          
-                          <View style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 2, pointerEvents: 'box-none' }}>
+                        </View>
+
+                        <View style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 2, pointerEvents: 'box-none' }}>
                           {calibPoints.map((p, i) => {
                             if (!p) return null;
                             const labelStr = selectedBuilding?.polygon?.[i]?.label;
@@ -2862,11 +2873,11 @@ export default function AdminDashboard() {
                                 onTouchStart={(e) => e.stopPropagation()}
                                 // @ts-ignore
                                 onPointerDown={(e: any) => { if (e.stopPropagation) e.stopPropagation(); }}
-                                style={{ 
-                                  left: px - 20, 
-                                  top: py - 20, 
-                                  width: 40, 
-                                  height: 40, 
+                                style={{
+                                  left: px - 20,
+                                  top: py - 20,
+                                  width: 40,
+                                  height: 40,
                                   zIndex: activeCalibIdx === i ? 10 : 1,
                                   transform: [{ scale: 1 / step1Zoom }]
                                 }}
@@ -2908,7 +2919,7 @@ export default function AdminDashboard() {
                                       <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleNudgeCalib(i, 0, 1); }} className="absolute bottom-1 p-2 bg-neutral-700 rounded-full"><MaterialCommunityIcons name="chevron-down" size={24} color="white" /></TouchableOpacity>
                                       <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleNudgeCalib(i, -1, 0); }} className="absolute left-1 p-2 bg-neutral-700 rounded-full"><MaterialCommunityIcons name="chevron-left" size={24} color="white" /></TouchableOpacity>
                                       <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleNudgeCalib(i, 1, 0); }} className="absolute right-1 p-2 bg-neutral-700 rounded-full"><MaterialCommunityIcons name="chevron-right" size={24} color="white" /></TouchableOpacity>
-                                      
+
                                       {/* Green Set Button */}
                                       <TouchableOpacity onPress={(e) => { e.stopPropagation(); setActiveCalibIdx(-1); }} className="w-8 h-8 bg-green-500 rounded-full border border-white items-center justify-center">
                                         <MaterialCommunityIcons name="check-bold" size={16} color="white" />
@@ -2919,309 +2930,311 @@ export default function AdminDashboard() {
                               </TouchableOpacity>
                             )
                           })}
-                          </View>
                         </View>
                       </View>
-                    )}
-                  </View>
-
-                  <View className="flex-row justify-between mb-0">
-                    <TouchableOpacity className="bg-neutral-700 px-6 py-3 rounded-xl flex-1 mr-2 items-center justify-center" onPress={() => { setCalibPoints([]); setActiveCalibIdx(0); }}>
-                      <Text className="text-white font-bold text-lg text-center">Clear Points</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      className="px-6 py-3 rounded-xl flex-1 ml-2 items-center justify-center bg-blue-600"
-                      onPress={() => {
-                        performAutoZoom();
-                        setMapEditorStep(2);
-                      }}
-                    >
-                      <Text className="text-white font-bold text-lg text-center">Next: Safe Routes ➔</Text>
-                    </TouchableOpacity>
-                  </View>
-                </ScrollView>
-                <ScrollView className="flex-1" style={{ display: mapEditorStep === 2 ? 'flex' : 'none' }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }} scrollEnabled={!isMapInteracting}>
-                  <Text className="text-neutral-400 text-lg mb-4">Select a brush type, then tap the map to paint grid cells.</Text>
-
-                  {/* Toolbar */}
-                  <View className="flex-row space-x-2 mb-2">
-                    <TouchableOpacity
-                      className={`flex-1 py-3 rounded-xl items-center border-2 ${gridPaintMode === "safe_route" ? 'bg-blue-600 border-blue-400' : 'bg-neutral-800 border-neutral-700'}`}
-                      onPress={() => setGridPaintMode("safe_route")}
-                    >
-                      <Text className="text-white font-bold text-lg">🟦 Safe Route</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      className={`flex-1 py-3 rounded-xl items-center border-2 ${gridPaintMode === "exit" ? 'bg-green-600 border-green-400' : 'bg-neutral-800 border-neutral-700'}`}
-                      onPress={() => setGridPaintMode("exit")}
-                    >
-                      <Text className="text-white font-bold text-lg">🚪 Exit</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      className={`flex-1 py-3 rounded-xl items-center border-2 ${gridPaintMode === "erase" ? 'bg-red-600 border-red-400' : 'bg-neutral-800 border-neutral-700'}`}
-                      onPress={() => setGridPaintMode("erase")}
-                    >
-                      <Text className="text-white font-bold text-lg">🧹 Erase</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      className={`flex-1 py-3 rounded-xl items-center border-2 ${gridPaintMode === "pan" ? 'bg-amber-600 border-amber-400' : 'bg-neutral-800 border-neutral-700'}`}
-                      onPress={() => setGridPaintMode("pan")}
-                    >
-                      <Text className="text-white font-bold">✋ Pan</Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  <View className="flex-row justify-between items-center mb-4">
-                    <View className="flex-row space-x-2">
-                      <Text className="text-white my-auto font-bold mr-2">Grid Size:</Text>
-                      <TouchableOpacity
-                        className="bg-neutral-700 p-2 rounded-lg"
-                        onPress={() => setGridSizeMeters(s => Math.max(0.5, s - 0.1))}
-                      >
-                        <MaterialCommunityIcons name="minus" size={20} color="white" />
-                      </TouchableOpacity>
-                      <Text className="text-white my-auto font-bold w-12 text-center">{gridSizeMeters.toFixed(1)}m</Text>
-                      <TouchableOpacity
-                        className="bg-neutral-700 p-2 rounded-lg"
-                        onPress={() => setGridSizeMeters(s => Math.min(5.0, s + 0.1))}
-                      >
-                        <MaterialCommunityIcons name="plus" size={20} color="white" />
-                      </TouchableOpacity>
                     </View>
-                    <View className="flex-row space-x-2">
-                      <Text className="text-white my-auto font-bold mr-2">Zoom:</Text>
-                      <TouchableOpacity
-                        className="bg-neutral-700 p-2 rounded-lg"
-                        onPress={() => {
-                          setStep1Zoom(z => Math.max(1, z - 0.5));
-                        }}
-                      >
-                        <MaterialCommunityIcons name="minus" size={20} color="white" />
-                      </TouchableOpacity>
-                      <Text className="text-white my-auto font-bold w-10 text-center">{Math.round(step1Zoom * 100)}%</Text>
-                      <TouchableOpacity
-                        className="bg-neutral-700 p-2 rounded-lg"
-                        onPress={() => {
-                          setStep1Zoom(z => Math.min(5, z + 0.5));
-                        }}
-                      >
-                        <MaterialCommunityIcons name="plus" size={20} color="white" />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
+                  )}
+                </View>
 
-                  <View
-                    ref={step2MapRef}
-                    className="bg-neutral-800 rounded-xl mb-4 w-full justify-center items-center relative overflow-hidden"
-                    style={{ height: getDynamicMapHeight() }}
-                    onLayout={(e) => {
-                      setImgLayout({ w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height) });
-                      if (Platform.OS === 'web' && step2MapRef.current) {
-                        const rect = step2MapRef.current.getBoundingClientRect();
-                        setStep2MapPos({ x: rect.left + window.scrollX, y: rect.top + window.scrollY });
-                      } else if (step2MapRef.current) {
-                        step2MapRef.current.measureInWindow((x: number, y: number) => {
-                          setStep2MapPos({ x, y });
-                        });
-                      }
+                <View className="flex-row justify-between mb-0">
+                  <TouchableOpacity className="bg-neutral-700 px-6 py-3 rounded-xl flex-1 mr-2 items-center justify-center" onPress={() => { setCalibPoints([]); setActiveCalibIdx(0); }}>
+                    <Text className="text-white font-bold text-lg text-center">Clear Points</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    className="px-6 py-3 rounded-xl flex-1 ml-2 items-center justify-center bg-blue-600"
+                    onPress={() => {
+                      performAutoZoom();
+                      setMapEditorStep(2);
                     }}
                   >
-                    {selectedBuilding?.masterPlanUrl && (
+                    <Text className="text-white font-bold text-lg text-center">Next: Safe Routes ➔</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+              <ScrollView keyboardShouldPersistTaps="handled" className="flex-1" style={{ display: mapEditorStep === 2 ? 'flex' : 'none' }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }} scrollEnabled={!isMapInteracting}>
+                <Text className="text-neutral-400 text-lg mb-4">Select a brush type, then tap the map to paint grid cells.</Text>
+
+                {/* Toolbar */}
+                <View className="flex-row space-x-2 mb-2">
+                  <TouchableOpacity
+                    className={`flex-1 py-3 rounded-xl items-center border-2 ${gridPaintMode === "safe_route" ? 'bg-blue-600 border-blue-400' : 'bg-neutral-800 border-neutral-700'}`}
+                    onPress={() => setGridPaintMode("safe_route")}
+                  >
+                    <Text className="text-white font-bold text-lg">🟦 Safe Route</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    className={`flex-1 py-3 rounded-xl items-center border-2 ${gridPaintMode === "exit" ? 'bg-green-600 border-green-400' : 'bg-neutral-800 border-neutral-700'}`}
+                    onPress={() => setGridPaintMode("exit")}
+                  >
+                    <Text className="text-white font-bold text-lg">🚪 Exit</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    className={`flex-1 py-3 rounded-xl items-center border-2 ${gridPaintMode === "erase" ? 'bg-red-600 border-red-400' : 'bg-neutral-800 border-neutral-700'}`}
+                    onPress={() => setGridPaintMode("erase")}
+                  >
+                    <Text className="text-white font-bold text-lg">🧹 Erase</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    className={`flex-1 py-3 rounded-xl items-center border-2 ${gridPaintMode === "pan" ? 'bg-amber-600 border-amber-400' : 'bg-neutral-800 border-neutral-700'}`}
+                    onPress={() => setGridPaintMode("pan")}
+                  >
+                    <Text className="text-white font-bold">✋ Pan</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View className="flex-row justify-between items-center mb-4">
+                  <View className="flex-row space-x-2">
+                    <Text className="text-white my-auto font-bold mr-2">Grid Size:</Text>
+                    <TouchableOpacity
+                      className="bg-neutral-700 p-2 rounded-lg"
+                      onPress={() => setGridSizeMeters(s => Math.max(0.5, s - 0.1))}
+                    >
+                      <MaterialCommunityIcons name="minus" size={20} color="white" />
+                    </TouchableOpacity>
+                    <Text className="text-white my-auto font-bold w-12 text-center">{gridSizeMeters.toFixed(1)}m</Text>
+                    <TouchableOpacity
+                      className="bg-neutral-700 p-2 rounded-lg"
+                      onPress={() => setGridSizeMeters(s => Math.min(5.0, s + 0.1))}
+                    >
+                      <MaterialCommunityIcons name="plus" size={20} color="white" />
+                    </TouchableOpacity>
+                  </View>
+                  <View className="flex-row space-x-2">
+                    <Text className="text-white my-auto font-bold mr-2">Zoom:</Text>
+                    <TouchableOpacity
+                      className="bg-neutral-700 p-2 rounded-lg"
+                      onPress={() => {
+                        setStep1Zoom(z => Math.max(1, z - 0.5));
+                      }}
+                    >
+                      <MaterialCommunityIcons name="minus" size={20} color="white" />
+                    </TouchableOpacity>
+                    <Text className="text-white my-auto font-bold w-10 text-center">{Math.round(step1Zoom * 100)}%</Text>
+                    <TouchableOpacity
+                      className="bg-neutral-700 p-2 rounded-lg"
+                      onPress={() => {
+                        setStep1Zoom(z => Math.min(5, z + 0.5));
+                      }}
+                    >
+                      <MaterialCommunityIcons name="plus" size={20} color="white" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                <View
+                  ref={step2MapRef}
+                  className="bg-neutral-800 rounded-xl mb-4 w-full justify-center items-center relative "
+                  style={{ height: getDynamicMapHeight() }}
+                  onLayout={(e) => {
+                    setImgLayout({ w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height) });
+                    if (Platform.OS === 'web' && step2MapRef.current) {
+                      const rect = step2MapRef.current.getBoundingClientRect();
+                      setStep2MapPos({ x: rect.left + window.scrollX, y: rect.top + window.scrollY });
+                    } else if (step2MapRef.current) {
+                      step2MapRef.current.measureInWindow((x: number, y: number) => {
+                        setStep2MapPos({ x, y });
+                      });
+                    }
+                  }}
+                >
+                  {selectedBuilding?.masterPlanUrl && (
+                    <View
+                      className="w-full h-full justify-center items-center"
+                      style={{ touchAction: 'none' } as any}
+                      // @ts-ignore - onWheel is passed through to the DOM by react-native-web
+                      onWheel={(e: any) => {
+                        if (Platform.OS === 'web' && e.nativeEvent.deltaY) {
+                          setStep1Zoom(z => Math.max(1, Math.min(5, z - (e.nativeEvent.deltaY > 0 ? 0.2 : -0.2))));
+                        }
+                      }}
+                    >
                       <View
-                        className="w-full h-full justify-center items-center"
-                        style={{ touchAction: 'none' } as any}
-                        // @ts-ignore - onWheel is passed through to the DOM by react-native-web
-                        onWheel={(e: any) => {
-                          if (Platform.OS === 'web' && e.nativeEvent.deltaY) {
-                            setStep1Zoom(z => Math.max(1, Math.min(5, z - (e.nativeEvent.deltaY > 0 ? 0.2 : -0.2))));
-                          }
+                        style={{
+                          width: imgLayout.w,
+                          height: imgLayout.h,
+                          overflow: 'hidden',
+                          position: 'relative',
                         }}
                       >
                         <View
+                          style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 10 }}
+                          onStartShouldSetResponder={() => true}
+                          onMoveShouldSetResponder={() => true}
+                          onResponderTerminationRequest={() => false}
+                          onResponderGrant={(e) => {
+                            setIsMapInteracting(true);
+                            handleTouchStart(e, step1Zoom, step1PanOffset, gridPaintMode === "pan", handleGridInteraction);
+                          }}
+                          onResponderMove={(e) => handleTouchMove(e, step1Zoom, setStep1Zoom, setStep1PanOffset, gridPaintMode === "pan", handleGridInteraction)}
+                          onResponderRelease={() => setIsMapInteracting(false)}
+                          onResponderTerminate={() => setIsMapInteracting(false)}
+                        />
+
+                        <View
                           style={{
+                            position: 'absolute',
+                            left: 0,
+                            top: 0,
                             width: imgLayout.w,
                             height: imgLayout.h,
-                            overflow: 'hidden',
-                            position: 'relative',
+                            pointerEvents: 'none',
+                            transform: [
+                              { scale: step1Zoom },
+                              { translateX: step1PanOffset.x },
+                              { translateY: step1PanOffset.y }
+                            ]
                           }}
                         >
-                          <View
-                            style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 10 }}
-                            onStartShouldSetResponder={() => true}
-                            onMoveShouldSetResponder={() => true}
-                            onResponderTerminationRequest={() => false}
-                            onResponderGrant={(e) => {
-                              setIsMapInteracting(true);
-                              handleTouchStart(e, step1Zoom, step1PanOffset, gridPaintMode === "pan", handleGridInteraction);
-                            }}
-                            onResponderMove={(e) => handleTouchMove(e, step1Zoom, setStep1Zoom, setStep1PanOffset, gridPaintMode === "pan", handleGridInteraction)}
-                            onResponderRelease={() => setIsMapInteracting(false)}
-                            onResponderTerminate={() => setIsMapInteracting(false)}
+                          <Image
+                            source={{ uri: selectedBuilding.masterPlanUrl }}
+                            className="w-full h-full opacity-70"
+                            resizeMode="contain"
                           />
 
-                          <View
-                            style={{
-                              position: 'absolute',
-                              left: 0,
-                              top: 0,
-                              width: imgLayout.w,
-                              height: imgLayout.h,
-                              pointerEvents: 'none',
-                              transform: [
-                                { scale: step1Zoom },
-                                { translateX: step1PanOffset.x },
-                                { translateY: step1PanOffset.y }
-                              ]
-                            }}
-                          >
-                            <Image
-                              source={{ uri: selectedBuilding.masterPlanUrl }}
-                              className="w-full h-full opacity-70"
-                              resizeMode="contain"
-                            />
+                          {/* Lightweight Grid Overlay & Painted Cells */}
+                          {(() => {
+                            const { rows, cols, minLat, maxLat, minLon, maxLon, cellLatSpan, cellLonSpan } = getGridDimensions();
+                            const bounds = getRenderedImageBounds();
 
-                            {/* Lightweight Grid Overlay & Painted Cells */}
-                            {(() => {
-                              const { rows, cols, minLat, maxLat, minLon, maxLon, cellLatSpan, cellLonSpan } = getGridDimensions();
-                              const bounds = getRenderedImageBounds();
-                              
-                              const gridLines = [];
-                              const reqPins = selectedBuilding?.polygon?.length || 4;
-                              const currentCalib = calibPoints.filter(Boolean).length >= reqPins ? calibPoints.filter(Boolean) : selectedBuilding?.imageCalibrationPoints;
-                              if (rows > 0 && cols > 0 && currentCalib && currentCalib.length >= reqPins) {
-                                const tl = mapGPSToImage(maxLat, minLon);
-                                const br = mapGPSToImage(minLat, maxLon);
-                                if (tl && br) {
-                                  const isLegacy = currentCalib[0]?.x > 2;
-                                  const tlX = isLegacy ? tl.x : bounds.offsetX + tl.x * bounds.renderW;
-                                  const brX = isLegacy ? br.x : bounds.offsetX + br.x * bounds.renderW;
-                                  const tlY = isLegacy ? tl.y : bounds.offsetY + tl.y * bounds.renderH;
-                                  const brY = isLegacy ? br.y : bounds.offsetY + br.y * bounds.renderH;
-                                  const tlGrid = mapGPSToImage(maxLat, minLon);
-                                  const brGrid = mapGPSToImage(maxLat - (rows * cellLatSpan), minLon + (cols * cellLonSpan));
-                                  if (tlGrid && brGrid) {
-                                    const tlxG = isLegacy ? tlGrid.x : bounds.offsetX + tlGrid.x * bounds.renderW;
-                                    const brxG = isLegacy ? brGrid.x : bounds.offsetX + brGrid.x * bounds.renderW;
-                                    const tlyG = isLegacy ? tlGrid.y : bounds.offsetY + tlGrid.y * bounds.renderH;
-                                    const bryG = isLegacy ? brGrid.y : bounds.offsetY + brGrid.y * bounds.renderH;
-                                    
-                                    for (let c = 0; c <= cols; c++) {
-                                      const lx = tlxG + (c / cols) * (brxG - tlxG);
-                                      gridLines.push(<View key={`v-${c}`} style={{ position: 'absolute', left: lx, top: tlyG, width: 1, height: bryG - tlyG, backgroundColor: 'rgba(255,255,255,0.2)', pointerEvents: 'none' }} />);
-                                    }
-                                    for (let r = 0; r <= rows; r++) {
-                                      const ly = tlyG + (r / rows) * (bryG - tlyG);
-                                      gridLines.push(<View key={`h-${r}`} style={{ position: 'absolute', left: tlxG, top: ly, width: brxG - tlxG, height: 1, backgroundColor: 'rgba(255,255,255,0.2)', pointerEvents: 'none' }} />);
-                                    }
+                            const gridLines = [];
+                            const reqPins = selectedBuilding?.polygon?.length || 4;
+                            const currentCalib = calibPoints.filter(Boolean).length >= reqPins ? calibPoints.filter(Boolean) : selectedBuilding?.imageCalibrationPoints;
+                            if (rows > 0 && cols > 0 && currentCalib && currentCalib.length >= reqPins) {
+                              const tl = mapGPSToImage(maxLat, minLon);
+                              const br = mapGPSToImage(minLat, maxLon);
+                              if (tl && br) {
+                                const isLegacy = currentCalib[0]?.x > 2;
+                                const tlX = isLegacy ? tl.x : bounds.offsetX + tl.x * bounds.renderW;
+                                const brX = isLegacy ? br.x : bounds.offsetX + br.x * bounds.renderW;
+                                const tlY = isLegacy ? tl.y : bounds.offsetY + tl.y * bounds.renderH;
+                                const brY = isLegacy ? br.y : bounds.offsetY + br.y * bounds.renderH;
+                                const tlGrid = mapGPSToImage(maxLat, minLon);
+                                const brGrid = mapGPSToImage(maxLat - (rows * cellLatSpan), minLon + (cols * cellLonSpan));
+                                if (tlGrid && brGrid) {
+                                  const tlxG = isLegacy ? tlGrid.x : bounds.offsetX + tlGrid.x * bounds.renderW;
+                                  const brxG = isLegacy ? brGrid.x : bounds.offsetX + brGrid.x * bounds.renderW;
+                                  const tlyG = isLegacy ? tlGrid.y : bounds.offsetY + tlGrid.y * bounds.renderH;
+                                  const bryG = isLegacy ? brGrid.y : bounds.offsetY + brGrid.y * bounds.renderH;
+
+                                  for (let c = 0; c <= cols; c++) {
+                                    const lx = tlxG + (c / cols) * (brxG - tlxG);
+                                    gridLines.push(<View key={`v-${c}`} style={{ position: 'absolute', left: lx, top: tlyG, width: 1, height: bryG - tlyG, backgroundColor: 'rgba(255,255,255,0.2)', pointerEvents: 'none' }} />);
+                                  }
+                                  for (let r = 0; r <= rows; r++) {
+                                    const ly = tlyG + (r / rows) * (bryG - tlyG);
+                                    gridLines.push(<View key={`h-${r}`} style={{ position: 'absolute', left: tlxG, top: ly, width: brxG - tlxG, height: 1, backgroundColor: 'rgba(255,255,255,0.2)', pointerEvents: 'none' }} />);
                                   }
                                 }
                               }
-                              
-                              return (
-                                <>
-                                  {gridLines}
-                                  {gridPaths.map(p => {
-                                const latCenter = maxLat - ((p.row + 0.5) * cellLatSpan);
-                                const lonCenter = minLon + ((p.col + 0.5) * cellLonSpan);
-                                const pu = mapGPSToImage(latCenter, lonCenter);
-                                if (!pu) return null;
+                            }
 
-                                const isLegacy = pu.x > 2;
-                                const sx = isLegacy ? pu.x : bounds.offsetX + pu.x * bounds.renderW;
-                                const sy = isLegacy ? pu.y : bounds.offsetY + pu.y * bounds.renderH;
+                            return (
+                              <>
+                                {gridLines}
+                                {gridPaths.map(p => {
+                                  const latCenter = maxLat - ((p.row + 0.5) * cellLatSpan);
+                                  const lonCenter = minLon + ((p.col + 0.5) * cellLonSpan);
+                                  const pu = mapGPSToImage(latCenter, lonCenter);
+                                  if (!pu) return null;
 
-                                const cellTopLeft = mapGPSToImage(maxLat - (p.row * cellLatSpan), minLon + (p.col * cellLonSpan));
-                                const cellBottomRight = mapGPSToImage(maxLat - ((p.row + 1) * cellLatSpan), minLon + ((p.col + 1) * cellLonSpan));
+                                  const isLegacy = pu.x > 2;
+                                  const sx = isLegacy ? pu.x : bounds.offsetX + pu.x * bounds.renderW;
+                                  const sy = isLegacy ? pu.y : bounds.offsetY + pu.y * bounds.renderH;
 
-                                let finalLeft = sx - 10;
-                                let finalTop = sy - 10;
-                                let cellW = 20;
-                                let cellH = 20;
+                                  const cellTopLeft = mapGPSToImage(maxLat - (p.row * cellLatSpan), minLon + (p.col * cellLonSpan));
+                                  const cellBottomRight = mapGPSToImage(maxLat - ((p.row + 1) * cellLatSpan), minLon + ((p.col + 1) * cellLonSpan));
 
-                                if (cellTopLeft && cellBottomRight) {
-                                  const tlX = isLegacy ? cellTopLeft.x : bounds.offsetX + cellTopLeft.x * bounds.renderW;
-                                  const brX = isLegacy ? cellBottomRight.x : bounds.offsetX + cellBottomRight.x * bounds.renderW;
-                                  const tlY = isLegacy ? cellTopLeft.y : bounds.offsetY + cellTopLeft.y * bounds.renderH;
-                                  const brY = isLegacy ? cellBottomRight.y : bounds.offsetY + cellBottomRight.y * bounds.renderH;
-                                  finalLeft = tlX;
-                                  finalTop = tlY;
-                                  cellW = Math.abs(brX - tlX);
-                                  cellH = Math.abs(brY - tlY);
-                                }
+                                  let finalLeft = sx - 10;
+                                  let finalTop = sy - 10;
+                                  let cellW = 20;
+                                  let cellH = 20;
 
-                                return (
-                                  <View
-                                    key={`grid-${p.row}-${p.col}`}
-                                    className={`absolute items-center justify-center border ${p.isExit ? 'bg-green-600/80 border-green-500' : 'bg-lime-500/80 border-lime-400'}`}
-                                    style={{
-                                      pointerEvents: 'none',
-                                      left: finalLeft,
-                                      top: finalTop,
-                                      width: cellW,
-                                      height: cellH,
-                                      zIndex: p.isExit ? 10 : 1
-                                    }}
-                                  >
-                                    {p.isExit && <Text style={{ pointerEvents: 'none' }} className="text-white text-[8px] font-bold">E</Text>}
-                                  </View>
-                                );
-                              })}
-                            </>
-                          );
-                        })()}
-                          </View>
+                                  if (cellTopLeft && cellBottomRight) {
+                                    const tlX = isLegacy ? cellTopLeft.x : bounds.offsetX + cellTopLeft.x * bounds.renderW;
+                                    const brX = isLegacy ? cellBottomRight.x : bounds.offsetX + cellBottomRight.x * bounds.renderW;
+                                    const tlY = isLegacy ? cellTopLeft.y : bounds.offsetY + cellTopLeft.y * bounds.renderH;
+                                    const brY = isLegacy ? cellBottomRight.y : bounds.offsetY + cellBottomRight.y * bounds.renderH;
+                                    finalLeft = tlX;
+                                    finalTop = tlY;
+                                    cellW = Math.abs(brX - tlX);
+                                    cellH = Math.abs(brY - tlY);
+                                  }
+
+                                  return (
+                                    <View
+                                      key={`grid-${p.row}-${p.col}`}
+                                      className={`absolute items-center justify-center border ${p.isExit ? 'bg-green-600/80 border-green-500' : 'bg-lime-500/80 border-lime-400'}`}
+                                      style={{
+                                        pointerEvents: 'none',
+                                        left: finalLeft,
+                                        top: finalTop,
+                                        width: cellW,
+                                        height: cellH,
+                                        zIndex: p.isExit ? 10 : 1
+                                      }}
+                                    >
+                                      {p.isExit && <Text style={{ pointerEvents: 'none' }} className="text-white text-[8px] font-bold">E</Text>}
+                                    </View>
+                                  );
+                                })}
+                              </>
+                            );
+                          })()}
                         </View>
                       </View>
-                    )}
-                  </View>
-
-                  <View className="bg-blue-900/30 p-4 rounded-xl border border-blue-600/50 mb-6 flex-row">
-                    <Text className="text-blue-500 mr-3 text-2xl">💡</Text>
-                    <View className="flex-1">
-                      <Text className="text-blue-400 font-bold mb-1 uppercase tracking-wider text-lg">Grid Strategy</Text>
-                      <Text className="text-blue-300 text-base">Paint <Text className="font-bold text-white text-base">Safe Routes</Text> along corridors and rooms to define where users can walk. Mark <Text className="font-bold text-white text-base">Exits</Text> at the doors. The system automatically calculates the shortest path through painted routes.</Text>
                     </View>
-                  </View>
+                  )}
+                </View>
 
-                  <View className="flex-row justify-between mb-0">
-                    <TouchableOpacity className="flex-1 bg-neutral-700 py-3 rounded-xl items-center justify-center mr-2" onPress={() => setGridPaths([])}>
-                      <Text className="text-white font-bold text-lg text-center">Clear Grid</Text>
-                    </TouchableOpacity>
-                    {(() => {
-                      const requiredPins = selectedBuilding?.polygon?.length || 4;
-                      const hasAllPins = calibPoints.filter(Boolean).length === requiredPins;
-                      const hasSafeRoute = gridPaths.some(p => !p.isExit);
-                      const hasExit = gridPaths.some(p => p.isExit);
-                      const isSaveReady = hasAllPins && hasSafeRoute && hasExit;
-
-                      return (
-                        <TouchableOpacity
-                          className={`flex-1 py-3 rounded-xl items-center justify-center ${isSaveReady ? 'bg-green-600' : 'bg-neutral-600 opacity-50'}`}
-                          disabled={!isSaveReady}
-                          onPress={async () => {
-                            try {
-                              await updateBuildingCalibration({ clerkId: user?.id || "", buildingId: selectedBuilding._id, calibrationPoints: calibPoints });
-                              await updateBuildingGridPaths({ clerkId: user?.id || "", buildingId: selectedBuilding._id, gridPaths });
-                              setIsMapEditorOpen(false);
-                              showToast("Floor plan configured successfully!");
-                            } catch (e) { showToast("Error saving layout", "error"); }
-                          }}
-                        >
-                          <Text className="text-white font-bold text-lg text-center">Save Configuration</Text>
-                        </TouchableOpacity>
-                      );
-                    })()}
+                <View className="bg-blue-900/30 p-4 rounded-xl border border-blue-600/50 mb-6 flex-row">
+                  <Text className="text-blue-500 mr-3 text-2xl">💡</Text>
+                  <View className="flex-1">
+                    <Text className="text-blue-400 font-bold mb-1 uppercase tracking-wider text-lg">Grid Strategy</Text>
+                    <Text className="text-blue-300 text-base">Paint <Text className="font-bold text-white text-base">Safe Routes</Text> along corridors and rooms to define where users can walk. Mark <Text className="font-bold text-white text-base">Exits</Text> at the doors. The system automatically calculates the shortest path through painted routes.</Text>
                   </View>
-                </ScrollView>
-              </>
-            )}
+                </View>
+
+                <View className="flex-row justify-between mb-0">
+                  <TouchableOpacity className="flex-1 bg-neutral-700 py-3 rounded-xl items-center justify-center mr-2" onPress={() => setGridPaths([])}>
+                    <Text className="text-white font-bold text-lg text-center">Clear Grid</Text>
+                  </TouchableOpacity>
+                  {(() => {
+                    const requiredPins = selectedBuilding?.polygon?.length || 4;
+                    const hasAllPins = calibPoints.filter(Boolean).length === requiredPins;
+                    const hasSafeRoute = gridPaths.some(p => !p.isExit);
+                    const hasExit = gridPaths.some(p => p.isExit);
+                    const isSaveReady = hasAllPins && hasSafeRoute && hasExit;
+
+                    return (
+                      <TouchableOpacity
+                        className={`flex-1 py-3 rounded-xl items-center justify-center ${isSaveReady ? 'bg-green-600' : 'bg-neutral-600 opacity-50'}`}
+                        disabled={!isSaveReady}
+                        onPress={async () => {
+                          try {
+                            await updateBuildingCalibration({ clerkId: user?.id || "", buildingId: selectedBuilding._id, calibrationPoints: calibPoints });
+                            await updateBuildingGridPaths({ clerkId: user?.id || "", buildingId: selectedBuilding._id, gridPaths });
+                            setIsMapEditorOpen(false);
+                            showToast("Floor plan configured successfully!");
+                          } catch (e) { showToast("Error saving layout", "error"); }
+                        }}
+                      >
+                        <Text className="text-white font-bold text-lg text-center">Save Configuration</Text>
+                      </TouchableOpacity>
+                    );
+                  })()}
+                </View>
+              </ScrollView>
+            </>
+          )}
         </View>
       </Modal>
+      )}
 
       {/* Manage Site Modal */}
-      <Modal visible={manageSiteName !== null} animationType="slide" presentationStyle="pageSheet">
+      {Boolean(manageSiteName !== null) && (
+      <Modal visible={true} animationType="slide" presentationStyle="pageSheet">
         {manageSiteName && (
-          <ScrollView className="flex-1 bg-neutral-900 pt-12 px-6" contentContainerStyle={{ paddingBottom: 120 }}>
+          <ScrollView keyboardShouldPersistTaps="handled" className="flex-1 bg-neutral-900 pt-12 px-6" contentContainerStyle={{ paddingBottom: 120 }}>
             <View className="flex-row justify-between items-center mb-6">
               <Text className="text-2xl font-extrabold text-white">Manage Site Details</Text>
               <TouchableOpacity onPress={() => setManageSiteName(null)} className="bg-neutral-800 p-2 rounded-full border border-neutral-700">
@@ -3298,9 +3311,11 @@ export default function AdminDashboard() {
           </ScrollView>
         )}
       </Modal>
+      )}
 
       {/* History Modal */}
-      <Modal visible={isHistoryOpen} animationType="slide" presentationStyle="formSheet">
+      {Boolean(isHistoryOpen) && (
+      <Modal visible={true} animationType="slide" presentationStyle="formSheet">
         <View className="flex-1 bg-black p-6 pt-10">
           <View className="flex-row justify-between items-center mb-6 border-b border-neutral-800 pb-4">
             <View>
@@ -3312,7 +3327,7 @@ export default function AdminDashboard() {
             </TouchableOpacity>
           </View>
 
-          <ScrollView className="flex-1" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
+          <ScrollView keyboardShouldPersistTaps="handled" className="flex-1" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
             <View className="mb-6 flex-row justify-end">
               <TouchableOpacity onPress={exportLogs} className="bg-neutral-800 px-4 py-3 rounded-xl border border-neutral-700 flex-row items-center">
                 <MaterialCommunityIcons name="download" size={18} color="white" style={{ marginRight: 8 }} />
@@ -3390,9 +3405,11 @@ export default function AdminDashboard() {
           </ScrollView>
         </View>
       </Modal>
+      )}
 
       {/* Universal Confirmation Modal (Moved to bottom for proper z-index) */}
-      <Modal visible={confirmDialog.visible} animationType="fade" transparent>
+      {Boolean(confirmDialog.visible) && (
+      <Modal visible={true} animationType="fade" transparent>
         <View className="flex-1 bg-black/80 justify-center items-center px-6">
           <View className="bg-neutral-900 border border-neutral-700 p-6 rounded-3xl w-full max-w-sm">
             <Text className={`text-xl font-black mb-2 tracking-wide ${confirmDialog.intent === 'danger' ? 'text-red-500' : confirmDialog.intent === 'warning' ? 'text-amber-500' : 'text-green-400'}`}>
@@ -3420,6 +3437,7 @@ export default function AdminDashboard() {
           </View>
         </View>
       </Modal>
+      )}
 
     </View>
   );

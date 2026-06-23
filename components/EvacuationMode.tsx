@@ -410,11 +410,8 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
   }, [user?.id, activeIncident?._id, evacStatus, drLocation]);
 
   // Audio Cleanup
-  useEffect(() => {
-    return () => {
-      sirenPlayer.remove();
-    };
-  }, [sirenPlayer]);
+  // expo-audio useAudioPlayer manages cleanup automatically.
+  // Do NOT call sirenPlayer.remove() here or it crashes on Android.
 
   const togglePanic = async () => {
     if (evacStatus === "PANIC") {

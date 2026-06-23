@@ -7,6 +7,7 @@ import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "../convex/_generated/api";
 import * as Location from "expo-location";
 import * as ImagePicker from "expo-image-picker";
+import * as DocumentPicker from "expo-document-picker";
 import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
 
@@ -24,17 +25,17 @@ import EvacuationMode from "./EvacuationMode";
 // Calculate distance between two coordinates in meters using Haversine formula
 function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371e3; // meters
-  const φ1 = lat1 * Math.PI/180;
-  const φ2 = lat2 * Math.PI/180;
-  const Δφ = (lat2-lat1) * Math.PI/180;
-  const Δλ = (lon2-lon1) * Math.PI/180;
+  const φ1 = lat1 * Math.PI / 180;
+  const φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180;
+  const Δλ = (lon2 - lon1) * Math.PI / 180;
 
-  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-            Math.cos(φ1) * Math.cos(φ2) *
-            Math.sin(Δλ/2) * Math.sin(Δλ/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) *
+    Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
-  return R * c; 
+  return R * c;
 }
 
 export default function GuestDashboard() {
@@ -54,12 +55,12 @@ export default function GuestDashboard() {
 
   // Draft state for confirmation modal
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [draftPlan, setDraftPlan] = useState<{storageId: any, lat: number, lon: number} | null>(null);
+  const [draftPlan, setDraftPlan] = useState<{ storageId: any, lat: number, lon: number } | null>(null);
   const [draftRoom, setDraftRoom] = useState("");
   const [draftFloor, setDraftFloor] = useState("");
   const [draftImageUri, setDraftImageUri] = useState<string | null>(null);
-  const [draftExitNode, setDraftExitNode] = useState<{x: number, y: number} | null>(null);
-  const [draftImgLayout, setDraftImgLayout] = useState<{w: number, h: number}>({w: 1, h: 1});
+  const [draftExitNode, setDraftExitNode] = useState<{ x: number, y: number } | null>(null);
+  const [draftImgLayout, setDraftImgLayout] = useState<{ w: number, h: number }>({ w: 1, h: 1 });
   const [draftImageAspectRatio, setDraftImageAspectRatio] = useState<number | null>(null);
 
   const savePushToken = useMutation(api.portal.savePushToken);
@@ -105,10 +106,10 @@ export default function GuestDashboard() {
 
   const dashboardData = useQuery(api.portal.getDashboardData, { clerkId: user?.id });
   const autoBuilding = useQuery(
-    api.portal.getAutoPushedBuilding, 
+    api.portal.getAutoPushedBuilding,
     currentLocation ? { lat: currentLocation.coords.latitude, lon: currentLocation.coords.longitude } : "skip"
   );
-  
+
   const activeIncident = useQuery(
     api.portal.getActiveIncident,
     autoBuilding?.buildingId ? { buildingId: autoBuilding.buildingId } : "skip"
@@ -117,9 +118,9 @@ export default function GuestDashboard() {
   // Background Check-In sync
   useEffect(() => {
     if (user?.id) {
-      checkInUser({ 
-        clerkId: user.id, 
-        buildingId: autoBuilding?.buildingId || null 
+      checkInUser({
+        clerkId: user.id,
+        buildingId: autoBuilding?.buildingId || null
       }).catch(console.error);
     }
   }, [user?.id, autoBuilding?.buildingId]);
@@ -145,7 +146,7 @@ export default function GuestDashboard() {
       }
     }
   }, [dashboardData]);
-  
+
   const updateProfile = useMutation(api.portal.updateProfile);
   const generateUploadUrl = useMutation(api.portal.generateUploadUrl);
   const uploadScannedPlan = useMutation(api.portal.uploadScannedPlan);
@@ -154,7 +155,7 @@ export default function GuestDashboard() {
 
   const processImage = async (result: ImagePicker.ImagePickerResult, loc: Location.LocationObject, isCamera: boolean) => {
     if (result.canceled || !result.assets || result.assets.length === 0) return;
-    
+
     const asset = result.assets[0];
     let imageLat = loc.coords.latitude;
     let imageLon = loc.coords.longitude;
@@ -163,16 +164,16 @@ export default function GuestDashboard() {
     if (!isCamera) {
       const exifLat = asset.exif?.GPSLatitude;
       const exifLon = asset.exif?.GPSLongitude;
-      
+
       if (exifLat === undefined || exifLon === undefined) {
-         if (Platform.OS === 'web') {
-           // For testing on web, fallback to current location if no EXIF
-           imageLat = loc.coords.latitude;
-           imageLon = loc.coords.longitude;
-         } else {
-           showToast("The selected image does not contain EXIF GPS data. Please take a photo with the camera instead, or use an image with location data.", "error");
-           return;
-         }
+        if (Platform.OS === 'web') {
+          // For testing on web, fallback to current location if no EXIF
+          imageLat = loc.coords.latitude;
+          imageLon = loc.coords.longitude;
+        } else {
+          showToast("The selected image does not contain EXIF GPS data. Please take a photo with the camera instead, or use an image with location data.", "error");
+          return;
+        }
       } else {
         imageLat = exifLat;
         if (asset.exif?.GPSLatitudeRef === 'S') imageLat = -imageLat;
@@ -181,7 +182,7 @@ export default function GuestDashboard() {
       }
 
       dist = getDistance(loc.coords.latitude, loc.coords.longitude, imageLat, imageLon);
-      
+
       if (dist > 500) {
         showToast(`Image location is too far from your current location (${Math.round(dist)} meters away). Maximum allowed distance is 500m.`, "error");
         return;
@@ -199,18 +200,18 @@ export default function GuestDashboard() {
         body: blob,
       });
       const { storageId } = await uploadResult.json();
-      
+
       setIsUploading(false);
       setIsAnalyzing(true);
-      
+
       // Call AI to extract details
       const aiData = await extractMapDetails({ storageId });
-      
+
       setDraftPlan({ storageId, lat: imageLat, lon: imageLon });
       setDraftRoom(aiData?.roomNumber || "");
       setDraftFloor(aiData?.floorLevel || "");
       setDraftImageUri(asset.uri);
-      
+
       setIsAnalyzing(false);
       setShowConfirmModal(true); // Open modal instead of saving directly
 
@@ -271,7 +272,7 @@ export default function GuestDashboard() {
 
       Alert.alert(
         "Scan Evacuation Plan",
-        "Would you like to take a photo or upload from your library?",
+        "Would you like to take a photo or upload an existing file?",
         [
           {
             text: "Take Photo",
@@ -286,15 +287,49 @@ export default function GuestDashboard() {
             }
           },
           {
-            text: "Choose from Library",
-            onPress: async () => {
-              const libPerm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-              if (libPerm.granted === false) {
-                showToast("Library permission is required!", "error");
-                return;
-              }
-              const result = await ImagePicker.launchImageLibraryAsync({ exif: true });
-              processImage(result, loc!, false);
+            text: "Upload Existing",
+            onPress: () => {
+              Alert.alert(
+                "Select Source",
+                "Where is your file located?",
+                [
+                  {
+                    text: "Photo Library",
+                    onPress: async () => {
+                      const libPerm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                      if (libPerm.granted === false) {
+                        showToast("Library permission is required!", "error");
+                        return;
+                      }
+                      const result = await ImagePicker.launchImageLibraryAsync({ exif: true });
+                      processImage(result, loc!, false);
+                    }
+                  },
+                  {
+                    text: "Files / Cloud (Drive)",
+                    onPress: async () => {
+                      const result = await DocumentPicker.getDocumentAsync({
+                        type: ['image/*'],
+                        copyToCacheDirectory: true,
+                      });
+                      if (!result.canceled && result.assets && result.assets.length > 0) {
+                        const docAsset = result.assets[0];
+                        const fakeImagePickerResult = {
+                          canceled: false,
+                          assets: [{
+                            uri: docAsset.uri,
+                            width: 1000,
+                            height: 1000,
+                            mimeType: docAsset.mimeType
+                          }]
+                        };
+                        processImage(fakeImagePickerResult as any, loc!, true);
+                      }
+                    }
+                  },
+                  { text: "Cancel", style: "cancel" }
+                ]
+              );
             }
           },
           { text: "Cancel", style: "cancel" }
@@ -314,13 +349,13 @@ export default function GuestDashboard() {
   // Calculate dynamic font sizes so it fits perfectly
   // We use 2/3 of the screen width for the text section to give it plenty of room.
   const textSectionWidth = width * 0.66;
-  const titleFontSize = textSectionWidth * 0.12; 
+  const titleFontSize = textSectionWidth * 0.12;
   const subFontSize = textSectionWidth * 0.06;
 
   // From a UI/UX perspective, the panic button should be the largest circle that safely fits 
   // inside the 60% Body view without ever overlapping. 
   // We cap it at 80% of width, or 45% of total screen height, up to 800px max.
-  const panicButtonSize = Math.min(width * 0.8, height * 0.45, 800); 
+  const panicButtonSize = Math.min(width * 0.8, height * 0.45, 800);
 
   useEffect(() => {
     let sub: Location.LocationSubscription | null = null;
@@ -329,10 +364,10 @@ export default function GuestDashboard() {
         setCurrentLocation(null);
         return;
       }
-      
+
       let { status } = await Location.getForegroundPermissionsAsync();
       if (status !== 'granted') return;
-      
+
       try {
         let loc = await Location.getCurrentPositionAsync({});
         setCurrentLocation(loc);
@@ -360,12 +395,12 @@ export default function GuestDashboard() {
     } else if (dashboardData && currentLocation) {
       if (dashboardData.scannedPlanLat && dashboardData.scannedPlanLon) {
         const dist = getDistance(
-          currentLocation.coords.latitude, 
-          currentLocation.coords.longitude, 
-          dashboardData.scannedPlanLat, 
+          currentLocation.coords.latitude,
+          currentLocation.coords.longitude,
+          dashboardData.scannedPlanLat,
           dashboardData.scannedPlanLon
         );
-        
+
         // Valid if within 500 meters
         if (dist <= 500) {
           setIsScanned(true);
@@ -400,7 +435,7 @@ export default function GuestDashboard() {
 
   return (
     <View className="flex-1 bg-neutral-900">
-      
+
       {/* Top Warning Banner */}
       {!hasPermissions && (
         <View className="bg-red-900/80 p-3 mt-8 mx-6 rounded-lg border border-red-500">
@@ -411,7 +446,7 @@ export default function GuestDashboard() {
       {/* HEADER */}
       <View style={{ paddingTop: hasPermissions ? paddingTop : 10 }} className="px-6 justify-center w-full pb-4">
         <View className="flex-row w-full items-center">
-          
+
           {/* LEFT 2/3: 3 Lines of Text */}
           <View style={{ flex: 2 }} className="justify-center pr-2">
             <Text style={{ fontSize: titleFontSize }} className="font-extrabold text-white leading-tight">FireVision</Text>
@@ -423,14 +458,14 @@ export default function GuestDashboard() {
 
           {/* RIGHT 1/3: Buttons */}
           <View style={{ flex: 1 }} className="flex-row space-x-2 items-center justify-end">
-            <TouchableOpacity 
+            <TouchableOpacity
               style={{ height: headerButtonHeight, width: headerButtonHeight, borderRadius: headerButtonHeight / 2 }}
               className={`border items-center justify-center mr-1 ${!hasPermissions ? 'bg-red-600 border-red-400 shadow-[0_0_15px_rgba(220,38,38,0.8)]' : 'bg-neutral-800 border-neutral-700'}`}
               onPress={() => setIsViewingProfile(true)}
             >
               <Text style={{ fontSize: headerButtonHeight * 0.4 }} className="text-white">⚙️</Text>
             </TouchableOpacity>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={{ height: headerButtonHeight, borderRadius: headerButtonHeight / 2, paddingHorizontal: 10 }}
               className="bg-neutral-800 border border-neutral-700 items-center justify-center shrink flex-1 max-w-[100px]"
               onPress={() => signOut()}
@@ -438,7 +473,7 @@ export default function GuestDashboard() {
               <Text adjustsFontSizeToFit numberOfLines={1} style={{ fontSize: headerButtonHeight * 0.4 }} className="text-white font-bold text-center">Sign Out</Text>
             </TouchableOpacity>
           </View>
-          
+
         </View>
       </View>
 
@@ -456,7 +491,7 @@ export default function GuestDashboard() {
           </View>
         )}
 
-        <TouchableOpacity 
+        <TouchableOpacity
           style={{ width: panicButtonSize, height: panicButtonSize, borderRadius: panicButtonSize * 0.22 }}
           className={`items-center justify-center shadow-[0_0_80px_rgba(220,38,38,0.6)] bg-white ${!hasPermissions ? 'opacity-50' : ''}`}
           onPress={() => {
@@ -472,8 +507,8 @@ export default function GuestDashboard() {
           }}
           disabled={!hasPermissions}
         >
-          <Image 
-            source={require('../assets/icon.png')} 
+          <Image
+            source={require('../assets/icon.png')}
             style={{ width: '100%', height: '100%', borderRadius: panicButtonSize * 0.22, resizeMode: 'cover' }}
           />
         </TouchableOpacity>
@@ -482,7 +517,7 @@ export default function GuestDashboard() {
       {/* BOTTOM ACTION AREA */}
       <View className="px-6 w-full items-center pb-8 pt-4">
         {/* ADD MAP / SCAN PLAN */}
-        <TouchableOpacity 
+        <TouchableOpacity
           className={`w-full max-w-2xl ${!hasPermissions ? 'bg-amber-900 border-amber-800 opacity-50' : isScanned ? 'bg-green-600 border-green-500' : isUploading || isAnalyzing ? 'bg-blue-600 border-blue-500' : 'bg-amber-500 border-amber-400'} border-4 rounded-3xl py-4 px-6 items-center flex-row justify-center shadow-lg`}
           onPress={() => {
             if (!hasPermissions) {
@@ -504,16 +539,16 @@ export default function GuestDashboard() {
         </TouchableOpacity>
 
         {/* FOOTER */}
-        <View className="justify-center items-center w-full pt-10">
+        <View className="justify-center items-center w-full pt-8 pb-12">
           <FooterLinks />
         </View>
       </View>
 
       {/* Profile Settings Modal */}
-      <ProfileSettingsScreen 
-        visible={isViewingProfile} 
-        onClose={() => setIsViewingProfile(false)} 
-        dashboardData={dashboardData} 
+      <ProfileSettingsScreen
+        visible={isViewingProfile}
+        onClose={() => setIsViewingProfile(false)}
+        dashboardData={dashboardData}
       />
 
       {/* View Plan Modal */}
@@ -528,9 +563,9 @@ export default function GuestDashboard() {
 
           {activePlanUrl ? (
             <View className="flex-1 justify-center items-center bg-neutral-800 rounded-2xl overflow-hidden mb-6 border border-neutral-700">
-              <Image 
-                source={{ uri: activePlanUrl }} 
-                style={{ width: '100%', height: '100%' }} 
+              <Image
+                source={{ uri: activePlanUrl }}
+                style={{ width: '100%', height: '100%' }}
                 resizeMode="contain"
               />
               <View className="absolute bottom-4 left-4 right-4 bg-black/60 p-4 rounded-xl">
@@ -544,7 +579,7 @@ export default function GuestDashboard() {
             </View>
           )}
 
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={() => {
               setIsViewingPlan(false);
               setTimeout(() => handleScanPlan(), 500); // Wait for modal to close
@@ -552,7 +587,7 @@ export default function GuestDashboard() {
             className="bg-amber-500 py-4 rounded-xl items-center shadow-lg border-2 border-amber-400"
           >
             <Text className="text-white font-extrabold text-lg uppercase tracking-wider">
-               {autoBuilding ? "Manually Scan Plan Instead" : "Scan New Plan"}
+              {autoBuilding ? "Manually Scan Plan Instead" : "Scan New Plan"}
             </Text>
           </TouchableOpacity>
         </View>
@@ -563,7 +598,7 @@ export default function GuestDashboard() {
         <View className="flex-1 bg-black/90 justify-center items-center px-4 py-12">
           <View className="bg-neutral-900 border border-neutral-700 p-6 rounded-3xl w-full flex-1 max-w-lg">
             <Text className="text-xl font-bold text-white mb-2">Confirm Details</Text>
-            
+
             <View className="bg-neutral-800/60 p-3 rounded-xl mb-4">
               <Text className="text-neutral-400 text-xs text-center italic">
                 We never track your movement. Location services are purely for your safety to confirm if you are inside a registered building during an emergency.
@@ -581,10 +616,10 @@ export default function GuestDashboard() {
             <Text className="text-neutral-400 text-xs mb-1 uppercase font-bold">1. Tap Map to Pin Exit Location</Text>
             <View className="bg-neutral-800 rounded-xl overflow-hidden mb-4 border border-neutral-700 flex-1 relative w-full" style={{ height: 300 }}>
               {draftImageUri && (
-                <TouchableOpacity 
+                <TouchableOpacity
                   activeOpacity={1}
                   className="flex-1"
-                  onLayout={(e) => setDraftImgLayout({w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height})}
+                  onLayout={(e) => setDraftImgLayout({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
                   onPress={(e) => {
                     const x = Platform.OS === 'web' && (e.nativeEvent as any).offsetX !== undefined ? (e.nativeEvent as any).offsetX : e.nativeEvent.locationX;
                     const y = Platform.OS === 'web' && (e.nativeEvent as any).offsetY !== undefined ? (e.nativeEvent as any).offsetY : e.nativeEvent.locationY;
@@ -625,21 +660,21 @@ export default function GuestDashboard() {
             </View>
 
             <View className="flex-row space-x-4">
-              <TouchableOpacity 
+              <TouchableOpacity
                 className="flex-1 bg-neutral-800 py-4 rounded-xl items-center border border-neutral-700 mr-2"
                 onPress={() => {
-                   if (draftPlan?.storageId) {
-                     deleteStorageImage({ storageId: draftPlan.storageId }).catch(console.error);
-                   }
-                   setShowConfirmModal(false);
-                   setDraftImageUri(null);
-                   setDraftExitNode(null);
-                   setDraftPlan(null);
+                  if (draftPlan?.storageId) {
+                    deleteStorageImage({ storageId: draftPlan.storageId }).catch(console.error);
+                  }
+                  setShowConfirmModal(false);
+                  setDraftImageUri(null);
+                  setDraftExitNode(null);
+                  setDraftPlan(null);
                 }}
               >
                 <Text className="text-white font-bold">Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
+              <TouchableOpacity
                 className={`flex-1 py-4 rounded-xl items-center border ${draftExitNode ? 'bg-green-600 border-green-500' : 'bg-neutral-800 border-neutral-700 opacity-50'}`}
                 disabled={!draftExitNode}
                 onPress={handleConfirmPlan}
@@ -652,7 +687,7 @@ export default function GuestDashboard() {
       </Modal>
 
       <Modal visible={isEvacuating} animationType="fade" presentationStyle="fullScreen">
-        <EvacuationMode 
+        <EvacuationMode
           dashboardData={dashboardData}
           autoBuilding={lockedBuilding || autoBuilding}
           currentLocation={currentLocation}
@@ -661,7 +696,7 @@ export default function GuestDashboard() {
             setIsEvacuating(false);
             setLockedIncident(null);
             setLockedBuilding(null);
-          }} 
+          }}
         />
       </Modal>
     </View>
