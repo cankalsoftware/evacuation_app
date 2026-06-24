@@ -132,4 +132,14 @@ export default defineSchema({
     targetBuildingId: v.optional(v.id("buildings")),
     createdAt: v.number(),
   }).index("by_site", ["targetSite"]).index("by_building", ["targetBuildingId"]),
+
+  // Phase 26: Indoor Coordinate Accuracy (Hybrid Sensor Fusion)
+  wifiFingerprints: defineTable({
+    buildingId: v.id("buildings"),
+    bssid: v.string(), // MAC Address of the router
+    lat: v.number(),
+    lon: v.number(),
+    signalStrength: v.number(), // Optional: for weighted averages later
+    createdAt: v.number(),
+  }).index("by_building", ["buildingId"]).index("by_bssid", ["bssid"]),
 });

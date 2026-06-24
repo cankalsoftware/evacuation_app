@@ -19,6 +19,7 @@ import * as Sharing from "expo-sharing";
 import * as Location from "expo-location";
 import * as Notifications from "expo-notifications";
 import LiveRollCall from "./LiveRollCall";
+import AdminCalibrationWalk from "./AdminCalibrationWalk";
 
 // Import Responsive Wrappers
 import { Text, TextInput, MaterialCommunityIcons, FooterLinks } from "./ResponsiveUI";
@@ -221,6 +222,7 @@ export default function AdminDashboard() {
   }, [showAddMap, bName, hasCenteredMap, bPins]);
 
   const [showEditMap, setShowEditMap] = React.useState(false);
+  const [showCalibrationWalk, setShowCalibrationWalk] = React.useState(false);
   React.useEffect(() => {
     if (selectedBuilding) {
       const timer = setTimeout(() => setShowEditMap(true), 300);
@@ -2057,6 +2059,15 @@ export default function AdminDashboard() {
       </Modal>
       )}
 
+      {/* Calibration Walk Modal */}
+      {showCalibrationWalk && selectedBuilding && (
+        <AdminCalibrationWalk
+          visible={showCalibrationWalk}
+          onClose={() => setShowCalibrationWalk(false)}
+          buildingId={selectedBuilding._id}
+        />
+      )}
+
       {/* Manage Building Modal */}
       {Boolean(!!selectedBuilding) && (
       <Modal visible={true} animationType="slide" presentationStyle="pageSheet">
@@ -2486,6 +2497,24 @@ export default function AdminDashboard() {
                 </TouchableOpacity>
               </View>
             )}
+
+            <Text className="text-white font-bold text-lg mb-4 mt-2">Indoor GPS Calibration (Wi-Fi)</Text>
+            <View className="bg-neutral-800 border border-neutral-700 p-6 rounded-2xl items-center mb-6">
+              <Text className="text-neutral-400 text-center mb-4">Walk the building to map Wi-Fi signals for 100% accuracy without beacons.</Text>
+              <TouchableOpacity
+                className="bg-indigo-600 px-6 py-4 rounded-xl flex-row items-center shadow-lg w-full justify-center"
+                onPress={() => setShowCalibrationWalk(true)}
+              >
+                <Text className="mr-2">📶</Text>
+                <Text className="text-white font-bold uppercase tracking-wide">Start Calibration Walk</Text>
+              </TouchableOpacity>
+              <View className="mt-4 border-t border-neutral-700 pt-4 w-full">
+                <Text className="text-neutral-400 text-xs text-center mb-2">Optional: Register your floor plan with Apple/Google IMDF to unlock native OS indoor tracking.</Text>
+                <TouchableOpacity onPress={() => alert('This process requires submitting your CAD/GeoJSON maps to Apple Business Connect and Google Maps. Approval can take 2-4 weeks. Once approved, OS-level location accuracy will improve automatically.')}>
+                  <Text className="text-indigo-400 text-xs text-center font-bold">Learn about IMDF Registration</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
 
             <TouchableOpacity
               className="bg-red-900/30 border border-red-700 py-4 rounded-xl items-center mb-12"

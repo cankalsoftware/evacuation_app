@@ -18,6 +18,7 @@ import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
 import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
+import Constants from "expo-constants";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -115,7 +116,7 @@ export default function GuestDashboard() {
           return;
         }
         try {
-          token = (await Notifications.getExpoPushTokenAsync({ projectId: 'your-project-id' })).data;
+          token = (await Notifications.getExpoPushTokenAsync({ projectId: Constants.expoConfig?.extra?.eas?.projectId })).data;
         } catch (e) {
           console.warn("Failed to get push token (expected on Web simulator without VAPID):", e);
         }

@@ -1028,3 +1028,56 @@ export const moveToOutside = mutation({
     }
   }
 });
+/**
+ * ==========================================
+ * SECTION 9: PHASE 26 - HYBRID SENSOR FUSION (WIFI TRACKING)
+ * ==========================================
+ */
+
+/**
+ * Saves a batch of Wi-Fi fingerprints captured by the Admin during the Calibration Walk.
+ */
+export const saveWifiFingerprints = mutation({
+  args: {
+    clerkId: v.string(),
+    buildingId: v.id('buildings'),
+    fingerprints: v.array(v.object({
+      bssid: v.string(),
+      lat: v.number(),
+      lon: v.number(),
+      signalStrength: v.number(),
+    })),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.query('users').withIndex('by_clerkId', q => q.eq('clerkId', args.clerkId)).first();
+    if (!user || user.role !== 'admin') throw new Error('Unauthorized');
+
+    for (const fp of args.fingerprints) {
+      await ctx.db.insert('wifiFingerprints', {
+        buildingId: args.buildingId,
+        bssid: fp.bssid,
+        lat: fp.lat,
+        lon: fp.lon,
+        signalStrength: fp.signalStrength,
+        createdAt: Date.now()
+      });
+    }
+    return { success: true, count: args.fingerprints.length };
+  }
+});
+
+/**
+ * Retrieves all Wi-Fi fingerprints for a specific building.
+ */
+export const getWifiFingerprints = query({
+  args: {
+    buildingId: v.optional(v.id('buildings')),
+  },
+  handler: async (ctx, args) => {
+    if (!args.buildingId) return [];
+    return await ctx.db
+      .query('wifiFingerprints')
+      .withIndex('by_building', (q) => q.eq('buildingId', args.buildingId!))
+      .collect();
+  }
+});

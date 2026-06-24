@@ -50,6 +50,12 @@ module.exports = {
           cameraPermission: "Allow FireVision to access your camera to scan evacuation plans."
         }
       ],
+      [
+        "expo-camera",
+        {
+          cameraPermission: "Allow FireVision to access your camera for AR evacuation mode."
+        }
+      ],
       "expo-sharing"
     ],
     extra: {

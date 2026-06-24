@@ -12,6 +12,7 @@ import { Text, TouchableOpacity } from "./ResponsiveUI";
 import * as Location from "expo-location";
 import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
+import Constants from "expo-constants";
 import { Platform } from "react-native";
 import { useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
@@ -71,7 +72,7 @@ export default function LocationConsentScreen() {
 
         // Get Expo Push Token
         try {
-          pushToken = (await Notifications.getExpoPushTokenAsync()).data;
+          pushToken = (await Notifications.getExpoPushTokenAsync({ projectId: Constants.expoConfig?.extra?.eas?.projectId })).data;
         } catch (e) {
           // Silently ignore push token errors on dev clients without Firebase setup
         }

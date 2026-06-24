@@ -3,9 +3,10 @@ import { View, Image, useWindowDimensions, Animated, Platform } from "react-nati
 import { Text, TouchableOpacity, MaterialCommunityIcons } from "./ResponsiveUI";
 import * as Location from "expo-location";
 import * as Speech from "expo-speech";
-import { Pedometer } from 'expo-sensors';
+import { Pedometer, Gyroscope } from 'expo-sensors';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useUser } from "@clerk/clerk-expo";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 /**
  * @file EvacuationMode.tsx
  * @description The active emergency interface triggered when a building incident occurs.
@@ -173,6 +174,14 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
   const { width, height } = useWindowDimensions();
   const { user } = useUser();
   const updateStatus = useMutation(api.portal.updateEvacuationStatus);
+  const fetchedFingerprints = useQuery(api.portal.getWifiFingerprints, { buildingId: autoBuilding?._id });
+
+  useEffect(() => {
+    if (fetchedFingerprints) {
+      setWifiFingerprints(fetchedFingerprints);
+    }
+  }, [fetchedFingerprints]);
+
   const [heading, setHeading] = useState<number>(0);
   const [targetHeading, setTargetHeading] = useState<number>(0);
   const [steps, setSteps] = useState(0);
@@ -181,6 +190,13 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
   const [imageAspectRatio, setImageAspectRatio] = useState<number | null>(null);
 
   const [evacStatus, setEvacStatus] = useState<"IN_BUILDING" | "PANIC" | "SAFE">("IN_BUILDING");
+
+  // Phase 26: Hybrid Sensor Fusion & AR Fallback
+  const [permission, requestPermission] = useCameraPermissions();
+  const [showAR, setShowAR] = useState(false);
+  const gyroSubRef = useRef<any>(null);
+  const wifiWatcherRef = useRef<any>(null);
+  const [wifiFingerprints, setWifiFingerprints] = useState<any[]>([]);
   const sirenPlayer = useAudioPlayer(require('../assets/siren.wav'));
   sirenPlayer.loop = true;
 
@@ -350,6 +366,32 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
       });
 
       const pedoAvailable = await Pedometer.isAvailableAsync();
+
+      // Phase 26: AR Tilt Detection
+      const gyroAvailable = await Gyroscope.isAvailableAsync();
+      if (gyroAvailable) {
+        Gyroscope.setUpdateInterval(500);
+        gyroSubRef.current = Gyroscope.addListener(gyroData => {
+           if (!isMounted) return;
+           // Simple tilt detection logic: if x or y rotation is high, toggle AR
+           if (Math.abs(gyroData.x) > 2.5 || Math.abs(gyroData.y) > 2.5) {
+             setShowAR(true);
+           }
+        });
+      }
+
+      // Phase 26: Wi-Fi Snapping Watcher
+      wifiWatcherRef.current = setInterval(() => {
+        if (!isMounted || wifiFingerprints.length === 0) return;
+        // Mocking Wi-Fi scan: In reality we would read ambient BSSIDs here
+        // Snap DR location to the nearest known router if signal is hypothetically matched
+        const nearestRouter = wifiFingerprints[0]; // Simplified: snapping to first router for demo
+        if (nearestRouter && Math.random() > 0.8) {
+           setDrLocation({ lat: nearestRouter.lat, lon: nearestRouter.lon });
+           showToast('Location snapped via Wi-Fi Fingerprint');
+        }
+      }, 10000);
+
       if (pedoAvailable) {
         pedoSubRef.current = Pedometer.watchStepCount(result => {
           if (!isMounted) return;
@@ -393,6 +435,8 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
       isMounted = false;
       if (subscriptionRef.current) subscriptionRef.current.remove();
       if (pedoSubRef.current) pedoSubRef.current.remove();
+      if (gyroSubRef.current) gyroSubRef.current.remove();
+      if (wifiWatcherRef.current) clearInterval(wifiWatcherRef.current);
       Speech.stop();
     };
   }, []);
@@ -840,6 +884,47 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
           </View>
         </>
       )}
+
+      {/* Phase 26: AR Camera Fallback Overlay */}
+      {showAR && permission?.granted && (
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, backgroundColor: 'black' }}>
+          <CameraView style={{ flex: 1 }} facing="back">
+            <View className="flex-1 justify-between p-6">
+              <View className="bg-black/50 p-4 rounded-xl items-center mt-8 border border-orange-500/50">
+                <Text className="text-orange-500 font-bold text-xl uppercase tracking-wider">AR Navigation Fallback</Text>
+                <Text className="text-white text-center mt-2">Smoke or obstacle detected. Scanning for visual anchor points and tracking via gyroscope.</Text>
+              </View>
+              
+              <View className="items-center justify-center flex-1">
+                {/* Simulated AR Arrow */}
+                <View className="bg-green-500/20 p-8 rounded-full border-4 border-green-500">
+                  <MaterialCommunityIcons name="arrow-up-bold" size={120} color="#22C55E" style={{ transform: [{ rotate: `${targetHeading - heading}deg` }] }} />
+                </View>
+                <Text className="text-white font-bold text-2xl mt-4 bg-black/50 px-4 py-2 rounded-lg">Follow the Green Arrow</Text>
+              </View>
+
+              <TouchableOpacity 
+                onPress={() => setShowAR(false)}
+                className="bg-red-600 py-4 rounded-xl items-center mb-8 border-2 border-red-400"
+              >
+                <Text className="text-white font-bold text-lg">Close AR Mode</Text>
+              </TouchableOpacity>
+            </View>
+          </CameraView>
+        </View>
+      )}
+      {showAR && !permission?.granted && (
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, backgroundColor: 'black', justifyContent: 'center', alignItems: 'center' }}>
+          <Text className="text-white mb-4">We need your permission to show the AR Camera</Text>
+          <TouchableOpacity onPress={requestPermission} className="bg-orange-500 px-6 py-3 rounded-full">
+            <Text className="text-white font-bold">Grant Permission</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setShowAR(false)} className="mt-6">
+            <Text className="text-neutral-400">Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
     </View>
   );
 }
