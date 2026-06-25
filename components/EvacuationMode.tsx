@@ -204,7 +204,10 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
 
   const subscriptionRef = useRef<Location.LocationSubscription | null>(null);
   const pedoSubRef = useRef<any>(null);
+  const gpsWatcherRef = useRef<Location.LocationSubscription | null>(null);
   const lastSpokenRef = useRef<number>(0);
+
+  const [envState, setEnvState] = useState<"OUTDOOR" | "INDOOR">("OUTDOOR");
 
   const HEADING_TOLERANCE = 45;
 
@@ -353,7 +356,7 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
       }
     }
 
-    const startCompassAndPedometer = async () => {
+    const startSensors = async () => {
       if (Platform.OS === 'web') return;
 
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -361,69 +364,84 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
 
       subscriptionRef.current = await Location.watchHeadingAsync((data) => {
         if (!isMounted) return;
-        const currentHeading = data.magHeading;
-        setHeading(currentHeading);
+        setHeading(data.magHeading);
       });
 
       const pedoAvailable = await Pedometer.isAvailableAsync();
-
-      // Phase 26: AR Tilt Detection
       const gyroAvailable = await Gyroscope.isAvailableAsync();
+      
       if (gyroAvailable) {
         Gyroscope.setUpdateInterval(500);
         gyroSubRef.current = Gyroscope.addListener(gyroData => {
            if (!isMounted) return;
-           // Simple tilt detection logic: if x or y rotation is high, toggle AR
            if (Math.abs(gyroData.x) > 2.5 || Math.abs(gyroData.y) > 2.5) {
              setShowAR(true);
            }
         });
       }
 
-      // Phase 26: Wi-Fi Snapping Watcher
-      wifiWatcherRef.current = setInterval(() => {
-        if (!isMounted || wifiFingerprints.length === 0) return;
-        // Mocking Wi-Fi scan: In reality we would read ambient BSSIDs here
-        // Snap DR location to the nearest known router if signal is hypothetically matched
-        const nearestRouter = wifiFingerprints[0]; // Simplified: snapping to first router for demo
-        if (nearestRouter && Math.random() > 0.8) {
-           setDrLocation({ lat: nearestRouter.lat, lon: nearestRouter.lon });
-           showToast('Location snapped via Wi-Fi Fingerprint');
-        }
-      }, 10000);
-
       if (pedoAvailable) {
         pedoSubRef.current = Pedometer.watchStepCount(result => {
-          if (!isMounted) return;
+          if (!isMounted || envState !== "INDOOR") return; // Only dead reckon if indoor
           setSteps(result.steps);
-
-          // Apply Dead Reckoning & Dynamic Routing
           setDrLocation(prev => {
             if (!prev) return prev;
             const nextLoc = updateLocationWithStep(prev.lat, prev.lon, heading);
-
             const target = evaluateRouting(nextLoc);
             if (target && !hasReachedExitRef.current) {
               const distToTarget = getDistance(nextLoc.lat, nextLoc.lon, target.lat, target.lon);
-
-              if (distToTarget <= 5) { // within 5 meters threshold
-                if (target.isExit) {
-                  hasReachedExitRef.current = true;
-                  Speech.speak("You have reached the exit!");
-                }
+              if (distToTarget <= 5 && target.isExit) {
+                hasReachedExitRef.current = true;
+                Speech.speak("You have reached the exit!");
               }
-
-              // Update target bearing dynamically
               setTargetHeading(getBearing(nextLoc.lat, nextLoc.lon, target.lat, target.lon));
             }
-
             return nextLoc;
           });
         });
       }
+
+      // State Machine Handlers
+      if (envState === "OUTDOOR") {
+        gpsWatcherRef.current = await Location.watchPositionAsync(
+          { accuracy: Location.Accuracy.Highest, distanceInterval: 1 },
+          (loc) => {
+            if (!isMounted) return;
+            setDrLocation({ lat: loc.coords.latitude, lon: loc.coords.longitude });
+            
+            // Check if near entrance
+            const entrances = wifiFingerprints.filter(f => f.nodeType === "ENTRANCE");
+            for (const entrance of entrances) {
+              if (entrance.gpsLat && entrance.gpsLon) {
+                const dist = getDistance(loc.coords.latitude, loc.coords.longitude, entrance.gpsLat, entrance.gpsLon);
+                if (dist < 2) {
+                  setEnvState("INDOOR");
+                  showToast("Entered Building: Switching to Wi-Fi Tracking");
+                  break;
+                }
+              }
+            }
+          }
+        );
+      } else if (envState === "INDOOR") {
+        wifiWatcherRef.current = setInterval(() => {
+          if (!isMounted || wifiFingerprints.length === 0) return;
+          // Mock Wi-Fi matching
+          const matchedFingerprint = wifiFingerprints[Math.floor(Math.random() * wifiFingerprints.length)];
+          if (matchedFingerprint && Math.random() > 0.8) {
+             setDrLocation({ lat: matchedFingerprint.lat, lon: matchedFingerprint.lon });
+             showToast('Location snapped via Wi-Fi');
+             
+             if (matchedFingerprint.nodeType === "FIRE_EXIT" && Math.random() > 0.5) { // Vanishing signal mock
+               setEnvState("OUTDOOR");
+               showToast("Exited Building: Switching to GPS Tracking");
+             }
+          }
+        }, 5000);
+      }
     };
 
-    startCompassAndPedometer();
+    startSensors();
 
     if (activeIncident?.isDrill) {
       Speech.speak("This is a test drill. Please follow the evacuation route calmly.");
@@ -436,10 +454,11 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
       if (subscriptionRef.current) subscriptionRef.current.remove();
       if (pedoSubRef.current) pedoSubRef.current.remove();
       if (gyroSubRef.current) gyroSubRef.current.remove();
+      if (gpsWatcherRef.current) gpsWatcherRef.current.remove();
       if (wifiWatcherRef.current) clearInterval(wifiWatcherRef.current);
       Speech.stop();
     };
-  }, []);
+  }, [envState, wifiFingerprints]);
 
   // Sync drLocation for Web DevTools Sensor override
   useEffect(() => {

@@ -390,6 +390,26 @@ export const updateBuildingGridPaths = mutation({
   }
 });
 
+export const updateBuildingDoorPins = mutation({
+  args: {
+    clerkId: v.string(),
+    buildingId: v.id("buildings"),
+    doorPins: v.array(v.object({ x: v.number(), y: v.number(), type: v.string(), label: v.optional(v.string()) })),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerkId", (q) => q.eq("clerkId", args.clerkId))
+      .first();
+
+    if (!user || user.role !== "admin") throw new Error("Unauthorized");
+
+    await ctx.db.patch(args.buildingId, {
+      doorPins: args.doorPins
+    });
+  }
+});
+
 export const deleteBuilding = mutation({
   args: {
     clerkId: v.string(),
@@ -1046,11 +1066,24 @@ export const saveWifiFingerprints = mutation({
       lat: v.number(),
       lon: v.number(),
       signalStrength: v.number(),
+      nodeType: v.optional(v.union(v.literal("ENTRANCE"), v.literal("FIRE_EXIT"), v.literal("SAFE_PATH"))),
+      gpsLat: v.optional(v.number()),
+      gpsLon: v.optional(v.number()),
+      x: v.optional(v.number()),
+      y: v.optional(v.number()),
     })),
   },
   handler: async (ctx, args) => {
     const user = await ctx.db.query('users').withIndex('by_clerkId', q => q.eq('clerkId', args.clerkId)).first();
     if (!user || user.role !== 'admin') throw new Error('Unauthorized');
+
+    // Delete existing fingerprints for this building
+    const existing = await ctx.db.query('wifiFingerprints')
+      .withIndex('by_building', q => q.eq('buildingId', args.buildingId))
+      .collect();
+    for (const fp of existing) {
+      await ctx.db.delete(fp._id);
+    }
 
     for (const fp of args.fingerprints) {
       await ctx.db.insert('wifiFingerprints', {
@@ -1059,6 +1092,11 @@ export const saveWifiFingerprints = mutation({
         lat: fp.lat,
         lon: fp.lon,
         signalStrength: fp.signalStrength,
+        nodeType: fp.nodeType,
+        gpsLat: fp.gpsLat,
+        gpsLon: fp.gpsLon,
+        x: fp.x,
+        y: fp.y,
         createdAt: Date.now()
       });
     }

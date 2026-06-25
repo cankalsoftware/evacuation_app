@@ -69,6 +69,9 @@ export default defineSchema({
     gridPaths: v.optional(v.array(
       v.object({ row: v.number(), col: v.number(), lat: v.number(), lon: v.number(), isExit: v.boolean(), type: v.optional(v.string()) })
     )), // Added for Phase 17 Grid routing
+    doorPins: v.optional(v.array(
+      v.object({ x: v.number(), y: v.number(), type: v.string(), label: v.optional(v.string()) })
+    )), // Added for Phase 27: V2 Door Pins (Entrances and Fire Exits)
     masterPlanId: v.optional(v.id("_storage")),
     nextDrillAt: v.optional(v.number()), // Phase 13
     drillJobId: v.optional(v.id("_scheduled_functions")), // Phase 13
@@ -141,5 +144,11 @@ export default defineSchema({
     lon: v.number(),
     signalStrength: v.number(), // Optional: for weighted averages later
     createdAt: v.number(),
+    // Phase 27 additions
+    nodeType: v.optional(v.union(v.literal("ENTRANCE"), v.literal("FIRE_EXIT"), v.literal("SAFE_PATH"))),
+    gpsLat: v.optional(v.number()),
+    gpsLon: v.optional(v.number()),
+    x: v.optional(v.number()),
+    y: v.optional(v.number()),
   }).index("by_building", ["buildingId"]).index("by_bssid", ["bssid"]),
 });
