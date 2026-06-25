@@ -652,7 +652,8 @@ export const getActiveIncidents = query({
           buildingId: b._id,
           incidentId: incident._id,
           isDrill: incident.isDrill,
-          triggeredAt: incident.triggeredAt
+          triggeredAt: incident.triggeredAt,
+          hazards: incident.hazards || []
         });
       }
     }
@@ -1104,6 +1105,58 @@ export const saveWifiFingerprints = mutation({
   }
 });
 
+// Phase 29: Global Dynamic Hazards
+export const reportIncidentHazard = mutation({
+  args: {
+    incidentId: v.id("incidents"),
+    clerkId: v.optional(v.string()),
+    row: v.number(),
+    col: v.number(),
+    lat: v.number(),
+    lon: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const incident = await ctx.db.get(args.incidentId);
+    if (!incident) throw new Error("Incident not found");
+
+    const newHazard = {
+      row: args.row,
+      col: args.col,
+      lat: args.lat,
+      lon: args.lon,
+      reportedBy: args.clerkId,
+      reportedAt: Date.now()
+    };
+
+    const currentHazards = incident.hazards || [];
+    
+    // Check if hazard already exists (within same cell)
+    if (currentHazards.some(h => h.row === args.row && h.col === args.col)) {
+      return; // Already reported
+    }
+
+    await ctx.db.patch(args.incidentId, {
+      hazards: [...currentHazards, newHazard]
+    });
+  }
+});
+
+export const removeIncidentHazard = mutation({
+  args: {
+    incidentId: v.id("incidents"),
+    row: v.number(),
+    col: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const incident = await ctx.db.get(args.incidentId);
+    if (!incident || !incident.hazards) return;
+
+    const newHazards = incident.hazards.filter(h => !(h.row === args.row && h.col === args.col));
+    await ctx.db.patch(args.incidentId, {
+      hazards: newHazards
+    });
+  }
+});
 /**
  * Retrieves all Wi-Fi fingerprints for a specific building.
  */

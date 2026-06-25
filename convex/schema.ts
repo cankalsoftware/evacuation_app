@@ -107,6 +107,16 @@ export default defineSchema({
     triggeredAt: v.number(),
     resolvedAt: v.optional(v.number()),
     endTime: v.optional(v.number()), // Phase 13: exact timestamp when everyone was SAFE
+    hazards: v.optional(v.array(
+      v.object({
+        row: v.number(),
+        col: v.number(),
+        lat: v.number(),
+        lon: v.number(),
+        reportedBy: v.optional(v.string()), // clerkId of the user
+        reportedAt: v.number()
+      })
+    )), // Phase 29: Global Dynamic Hazards
   }).index("by_building", ["buildingId"]),
 
   inside: defineTable({

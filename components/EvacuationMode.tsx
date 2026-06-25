@@ -3,7 +3,7 @@ import { View, Image, useWindowDimensions, Animated, Platform } from "react-nati
 import { Text, TouchableOpacity, MaterialCommunityIcons } from "./ResponsiveUI";
 import * as Location from "expo-location";
 import * as Speech from "expo-speech";
-import { Pedometer, Gyroscope } from 'expo-sensors';
+import { Pedometer, Gyroscope, Magnetometer, Barometer } from 'expo-sensors';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useUser } from "@clerk/clerk-expo";
 import { useMutation, useQuery } from "convex/react";
@@ -87,7 +87,7 @@ interface GridCell {
   isExit: boolean;
 }
 
-function aStarGridPath(startCell: GridCell, exits: GridCell[], gridPaths: GridCell[]) {
+function aStarGridPath(startCell: GridCell, exits: GridCell[], gridPaths: GridCell[], hazards: GridCell[] = []) {
   // Finds shortest path from startCell to nearest exit using A* algorithm
   // Allowed moves: 8-way (horizontal, vertical, diagonal)
   if (exits.some(e => e.row === startCell.row && e.col === startCell.col)) {
@@ -135,6 +135,9 @@ function aStarGridPath(startCell: GridCell, exits: GridCell[], gridPaths: GridCe
         if (dr === 0 && dc === 0) continue;
         const neighbor = gridPaths.find(p => p.row === current.row + dr && p.col === current.col + dc);
         if (!neighbor) continue;
+        
+        // Skip hazards
+        if (hazards.some(h => h.row === neighbor.row && h.col === neighbor.col)) continue;
 
         const moveCost = Math.hypot(dr, dc); // 1 for straight, 1.414 for diagonal
         const tentative_gScore = (gScore.get(currentKey) ?? Infinity) + moveCost;
@@ -207,11 +210,58 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
   const gpsWatcherRef = useRef<Location.LocationSubscription | null>(null);
   const lastSpokenRef = useRef<number>(0);
 
+  // Phase 28: Sensor Fusion & Multi-Floor
+  const fusedHeadingRef = useRef<number>(0);
+  const magSubRef = useRef<any>(null);
+  const baroSubRef = useRef<any>(null);
+  const baselinePressureRef = useRef<number | null>(null);
+  const [currentFloorOffset, setCurrentFloorOffset] = useState<number>(0);
+  const [stairwellMode, setStairwellMode] = useState<boolean>(false);
+
+  // Global Hazards from DB
+  const hazards = activeIncident?.hazards || [];
+  const reportIncidentHazard = useMutation(api.portal.reportIncidentHazard);
+
   const [envState, setEnvState] = useState<"OUTDOOR" | "INDOOR">("OUTDOOR");
 
   const HEADING_TOLERANCE = 45;
 
   const activePlanUrl = autoBuilding?.masterPlanUrl || dashboardData?.scannedPlanUrl;
+
+  const reportHazard = async () => {
+    if (!drLocation || !activeIncident?._id) return;
+    const routingResult = evaluateRouting(drLocation);
+    if (routingResult && routingResult.snappedCell) {
+      // Optimitic local UI update won't work easily with standard array, but Convex handles updates fast.
+      try {
+        await reportIncidentHazard({
+          incidentId: activeIncident._id,
+          clerkId: user?.id,
+          row: routingResult.snappedCell.row,
+          col: routingResult.snappedCell.col,
+          lat: routingResult.snappedCell.lat,
+          lon: routingResult.snappedCell.lon
+        });
+        showToast("Hazard reported! Global routes recalculated.");
+        Speech.speak("Hazard reported. Rerouting all users.");
+      } catch (e) {
+        console.log("Failed to report hazard", e);
+      }
+    }
+  };
+
+  // Watch for NEW hazards from the backend
+  const prevHazardsLengthRef = useRef<number>(0);
+  useEffect(() => {
+    if (hazards.length > prevHazardsLengthRef.current) {
+      if (prevHazardsLengthRef.current > 0) {
+        // A new hazard just arrived!
+        Speech.speak("Warning. A new hazard has been reported. Your safe route has been updated.");
+        showToast("New hazard reported! Rerouting...");
+      }
+      prevHazardsLengthRef.current = hazards.length;
+    }
+  }, [hazards.length]);
 
   useEffect(() => {
     if (activePlanUrl) {
@@ -334,7 +384,7 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
     }
 
     // 3. Find shortest grid path to nearest exit
-    const path = aStarGridPath(snappedCell, exits, gridPaths);
+    const path = aStarGridPath(snappedCell, exits, gridPaths, hazards);
 
     if (!path || path.length === 0) return null;
 
@@ -342,7 +392,11 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
     // A* returns [CurrentCell, NextCell, ... ExitCell]. If path.length > 1, head to NextCell.
     const targetCell = path.length > 1 ? path[1] : path[0];
 
-    return targetCell;
+    return { 
+      targetCell, 
+      snappedLoc: { lat: snappedCell.lat, lon: snappedCell.lon },
+      snappedCell
+    };
   };
 
   useEffect(() => {
@@ -371,12 +425,39 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
       const gyroAvailable = await Gyroscope.isAvailableAsync();
       
       if (gyroAvailable) {
-        Gyroscope.setUpdateInterval(500);
+        Gyroscope.setUpdateInterval(100); // 10Hz
         gyroSubRef.current = Gyroscope.addListener(gyroData => {
            if (!isMounted) return;
            if (Math.abs(gyroData.x) > 2.5 || Math.abs(gyroData.y) > 2.5) {
              setShowAR(true);
            }
+           // Complementary Filter: Add gyro Z-axis change (radians -> degrees)
+           // Z is rotation around the Z axis (vertical). Note: dt is approx 0.1s
+           const dt = 0.1;
+           const deltaHeading = (gyroData.z * (180 / Math.PI)) * dt;
+           fusedHeadingRef.current = fusedHeadingRef.current + deltaHeading;
+           // Keep in 0-360 range
+           if (fusedHeadingRef.current >= 360) fusedHeadingRef.current -= 360;
+           if (fusedHeadingRef.current < 0) fusedHeadingRef.current += 360;
+        });
+      }
+
+      const magAvailable = await Magnetometer.isAvailableAsync();
+      if (magAvailable) {
+        Magnetometer.setUpdateInterval(500); // 2Hz
+        magSubRef.current = Magnetometer.addListener(magData => {
+          if (!isMounted) return;
+          // Calculate absolute magnetic heading
+          let magHeading = Math.atan2(magData.y, magData.x) * (180 / Math.PI);
+          if (magHeading < 0) magHeading += 360;
+          
+          // Complementary Filter: slowly pull fused heading towards absolute mag heading
+          // Handle the 360 -> 0 wrap around correctly
+          let diff = magHeading - fusedHeadingRef.current;
+          if (diff > 180) diff -= 360;
+          if (diff < -180) diff += 360;
+          
+          fusedHeadingRef.current = fusedHeadingRef.current + (diff * 0.05); // 5% pull towards Mag
         });
       }
 
@@ -386,18 +467,55 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
           setSteps(result.steps);
           setDrLocation(prev => {
             if (!prev) return prev;
-            const nextLoc = updateLocationWithStep(prev.lat, prev.lon, heading);
-            const target = evaluateRouting(nextLoc);
-            if (target && !hasReachedExitRef.current) {
-              const distToTarget = getDistance(nextLoc.lat, nextLoc.lon, target.lat, target.lon);
-              if (distToTarget <= 5 && target.isExit) {
-                hasReachedExitRef.current = true;
-                Speech.speak("You have reached the exit!");
+            // Use fusedHeading for Dead Reckoning step
+            let nextLoc = updateLocationWithStep(prev.lat, prev.lon, fusedHeadingRef.current);
+            const routingResult = evaluateRouting(nextLoc);
+            
+            if (routingResult) {
+              // 1. Strict Map Snapping
+              nextLoc = routingResult.snappedLoc;
+
+              const target = routingResult.targetCell;
+              if (!hasReachedExitRef.current) {
+                const distToTarget = getDistance(nextLoc.lat, nextLoc.lon, target.lat, target.lon);
+                if (distToTarget <= 5 && target.isExit) {
+                  hasReachedExitRef.current = true;
+                  Speech.speak("You have reached the exit!");
+                }
+                setTargetHeading(getBearing(nextLoc.lat, nextLoc.lon, target.lat, target.lon));
               }
-              setTargetHeading(getBearing(nextLoc.lat, nextLoc.lon, target.lat, target.lon));
             }
             return nextLoc;
           });
+        });
+      }
+
+      const baroAvailable = await Barometer.isAvailableAsync();
+      if (baroAvailable) {
+        Barometer.setUpdateInterval(1000); // 1Hz
+        baroSubRef.current = Barometer.addListener(baroData => {
+           if (!isMounted || envState !== "INDOOR") return;
+           
+           if (baselinePressureRef.current === null) {
+              baselinePressureRef.current = baroData.pressure;
+              return;
+           }
+           
+           // Roughly 0.12 hPa per meter. 3.5m floor height = ~0.42 hPa
+           const pressureDiff = baroData.pressure - baselinePressureRef.current;
+           const floorChange = Math.round(pressureDiff / 0.42);
+           
+           if (floorChange !== currentFloorOffset) {
+             setCurrentFloorOffset(floorChange);
+             if (floorChange !== 0 && !stairwellMode) {
+                setStairwellMode(true);
+                showToast("Stairwell descent detected. Switching to Stairwell Mode.");
+                Speech.speak("You are in the stairwell. Continue descending.");
+             }
+             if (stairwellMode) {
+               showToast(`Floor changed by ${floorChange}. Update Map.`);
+             }
+           }
         });
       }
 
@@ -454,6 +572,8 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
       if (subscriptionRef.current) subscriptionRef.current.remove();
       if (pedoSubRef.current) pedoSubRef.current.remove();
       if (gyroSubRef.current) gyroSubRef.current.remove();
+      if (magSubRef.current) magSubRef.current.remove();
+      if (baroSubRef.current) baroSubRef.current.remove();
       if (gpsWatcherRef.current) gpsWatcherRef.current.remove();
       if (wifiWatcherRef.current) clearInterval(wifiWatcherRef.current);
       Speech.stop();
@@ -809,6 +929,30 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
               });
             })()}
 
+            {/* Global Hazards */}
+            {(() => {
+              const { renderW, renderH, offsetX, offsetY } = getImageBounds();
+              return hazards.map((hazard: any, i: number) => {
+                const pos = interpolateLocation(hazard.lat, hazard.lon);
+                if (!pos) return null;
+                return (
+                  <View
+                    key={`hazard-${i}`}
+                    style={{
+                      position: 'absolute',
+                      left: offsetX + pos.x * renderW - 12,
+                      top: offsetY + pos.y * renderH - 12,
+                      width: 24,
+                      height: 24,
+                    }}
+                    className="z-15 bg-red-600 rounded-md justify-center items-center shadow-lg shadow-red-900 border-2 border-white opacity-90"
+                  >
+                    <MaterialCommunityIcons name="alert" size={16} color="#ffffff" />
+                  </View>
+                );
+              });
+            })()}
+
             {/* User Location */}
             {userImgPos && (() => {
               const { renderW, renderH, offsetX, offsetY } = getImageBounds();
@@ -868,38 +1012,47 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
           </View>
 
           {/* Buttons (20%) */}
-          <View style={{ height: '20%' }} className={`flex-row items-center justify-center px-4 pb-4 gap-4 ${bgColor}`}>
+          <View style={{ height: '20%' }} className={`flex-col px-4 pb-4 gap-2 ${bgColor}`}>
             <TouchableOpacity
-              className={`flex-1 h-full rounded-3xl border-2 shadow-lg justify-center items-center overflow-hidden ${evacStatus === 'PANIC' ? 'bg-white border-red-500 shadow-red-600/50' : 'bg-red-600 border-red-500 shadow-red-600/50'}`}
-              onPress={togglePanic}
+              className="w-full bg-orange-600 rounded-xl py-3 border-2 border-orange-500 shadow-lg justify-center items-center"
+              onPress={reportHazard}
             >
-              <View className="flex-1 w-[90%] justify-center items-center">
-                <Text 
-                  adjustsFontSizeToFit 
-                  numberOfLines={1} 
-                  className={`font-black text-center ${evacStatus === 'PANIC' ? 'text-red-600' : 'text-white'}`}
-                  style={{ fontSize: activeSOSFont, lineHeight: activeSOSFont * 1.1, textAlignVertical: 'center' }}
-                >
-                  {evacStatus === 'PANIC' ? 'CANCEL SOS' : 'SOS'}
-                </Text>
-              </View>
+              <Text className="font-bold text-white text-lg uppercase">Route Blocked? Report Hazard</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              className="flex-1 h-full bg-green-600 rounded-3xl border-2 border-green-500 shadow-lg shadow-green-600/50 justify-center items-center overflow-hidden"
-              onPress={markAsSafe}
-            >
-              <View className="flex-1 w-[90%] justify-center items-center">
-                <Text 
-                  adjustsFontSizeToFit 
-                  numberOfLines={1} 
-                  className="font-black text-white text-center"
-                  style={{ fontSize: fontSafe, lineHeight: fontSafe * 1.1, textAlignVertical: 'center' }}
-                >
-                  I AM SAFE
-                </Text>
-              </View>
-            </TouchableOpacity>
+            <View className="flex-row flex-1 gap-4 mt-2">
+              <TouchableOpacity
+                className={`flex-1 rounded-3xl border-2 shadow-lg justify-center items-center overflow-hidden ${evacStatus === 'PANIC' ? 'bg-white border-red-500 shadow-red-600/50' : 'bg-red-600 border-red-500 shadow-red-600/50'}`}
+                onPress={togglePanic}
+              >
+                <View className="flex-1 w-[90%] justify-center items-center">
+                  <Text 
+                    adjustsFontSizeToFit 
+                    numberOfLines={1} 
+                    className={`font-black text-center ${evacStatus === 'PANIC' ? 'text-red-600' : 'text-white'}`}
+                    style={{ fontSize: activeSOSFont, lineHeight: activeSOSFont * 1.1, textAlignVertical: 'center' }}
+                  >
+                    {evacStatus === 'PANIC' ? 'CANCEL SOS' : 'SOS'}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                className="flex-1 bg-green-600 rounded-3xl border-2 border-green-500 shadow-lg shadow-green-600/50 justify-center items-center overflow-hidden"
+                onPress={markAsSafe}
+              >
+                <View className="flex-1 w-[90%] justify-center items-center">
+                  <Text 
+                    adjustsFontSizeToFit 
+                    numberOfLines={1} 
+                    className="font-black text-white text-center"
+                    style={{ fontSize: fontSafe, lineHeight: fontSafe * 1.1, textAlignVertical: 'center' }}
+                  >
+                    I AM SAFE
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </View>
           </View>
         </>
       )}

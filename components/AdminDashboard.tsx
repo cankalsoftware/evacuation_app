@@ -140,6 +140,8 @@ export default function AdminDashboard() {
   const resolveSiteIncident = useMutation(api.portal.resolveSiteIncident);
   const scheduleDrill = useMutation(api.portal.scheduleDrill);
   const cancelDrill = useMutation(api.portal.cancelDrill);
+  const removeIncidentHazard = useMutation(api.portal.removeIncidentHazard);
+  
   const activeIncidents =
     useQuery(api.portal.getActiveIncidents, { clerkId: user?.id }) || [];
   const recentIncidents =
@@ -826,7 +828,7 @@ export default function AdminDashboard() {
 
     if (activeDoorPinIdx === -1) {
        // if we click empty space, add a new pin and make it active
-       const newPins = [...doorPins, { x, y, type: step2PinType }];
+       const newPins = [...doorPins, { x, y, type: step2PinType as string }];
        setDoorPins(newPins);
        setActiveDoorPinIdx(newPins.length - 1);
        setStep1PanMode(false);
@@ -939,7 +941,7 @@ export default function AdminDashboard() {
             const newCell = {
               row: cell.row,
               col: cell.col,
-              type: gridPaintMode,
+              type: gridPaintMode as string,
               lat: maxLat - (cell.row + 0.5) * cellLatSpan,
               lon: minLon + (cell.col + 0.5) * cellLonSpan,
               isExit: gridPaintMode === "exit",
@@ -3950,43 +3952,83 @@ export default function AdminDashboard() {
                                         bounds.offsetX + x_pct * bounds.renderW;
                                       const py =
                                         bounds.offsetY + y_pct * bounds.renderH;
+                                        
+                                      // Get Hazards
+                                      const currentIncident = activeIncidents.find((i: any) => i.buildingId === selectedBuilding._id);
+                                      const hazards = currentIncident?.hazards || [];
 
                                       return (
-                                        <View
-                                          className="absolute items-center justify-center pointer-events-none"
-                                          style={{
-                                            left: px - 20,
-                                            top: py - 20,
-                                            width: 40,
-                                            height: 40,
-                                          }}
-                                        >
-                                          <View className="absolute inset-0 rounded-full bg-red-600/30 animate-ping" />
-                                          <Text
-                                            className="text-red-500 font-bold text-3xl z-10"
+                                        <>
+                                          {hazards.map((h: any, i: number) => {
+                                            let hy_pct = (maxLat - h.lat) / (maxLat - minLat || 1);
+                                            let hx_pct = (h.lon - minLon) / (maxLon - minLon || 1);
+                                            if (imgPts && imgPts.length >= 4) {
+                                              const minCX = Math.min(...imgPts.map((c: any) => c.x));
+                                              const maxCX = Math.max(...imgPts.map((c: any) => c.x));
+                                              const minCY = Math.min(...imgPts.map((c: any) => c.y));
+                                              const maxCY = Math.max(...imgPts.map((c: any) => c.y));
+                                              hx_pct = minCX + hx_pct * (maxCX - minCX);
+                                              hy_pct = minCY + hy_pct * (maxCY - minCY);
+                                            }
+                                            const hpx = bounds.offsetX + hx_pct * bounds.renderW;
+                                            const hpy = bounds.offsetY + hy_pct * bounds.renderH;
+                                            
+                                            return (
+                                              <TouchableOpacity
+                                                key={`haz-${i}`}
+                                                className="absolute items-center justify-center pointer-events-auto z-30"
+                                                style={{ left: hpx - 15, top: hpy - 15, width: 30, height: 30 }}
+                                                onPress={() => {
+                                                  removeIncidentHazard({
+                                                    incidentId: currentIncident.incidentId,
+                                                    row: h.row,
+                                                    col: h.col
+                                                  });
+                                                }}
+                                              >
+                                                <View className="bg-red-600 border border-white rounded shadow-[0_0_10px_rgba(220,38,38,0.8)] w-full h-full items-center justify-center">
+                                                  <MaterialCommunityIcons name="alert" size={16} color="white" />
+                                                </View>
+                                              </TouchableOpacity>
+                                            );
+                                          })}
+                                          
+                                          <View
+                                            className="absolute items-center justify-center pointer-events-none"
                                             style={{
-                                              transform: [
-                                                {
-                                                  scale: 1 / mapTransform.scale,
-                                                },
-                                              ],
+                                              left: px - 20,
+                                              top: py - 20,
+                                              width: 40,
+                                              height: 40,
                                             }}
                                           >
-                                            +
-                                          </Text>
-                                          <Text
-                                            className="text-xl z-20 absolute top-8"
-                                            style={{
-                                              transform: [
-                                                {
-                                                  scale: 1 / mapTransform.scale,
-                                                },
-                                              ],
-                                            }}
-                                          >
-                                            🆘
-                                          </Text>
-                                        </View>
+                                            <View className="absolute inset-0 rounded-full bg-red-600/30 animate-ping" />
+                                            <Text
+                                              className="text-red-500 font-bold text-3xl z-10"
+                                              style={{
+                                                transform: [
+                                                  {
+                                                    scale: 1 / mapTransform.scale,
+                                                  },
+                                                ],
+                                              }}
+                                            >
+                                              +
+                                            </Text>
+                                            <Text
+                                              className="text-xl z-20 absolute top-8"
+                                              style={{
+                                                transform: [
+                                                  {
+                                                    scale: 1 / mapTransform.scale,
+                                                  },
+                                                ],
+                                              }}
+                                            >
+                                              🆘
+                                            </Text>
+                                          </View>
+                                        </>
                                       );
                                     })()}
                                   </View>
