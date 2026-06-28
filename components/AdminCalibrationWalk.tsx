@@ -1,5 +1,5 @@
 import React, { useState, useRef } from "react";
-import { View, Modal, ActivityIndicator, Alert, Image, Platform } from "react-native";
+import { View, Modal, ActivityIndicator, Alert, Image, Platform, ScrollView } from "react-native";
 import { Text, TouchableOpacity } from "./ResponsiveUI";
 import MapView, { Marker } from "react-native-maps";
 import * as Location from "expo-location";
@@ -276,7 +276,7 @@ export default function AdminCalibrationWalk({ visible, onClose, buildingId, ima
 
   return (
     <Modal visible={visible} animationType="slide">
-      <View className="flex-1 bg-neutral-900 pt-12">
+      <ScrollView className="flex-1 bg-neutral-900 pt-12" contentContainerStyle={{ flexGrow: 1, paddingBottom: 40 }} scrollEnabled={!isMapInteracting}>
         <View className="flex-row items-center justify-between px-6 mb-4">
           <Text className="text-white text-xl font-bold">Calibration Walk</Text>
           <TouchableOpacity onPress={onClose} className="p-2">
@@ -290,7 +290,7 @@ export default function AdminCalibrationWalk({ visible, onClose, buildingId, ima
           </Text>
         </View>
 
-        <View className="flex-1 rounded-2xl overflow-hidden mx-4 mb-4 border border-neutral-700">
+        <View className="rounded-2xl overflow-hidden mx-4 mb-4 border border-neutral-700" style={{ height: 450 }}>
           {!scanning ? (
             <View className="flex-1 items-center justify-center bg-neutral-800">
               <Ionicons name="walk" size={64} color="#F97316" />
@@ -426,10 +426,16 @@ export default function AdminCalibrationWalk({ visible, onClose, buildingId, ima
                               <View className="absolute shadow-md shadow-black bg-orange-500" style={{ left: 15, bottom: 0, width: 2, height: 12 }} />
                               <View className="absolute shadow-md shadow-black bg-orange-500" style={{ top: 15, left: 0, width: 12, height: 2 }} />
                               <View className="absolute shadow-md shadow-black bg-orange-500" style={{ top: 15, right: 0, width: 12, height: 2 }} />
+                              <View style={{ position: "absolute", top: -8, right: -8, zIndex: 100 }} className="bg-red-600 rounded-full w-5 h-5 items-center justify-center border-2 border-white shadow-md z-10">
+                                <Text className="text-white text-[10px] font-bold">{i + 1}</Text>
+                              </View>
                             </View>
                           ) : (
                             <>
                               <MaterialCommunityIcons name="wifi-marker" size={32} color="#F97316" />
+                              <View style={{ position: "absolute", top: -4, right: 0, zIndex: 100 }} className="bg-red-600 rounded-full w-4 h-4 items-center justify-center border border-white shadow-sm">
+                                <Text className="text-white text-[9px] font-bold">{i + 1}</Text>
+                              </View>
                             </>
                           )}
 
@@ -517,7 +523,7 @@ export default function AdminCalibrationWalk({ visible, onClose, buildingId, ima
         </View>
 
         {scanning && (
-          <View className="px-6 pb-12 flex-row justify-between">
+          <View className="px-6 mb-8 flex-row justify-between">
             <TouchableOpacity 
               onPress={() => setPanMode(!panMode)} 
               className={`flex-1 py-4 rounded-xl items-center mr-1 border ${panMode ? "bg-amber-600 border-amber-400" : "bg-neutral-800 border-neutral-700"}`}
@@ -550,7 +556,29 @@ export default function AdminCalibrationWalk({ visible, onClose, buildingId, ima
             </TouchableOpacity>
           </View>
         )}
-      </View>
+
+        {scanning && fingerprints.length > 0 && (
+          <View className="px-6 pb-12">
+            <Text className="text-white text-lg font-bold mb-2">Captured Points</Text>
+            {fingerprints.map((fp, i) => (
+              <View key={i} className="flex-row items-center py-3 border-b border-neutral-800">
+                <View className="bg-orange-600 rounded-full w-8 h-8 items-center justify-center mr-4">
+                  <Text className="text-white text-sm font-bold">{i + 1}</Text>
+                </View>
+                <View className="flex-1">
+                  <Text className="text-white font-bold text-base" numberOfLines={1}>{fp.bssid}</Text>
+                  <Text className="text-neutral-400 text-xs mt-1">
+                    Lat: {fp.lat.toFixed(6)}, Lon: {fp.lon.toFixed(6)}
+                  </Text>
+                  <Text className="text-neutral-400 text-xs">
+                    Signal Strength: {fp.signalStrength} dBm
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+      </ScrollView>
     </Modal>
   );
 }

@@ -406,7 +406,7 @@ export default function EvacuationMode({ dashboardData, autoBuilding, currentLoc
     if (drLocation) {
       const initTarget = evaluateRouting(drLocation);
       if (initTarget) {
-        setTargetHeading(getBearing(drLocation.lat, drLocation.lon, initTarget.lat, initTarget.lon));
+        setTargetHeading(getBearing(drLocation.lat, drLocation.lon, initTarget.targetCell.lat, initTarget.targetCell.lon));
       }
     }
 

@@ -3979,11 +3979,13 @@ export default function AdminDashboard() {
                                                 className="absolute items-center justify-center pointer-events-auto z-30"
                                                 style={{ left: hpx - 15, top: hpy - 15, width: 30, height: 30 }}
                                                 onPress={() => {
-                                                  removeIncidentHazard({
-                                                    incidentId: currentIncident.incidentId,
-                                                    row: h.row,
-                                                    col: h.col
-                                                  });
+                                                  if (currentIncident) {
+                                                    removeIncidentHazard({
+                                                      incidentId: currentIncident.incidentId,
+                                                      row: h.row,
+                                                      col: h.col
+                                                    });
+                                                  }
                                                 }}
                                               >
                                                 <View className="bg-red-600 border border-white rounded shadow-[0_0_10px_rgba(220,38,38,0.8)] w-full h-full items-center justify-center">
